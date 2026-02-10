@@ -169,6 +169,57 @@ export async function getAlbum(albumId: string): Promise<AlbumWithSongsID3 | nul
   }
 }
 
+/**
+ * Attempt to fetch all albums via search3 with an empty query.
+ * Some servers return the full library this way; others return nothing.
+ */
+export async function searchAllAlbums(): Promise<AlbumID3[]> {
+  const api = getApi();
+  if (!api) return [];
+  const response = await api.search3({
+    query: '',
+    albumCount: 10000,
+    songCount: 0,
+    artistCount: 0,
+  });
+  return response.searchResult3?.album ?? [];
+}
+
+/**
+ * Fetch a page of albums sorted alphabetically by artist.
+ */
+export async function getAlbumListAlphabetical(
+  size: number,
+  offset: number
+): Promise<AlbumID3[]> {
+  const api = getApi();
+  if (!api) return [];
+  const response = await api.getAlbumList2({
+    type: 'alphabeticalByArtist',
+    size,
+    offset,
+  });
+  return response.albumList2?.album ?? [];
+}
+
+/**
+ * Fetch all albums by paginating through getAlbumList2 (alphabeticalByArtist).
+ * The API returns a max of 500 results per request, so we loop until exhausted.
+ */
+export async function getAllAlbumsAlphabetical(): Promise<AlbumID3[]> {
+  const PAGE_SIZE = 500;
+  let offset = 0;
+  const allAlbums: AlbumID3[] = [];
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const batch = await getAlbumListAlphabetical(PAGE_SIZE, offset);
+    allAlbums.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return allAlbums;
+}
+
 export async function fetchServerInfo(): Promise<ServerInfo | null> {
   const api = getApi();
   if (!api) return null;
