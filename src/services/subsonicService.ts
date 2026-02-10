@@ -1,5 +1,11 @@
 import * as ExpoCrypto from 'expo-crypto';
-import SubsonicAPI, { type AlbumID3, type AlbumWithSongsID3, type Child } from 'subsonic-api';
+import SubsonicAPI, {
+  type AlbumID3,
+  type AlbumWithSongsID3,
+  type ArtistID3,
+  type Child,
+  type Playlist,
+} from 'subsonic-api';
 
 import { authStore } from '../store/authStore';
 import type { ServerInfo } from '../store/serverInfoStore';
@@ -92,7 +98,7 @@ export function clearApiCache(): void {
   cachedCoverArtToken = null;
 }
 
-export type { AlbumID3, AlbumWithSongsID3, Child };
+export type { AlbumID3, AlbumWithSongsID3, ArtistID3, Child, Playlist };
 
 export async function ensureCoverArtAuth(): Promise<void> {
   const { isLoggedIn, serverUrl, username, password } = authStore.getState();
@@ -218,6 +224,28 @@ export async function getAllAlbumsAlphabetical(): Promise<AlbumID3[]> {
     offset += PAGE_SIZE;
   }
   return allAlbums;
+}
+
+/**
+ * Fetch all artists via the getArtists endpoint.
+ * Flattens the index-based response into a flat array of ArtistID3.
+ */
+export async function getAllArtists(): Promise<ArtistID3[]> {
+  const api = getApi();
+  if (!api) return [];
+  const response = await api.getArtists();
+  const indexes = response.artists?.index ?? [];
+  return indexes.flatMap((idx) => idx.artist ?? []);
+}
+
+/**
+ * Fetch all playlists via the getPlaylists endpoint.
+ */
+export async function getAllPlaylists(): Promise<Playlist[]> {
+  const api = getApi();
+  if (!api) return [];
+  const response = await api.getPlaylists();
+  return response.playlists?.playlist ?? [];
 }
 
 export async function fetchServerInfo(): Promise<ServerInfo | null> {

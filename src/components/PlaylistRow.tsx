@@ -4,7 +4,7 @@ import { memo, useCallback } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '../hooks/useTheme';
-import { getCoverArtUrl, type AlbumID3 } from '../services/subsonicService';
+import { getCoverArtUrl, type Playlist } from '../services/subsonicService';
 
 const COVER_SIZE = 300;
 
@@ -20,14 +20,14 @@ function formatDuration(seconds: number): string {
 /** Total row height (padding 12*2 + image 56 = 80). Exported for getItemLayout. */
 export const ROW_HEIGHT = 80;
 
-export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
+export const PlaylistRow = memo(function PlaylistRow({ playlist }: { playlist: Playlist }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const uri = getCoverArtUrl(album.coverArt ?? '', COVER_SIZE) ?? undefined;
+  const uri = getCoverArtUrl(playlist.coverArt ?? '', COVER_SIZE) ?? undefined;
 
   const onPress = useCallback(() => {
-    router.push(`/album/${album.id}`);
-  }, [album.id, router]);
+    router.push(`/playlist/${playlist.id}`);
+  }, [playlist.id, router]);
 
   return (
     <Pressable
@@ -41,26 +41,20 @@ export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
       <Image source={{ uri }} style={styles.cover} resizeMode="cover" />
       <View style={styles.text}>
         <Text
-          style={[styles.albumName, { color: colors.textPrimary }]}
+          style={[styles.playlistName, { color: colors.textPrimary }]}
           numberOfLines={1}
         >
-          {album.name}
-        </Text>
-        <Text
-          style={[styles.artistName, { color: colors.textSecondary }]}
-          numberOfLines={1}
-        >
-          {album.artist ?? 'Unknown Artist'}
+          {playlist.name}
         </Text>
         <View style={styles.meta}>
           <Ionicons name="musical-notes-outline" size={14} color={colors.primary} />
           <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {album.songCount}
+            {playlist.songCount}
           </Text>
           <View style={styles.metaSpacer} />
           <Ionicons name="time-outline" size={14} color={colors.primary} />
           <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {formatDuration(album.duration)}
+            {formatDuration(playlist.duration)}
           </Text>
         </View>
       </View>
@@ -89,13 +83,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-  albumName: {
+  playlistName: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  artistName: {
-    fontSize: 14,
-    marginTop: 2,
   },
   meta: {
     flexDirection: 'row',

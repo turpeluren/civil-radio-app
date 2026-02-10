@@ -3,9 +3,14 @@ import { useNavigation } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AlbumListView, type AlbumLayout } from '../components/AlbumListView';
 import { useTheme } from '../hooks/useTheme';
-import { albumLibraryStore } from '../store/albumLibraryStore';
+import {
+  layoutPreferencesStore,
+  type ItemLayout,
+} from '../store/layoutPreferencesStore';
+import { AlbumLibraryListScreen } from './album-library-list';
+import { ArtistListScreen } from './artist-list';
+import { PlaylistListScreen } from './playlist-list';
 
 /* ------------------------------------------------------------------ */
 /*  Segment types                                                     */
@@ -62,54 +67,6 @@ function SegmentControl({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Albums tab content                                                */
-/* ------------------------------------------------------------------ */
-
-function AlbumsTab({ layout }: { layout: AlbumLayout }) {
-  const albums = albumLibraryStore((s) => s.albums);
-  const loading = albumLibraryStore((s) => s.loading);
-  const error = albumLibraryStore((s) => s.error);
-  const fetchAllAlbums = albumLibraryStore((s) => s.fetchAllAlbums);
-
-  // Auto-fetch when mounted if the store has no data
-  useEffect(() => {
-    if (albums.length === 0 && !loading) {
-      fetchAllAlbums();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleRefresh = useCallback(() => {
-    fetchAllAlbums();
-  }, [fetchAllAlbums]);
-
-  return (
-    <AlbumListView
-      albums={albums}
-      layout={layout}
-      loading={loading}
-      error={error}
-      onRefresh={handleRefresh}
-      refreshing={loading && albums.length > 0}
-    />
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Placeholder tabs (artists / playlists – to be implemented)        */
-/* ------------------------------------------------------------------ */
-
-function PlaceholderTab({ label }: { label: string }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.placeholder, { backgroundColor: colors.background }]}>
-      <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-        {label} coming soon
-      </Text>
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  LibraryScreen                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -117,45 +74,72 @@ export function LibraryScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [activeSegment, setActiveSegment] = useState<Segment>('albums');
-  const [albumLayout, setAlbumLayout] = useState<AlbumLayout>('list');
 
-  const toggleLayout = useCallback(() => {
-    setAlbumLayout((prev) => (prev === 'list' ? 'grid' : 'list'));
-  }, []);
+  const albumLayout = layoutPreferencesStore((s) => s.albumLayout);
+  const artistLayout = layoutPreferencesStore((s) => s.artistLayout);
+  const playlistLayout = layoutPreferencesStore((s) => s.playlistLayout);
+  const setAlbumLayout = layoutPreferencesStore((s) => s.setAlbumLayout);
+  const setArtistLayout = layoutPreferencesStore((s) => s.setArtistLayout);
+  const setPlaylistLayout = layoutPreferencesStore((s) => s.setPlaylistLayout);
 
-  // Set a header-right toggle button when the albums segment is active
+  const toggleAlbumLayout = useCallback(() => {
+    setAlbumLayout(albumLayout === 'list' ? 'grid' : 'list');
+  }, [albumLayout, setAlbumLayout]);
+
+  const toggleArtistLayout = useCallback(() => {
+    setArtistLayout(artistLayout === 'list' ? 'grid' : 'list');
+  }, [artistLayout, setArtistLayout]);
+
+  const togglePlaylistLayout = useCallback(() => {
+    setPlaylistLayout(playlistLayout === 'list' ? 'grid' : 'list');
+  }, [playlistLayout, setPlaylistLayout]);
+
+  // Set a header-right toggle button for segments that support layout switching
   useEffect(() => {
-    if (activeSegment === 'albums') {
-      navigation.setOptions({
-        headerRight: () => (
-          <Pressable
-            onPress={toggleLayout}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed && styles.headerButtonPressed,
-            ]}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={albumLayout === 'list' ? 'grid-outline' : 'list-outline'}
-              size={22}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-        ),
-      });
-    } else {
-      navigation.setOptions({ headerRight: undefined });
-    }
-  }, [activeSegment, albumLayout, toggleLayout, navigation, colors.textPrimary]);
+    const layoutMap: Record<Segment, { layout: ItemLayout; toggle: () => void }> = {
+      albums: { layout: albumLayout, toggle: toggleAlbumLayout },
+      artists: { layout: artistLayout, toggle: toggleArtistLayout },
+      playlists: { layout: playlistLayout, toggle: togglePlaylistLayout },
+    };
+
+    const current = layoutMap[activeSegment];
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={current.toggle}
+          style={({ pressed }) => [
+            styles.headerButton,
+            pressed && styles.headerButtonPressed,
+          ]}
+          hitSlop={8}
+        >
+          <Ionicons
+            name={current.layout === 'list' ? 'grid-outline' : 'list-outline'}
+            size={22}
+            color={colors.textPrimary}
+          />
+        </Pressable>
+      ),
+    });
+  }, [
+    activeSegment,
+    albumLayout,
+    artistLayout,
+    playlistLayout,
+    toggleAlbumLayout,
+    toggleArtistLayout,
+    togglePlaylistLayout,
+    navigation,
+    colors.textPrimary,
+  ]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SegmentControl selected={activeSegment} onSelect={setActiveSegment} />
       <View style={styles.content}>
-        {activeSegment === 'albums' && <AlbumsTab layout={albumLayout} />}
-        {activeSegment === 'artists' && <PlaceholderTab label="Artists" />}
-        {activeSegment === 'playlists' && <PlaceholderTab label="Playlists" />}
+        {activeSegment === 'albums' && <AlbumLibraryListScreen layout={albumLayout} />}
+        {activeSegment === 'artists' && <ArtistListScreen layout={artistLayout} />}
+        {activeSegment === 'playlists' && <PlaylistListScreen layout={playlistLayout} />}
       </View>
     </View>
   );
@@ -199,14 +183,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 16,
   },
   headerButton: {
     padding: 4,

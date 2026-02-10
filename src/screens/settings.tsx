@@ -9,6 +9,10 @@ import { useTheme } from '../hooks/useTheme';
 import { clearApiCache } from '../services/subsonicService';
 import type { ThemePreference } from '../store/themeStore';
 import { authStore } from '../store/authStore';
+import {
+  layoutPreferencesStore,
+  type ItemLayout,
+} from '../store/layoutPreferencesStore';
 import { serverInfoStore } from '../store/serverInfoStore';
 
 const AUTH_PERSIST_KEY = 'substreamer-auth';
@@ -42,6 +46,12 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: 'phone-portr
   { value: 'dark', label: 'Dark', icon: 'moon-outline' },
 ];
 
+const LAYOUT_ROWS: { key: 'albumLayout' | 'artistLayout' | 'playlistLayout'; label: string }[] = [
+  { key: 'albumLayout', label: 'Albums' },
+  { key: 'artistLayout', label: 'Artists' },
+  { key: 'playlistLayout', label: 'Playlists' },
+];
+
 export function SettingsScreen() {
   const router = useRouter();
   const { colors, preference, setThemePreference } = useTheme();
@@ -55,6 +65,25 @@ export function SettingsScreen() {
       lastFetchedAt: s.lastFetchedAt,
     }))
   );
+
+  const albumLayout = layoutPreferencesStore((s) => s.albumLayout);
+  const artistLayout = layoutPreferencesStore((s) => s.artistLayout);
+  const playlistLayout = layoutPreferencesStore((s) => s.playlistLayout);
+  const setAlbumLayout = layoutPreferencesStore((s) => s.setAlbumLayout);
+  const setArtistLayout = layoutPreferencesStore((s) => s.setArtistLayout);
+  const setPlaylistLayout = layoutPreferencesStore((s) => s.setPlaylistLayout);
+
+  const layoutValues: Record<string, ItemLayout> = {
+    albumLayout,
+    artistLayout,
+    playlistLayout,
+  };
+
+  const layoutSetters: Record<string, (l: ItemLayout) => void> = {
+    albumLayout: setAlbumLayout,
+    artistLayout: setArtistLayout,
+    playlistLayout: setPlaylistLayout,
+  };
 
   const hasAnyInfo =
     serverInfo.serverType != null ||
@@ -82,6 +111,8 @@ export function SettingsScreen() {
         themeRow: { backgroundColor: colors.card, borderColor: colors.border },
         themeRowText: { color: colors.textPrimary },
         themeRowSubtext: { color: colors.textSecondary },
+        layoutRow: { backgroundColor: colors.card, borderColor: colors.border },
+        layoutRowLabel: { color: colors.textPrimary },
       }),
     [colors]
   );
@@ -178,6 +209,49 @@ export function SettingsScreen() {
                   <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                 )}
               </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Default layouts</Text>
+        <View style={styles.themeCard}>
+          {LAYOUT_ROWS.map((row) => {
+            const currentValue = layoutValues[row.key];
+            return (
+              <View
+                key={row.key}
+                style={[styles.layoutRow, dynamicStyles.layoutRow]}
+              >
+                <Text style={[styles.layoutRowLabel, dynamicStyles.layoutRowLabel]}>
+                  {row.label}
+                </Text>
+                <View style={styles.layoutIcons}>
+                  <Pressable
+                    onPress={() => layoutSetters[row.key]('list')}
+                    hitSlop={6}
+                    style={({ pressed }) => pressed && styles.themeRowPressed}
+                  >
+                    <Ionicons
+                      name="list-outline"
+                      size={22}
+                      color={currentValue === 'list' ? colors.primary : colors.textSecondary}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => layoutSetters[row.key]('grid')}
+                    hitSlop={6}
+                    style={({ pressed }) => pressed && styles.themeRowPressed}
+                  >
+                    <Ionicons
+                      name="grid-outline"
+                      size={22}
+                      color={currentValue === 'grid' ? colors.primary : colors.textSecondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
             );
           })}
         </View>
@@ -291,6 +365,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontStyle: 'italic',
     padding: 16,
+  },
+  layoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  layoutRowLabel: {
+    fontSize: 16,
+  },
+  layoutIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   logoutButton: {
     backgroundColor: 'transparent',
