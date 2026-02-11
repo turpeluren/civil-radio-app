@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useTheme } from '../hooks/useTheme';
@@ -17,6 +17,11 @@ import {
   type AlbumSortOrder,
   type ItemLayout,
 } from '../store/layoutPreferencesStore';
+import {
+  playbackSettingsStore,
+  type MaxBitRate,
+  type StreamFormat,
+} from '../store/playbackSettingsStore';
 import { serverInfoStore } from '../store/serverInfoStore';
 
 const AUTH_PERSIST_KEY = 'substreamer-auth';
@@ -75,6 +80,19 @@ const ALBUM_SORT_OPTIONS: { value: AlbumSortOrder; label: string }[] = [
   { value: 'title', label: 'Album title' },
 ];
 
+const BITRATE_OPTIONS: { value: MaxBitRate; label: string }[] = [
+  { value: 64, label: '64 kbps' },
+  { value: 128, label: '128 kbps' },
+  { value: 256, label: '256 kbps' },
+  { value: 320, label: '320 kbps' },
+  { value: null, label: 'No limit' },
+];
+
+const FORMAT_OPTIONS: { value: StreamFormat; label: string }[] = [
+  { value: 'raw', label: 'Original' },
+  { value: 'mp3', label: 'MP3' },
+];
+
 const ACCENT_COLORS: { label: string; hex: string }[] = [
   { label: 'Default', hex: '#1D9BF0' },
   { label: 'Red', hex: '#E91429' },
@@ -92,6 +110,14 @@ export function SettingsScreen() {
   const activePrimary = primaryColor ?? DEFAULT_PRIMARY_COLOR;
   const [accentOpen, setAccentOpen] = useState(false);
   const [sortOrderOpen, setSortOrderOpen] = useState(false);
+  const [bitrateOpen, setBitrateOpen] = useState(false);
+  const [formatOpen, setFormatOpen] = useState(false);
+  const maxBitRate = playbackSettingsStore((s) => s.maxBitRate);
+  const streamFormat = playbackSettingsStore((s) => s.streamFormat);
+  const estimateContentLength = playbackSettingsStore((s) => s.estimateContentLength);
+  const setMaxBitRate = playbackSettingsStore((s) => s.setMaxBitRate);
+  const setStreamFormat = playbackSettingsStore((s) => s.setStreamFormat);
+  const setEstimateContentLength = playbackSettingsStore((s) => s.setEstimateContentLength);
   const totalBytes = imageCacheStore((s) => s.totalBytes);
   const fileCount = imageCacheStore((s) => s.fileCount);
   const imageCount = getImageCount(fileCount);
@@ -464,6 +490,128 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Playback</Text>
+        <View style={[styles.accentDropdown, { backgroundColor: colors.card }]}>
+          {/* Max bitrate dropdown */}
+          <Pressable
+            onPress={() => setBitrateOpen((prev) => !prev)}
+            style={({ pressed }) => [
+              styles.accentHeader,
+              { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+              pressed && styles.themeRowPressed,
+            ]}
+          >
+            <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>Max bitrate</Text>
+            <View style={styles.dropdownRight}>
+              <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+                {BITRATE_OPTIONS.find((o) => o.value === maxBitRate)?.label ?? 'No limit'}
+              </Text>
+              <Ionicons
+                name={bitrateOpen ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </View>
+          </Pressable>
+          {bitrateOpen && (
+            <View style={[styles.accentList, { borderTopColor: colors.border }]}>
+              {BITRATE_OPTIONS.map((opt) => {
+                const isActive = maxBitRate === opt.value;
+                return (
+                  <Pressable
+                    key={String(opt.value)}
+                    onPress={() => {
+                      setMaxBitRate(opt.value);
+                      setBitrateOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.accentOption,
+                      { borderBottomColor: colors.border },
+                      pressed && styles.themeRowPressed,
+                    ]}
+                  >
+                    <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+                      {opt.label}
+                    </Text>
+                    {isActive && (
+                      <Ionicons name="checkmark" size={20} color={colors.primary} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Format dropdown */}
+          <Pressable
+            onPress={() => setFormatOpen((prev) => !prev)}
+            style={({ pressed }) => [
+              styles.accentHeader,
+              { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+              pressed && styles.themeRowPressed,
+            ]}
+          >
+            <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>Format</Text>
+            <View style={styles.dropdownRight}>
+              <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+                {FORMAT_OPTIONS.find((o) => o.value === streamFormat)?.label ?? 'Original'}
+              </Text>
+              <Ionicons
+                name={formatOpen ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={colors.textSecondary}
+              />
+            </View>
+          </Pressable>
+          {formatOpen && (
+            <View style={[styles.accentList, { borderTopColor: colors.border }]}>
+              {FORMAT_OPTIONS.map((opt) => {
+                const isActive = streamFormat === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => {
+                      setStreamFormat(opt.value);
+                      setFormatOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.accentOption,
+                      { borderBottomColor: colors.border },
+                      pressed && styles.themeRowPressed,
+                    ]}
+                  >
+                    <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+                      {opt.label}
+                    </Text>
+                    {isActive && (
+                      <Ionicons name="checkmark" size={20} color={colors.primary} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Estimate content length toggle */}
+          <View style={[styles.toggleRow, { borderBottomColor: colors.border }]}>
+            <View style={styles.toggleTextWrap}>
+              <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+                Estimate content length
+              </Text>
+              <Text style={[styles.toggleHint, { color: colors.textSecondary }]}>
+                Enables the server to set the Content-Length header, which may improve compatibility with some players and casting devices.
+              </Text>
+            </View>
+            <Switch
+              value={estimateContentLength}
+              onValueChange={setEstimateContentLength}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Library layout</Text>
         <View style={styles.themeCard}>
           {LAYOUT_ROWS.map((row) => {
@@ -744,6 +892,27 @@ const styles = StyleSheet.create({
   clearCacheText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  dropdownRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleHint: {
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 16,
   },
   logoutButton: {
     backgroundColor: 'transparent',

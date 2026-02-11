@@ -11,6 +11,7 @@ import SubsonicAPI, {
 } from 'subsonic-api';
 
 import { authStore } from '../store/authStore';
+import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import type { ServerInfo } from '../store/serverInfoStore';
 
 const reactNativeCrypto: Crypto = {
@@ -157,6 +158,20 @@ export function getStreamUrl(trackId: string): string | null {
     t: cachedCoverArtToken,
     s: cachedCoverArtSalt,
   });
+
+  // Apply playback settings
+  const { maxBitRate, streamFormat, estimateContentLength } =
+    playbackSettingsStore.getState();
+  if (maxBitRate != null) {
+    params.set('maxBitRate', String(maxBitRate));
+  }
+  if (streamFormat === 'mp3') {
+    params.set('format', 'mp3');
+  }
+  if (estimateContentLength) {
+    params.set('estimateContentLength', 'true');
+  }
+
   return `${base}?${params.toString()}`;
 }
 
