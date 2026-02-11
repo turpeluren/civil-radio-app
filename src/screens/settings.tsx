@@ -244,27 +244,27 @@ export function SettingsScreen() {
             <InfoRow
               label="Server type"
               value={serverInfo.serverType ?? (serverInfo.apiVersion != null ? 'Subsonic' : null)}
-              labelColor={colors.textSecondary}
-              valueColor={colors.textPrimary}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
               borderColor={colors.border}
             />
             <InfoRow
               label="Server version"
               value={serverInfo.serverVersion}
-              labelColor={colors.textSecondary}
-              valueColor={colors.textPrimary}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
               borderColor={colors.border}
             />
             <InfoRow
               label="API version"
               value={serverInfo.apiVersion}
-              labelColor={colors.textSecondary}
-              valueColor={colors.textPrimary}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
               borderColor={colors.border}
             />
             <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>OpenSubsonic</Text>
-              <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+              <Text style={[styles.infoLabel, { color: colors.textPrimary }]}>OpenSubsonic</Text>
+              <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
                 {serverInfo.openSubsonic ? 'Yes' : 'No'}
               </Text>
             </View>
@@ -297,14 +297,14 @@ export function SettingsScreen() {
         <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Storage</Text>
         <View style={[styles.card, dynamicStyles.card]}>
           <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Cached images</Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+            <Text style={[styles.infoLabel, { color: colors.textPrimary }]}>Cached images</Text>
+            <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
               {imageCount} {imageCount === 1 ? 'image' : 'images'}
             </Text>
           </View>
           <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Disk usage</Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+            <Text style={[styles.infoLabel, { color: colors.textPrimary }]}>Disk usage</Text>
+            <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
               {formatBytes(totalBytes)}
             </Text>
           </View>
@@ -317,8 +317,8 @@ export function SettingsScreen() {
             ]}
           >
             <View style={styles.browseCacheLeft}>
-              <Ionicons name="images-outline" size={18} color={colors.primary} />
-              <Text style={[styles.browseCacheText, { color: colors.primary }]}>Browse Cache</Text>
+              <Ionicons name="images-outline" size={18} color={colors.textPrimary} />
+              <Text style={[styles.browseCacheText, { color: colors.textPrimary }]}>Browse Image Cache</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </Pressable>
@@ -501,9 +501,9 @@ export function SettingsScreen() {
               pressed && styles.themeRowPressed,
             ]}
           >
-            <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>Max bitrate</Text>
+            <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>Max bitrate</Text>
             <View style={styles.dropdownRight}>
-              <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+              <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>
                 {BITRATE_OPTIONS.find((o) => o.value === maxBitRate)?.label ?? 'No limit'}
               </Text>
               <Ionicons
@@ -551,9 +551,9 @@ export function SettingsScreen() {
               pressed && styles.themeRowPressed,
             ]}
           >
-            <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>Format</Text>
+            <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>Format</Text>
             <View style={styles.dropdownRight}>
-              <Text style={[styles.chipLabel, { color: colors.textPrimary }]}>
+              <Text style={[styles.chipLabel, { color: colors.textSecondary }]}>
                 {FORMAT_OPTIONS.find((o) => o.value === streamFormat)?.label ?? 'Original'}
               </Text>
               <Ionicons
