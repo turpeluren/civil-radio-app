@@ -11,6 +11,9 @@ import { authStore, clearPersistedData } from '../store/authStore';
 import { fetchServerInfo } from '../services/subsonicService';
 import { serverInfoStore } from '../store/serverInfoStore';
 
+// Keep the native splash visible until the animated splash is ready.
+// AnimatedSplashScreen calls hideAsync() itself once mounted so the
+// transition is seamless (both share the same blue + logo appearance).
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -42,9 +45,10 @@ export default function RootLayout() {
     albumListsStore.getState().refreshAll();
   }, [rehydrated, isLoggedIn]);
 
+  // Native splash is already hidden by AnimatedSplashScreen on mount.
+  // This callback fires after the fade-out animation completes.
   const handleSplashFinish = () => {
     setSplashVisible(false);
-    SplashScreen.hideAsync();
   };
 
   if (splashVisible) {
