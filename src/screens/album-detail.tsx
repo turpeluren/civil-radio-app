@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   ActivityIndicator,
@@ -12,6 +12,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AlbumOptionsSheet } from '../components/AlbumOptionsSheet';
+import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { TrackRow } from '../components/TrackRow';
 import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useTheme } from '../hooks/useTheme';
@@ -46,14 +48,39 @@ function groupTracksByDisc(songs: Child[]): Map<number, Child[]> {
 export function AlbumDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [album, setAlbum] = useState<AlbumWithSongsID3 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   const { coverBackgroundColor, gradientOpacity } = useColorExtraction(
     album?.coverArt,
     colors.background,
+  );
+
+  /* ---- Header right: more options button ---- */
+  useEffect(() => {
+    if (!album) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <MoreOptionsButton
+          onPress={() => setSheetVisible(true)}
+          color={colors.textPrimary}
+        />
+      ),
+    });
+  }, [album, navigation, colors.textPrimary]);
+
+  const handleStarChanged = useCallback(
+    (_albumId: string, starred: boolean) => {
+      setAlbum((prev) => {
+        if (!prev) return prev;
+        return { ...prev, starred: starred ? new Date() : undefined };
+      });
+    },
+    []
   );
 
   useEffect(() => {
@@ -186,6 +213,15 @@ export function AlbumDetailScreen() {
         </View>
       )}
         </ScrollView>
+
+      {album && (
+        <AlbumOptionsSheet
+          album={album}
+          visible={sheetVisible}
+          onClose={() => setSheetVisible(false)}
+          onStarChanged={handleStarChanged}
+        />
+      )}
     </View>
   );
 }

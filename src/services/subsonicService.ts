@@ -392,3 +392,25 @@ export async function search3(query: string): Promise<{
     songs: r?.song ?? [],
   };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Star / Unstar                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Star (favorite) an album by its ID3 albumId.
+ */
+export async function starAlbum(albumId: string): Promise<void> {
+  const api = getApi();
+  if (!api) return;
+  await api.star({ albumId });
+}
+
+/**
+ * Unstar (unfavorite) an album by its ID3 albumId.
+ */
+export async function unstarAlbum(albumId: string): Promise<void> {
+  const api = getApi();
+  if (!api) return;
+  await api.unstar({ albumId });
+}
