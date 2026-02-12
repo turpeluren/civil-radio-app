@@ -25,9 +25,7 @@ Each entity (Album, Artist, Song, Playlist) follows a Card + Row + ListView patt
 
 - **Card** (`AlbumCard`) – grid display with cover art and title
 - **Row** (`AlbumRow`) – list display with thumbnail, title, and metadata
-- **ListView** (`AlbumListView`) – FlatList wrapper supporting list/grid toggle, pull-to-refresh, empty states, and alphabet scrolling
-
-Export `ROW_HEIGHT` from row components for `getItemLayout` optimizations.
+- **ListView** (`AlbumListView`) – FlashList wrapper supporting list/grid toggle, pull-to-refresh, empty states, and alphabet scrolling
 
 ## Styling
 
@@ -55,13 +53,32 @@ Always use `CachedImage` for Subsonic cover art – never raw `<Image>`:
 
 Standard sizes: 50 (thumbnails), 150 (small), 300 (cards/lists), 600 (hero/detail).
 
-## FlatList Performance
+## FlashList Performance
 
-- Provide `getItemLayout` using exported `ROW_HEIGHT` for list mode.
+Uses `@shopify/flash-list` v2 (`FlashList`) instead of React Native's `FlatList`. FlashList v2 handles view recycling, batching, and size estimation automatically.
+
 - Use `keyExtractor={(item) => item.id}`.
-- Set `windowSize={11}`, `maxToRenderPerBatch`, `initialNumToRender`, `removeClippedSubviews`.
 - Memoize `renderItem` with `useCallback`.
-- Grid: `numColumns={2}` with `columnWrapperStyle` for gaps.
+- Do **not** pass `windowSize`, `maxToRenderPerBatch`, `initialNumToRender`, `removeClippedSubviews`, or `getItemLayout` – FlashList manages these internally.
+- Use `drawDistance` (pixels) to control off-screen rendering distance when needed (default 250px is usually sufficient; use 300 for lists with alphabet scrollers).
+- Grid: use `numColumns={2}`. Handle inter-column gaps via padding on individual grid items (FlashList does not support `columnWrapperStyle`):
+
+```tsx
+const renderGridItem = ({ item, index }: { item: AlbumID3; index: number }) => {
+  const isLeftColumn = index % GRID_COLUMNS === 0;
+  return (
+    <View style={{
+      flex: 1,
+      paddingLeft: isLeftColumn ? 0 : GRID_GAP / 2,
+      paddingRight: isLeftColumn ? GRID_GAP / 2 : 0,
+    }}>
+      <AlbumCard album={item} width={cardWidth} />
+    </View>
+  );
+};
+```
+
+- Ref type: `useRef<FlashListRef<T>>(null)` (import `FlashListRef` from `@shopify/flash-list`).
 
 ## Modals and Bottom Sheets
 
