@@ -105,7 +105,7 @@ const CacheRow = memo(function CacheRow({
   );
 });
 
-export function CacheBrowserScreen() {
+export function ImageCacheBrowserScreen() {
   const { colors } = useTheme();
   const [entries, setEntries] = useState<CachedImageEntry[]>([]);
   const [filter, setFilter] = useState('');

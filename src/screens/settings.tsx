@@ -335,7 +335,7 @@ export function SettingsScreen() {
             </Text>
           </View>
           <Pressable
-            onPress={() => router.push('/cache-browser')}
+            onPress={() => router.push('/image-cache-browser')}
             style={({ pressed }) => [
               styles.browseCacheButton,
               { borderTopColor: colors.border },
@@ -380,7 +380,7 @@ export function SettingsScreen() {
             </Text>
           </View>
           <Pressable
-            onPress={() => router.push('/metadata-browser')}
+            onPress={() => router.push('/metadata-cache-browser')}
             style={({ pressed }) => [
               styles.browseCacheButton,
               { borderTopColor: colors.border },

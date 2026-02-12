@@ -126,11 +126,11 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
-          name="cache-browser"
+          name="image-cache-browser"
           options={{ title: 'Image Cache', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
-          name="metadata-browser"
+          name="metadata-cache-browser"
           options={{ title: 'Metadata Cache', headerBackTitle: 'Back' }}
         />
       </Stack>

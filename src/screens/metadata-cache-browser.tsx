@@ -179,7 +179,7 @@ const MetadataRow = memo(function MetadataRow({
 /*  Screen                                                             */
 /* ------------------------------------------------------------------ */
 
-export function MetadataBrowserScreen() {
+export function MetadataCacheBrowserScreen() {
   const { colors } = useTheme();
   const [entries, setEntries] = useState<MetadataEntry[]>(() => buildEntries());
   const [filter, setFilter] = useState('');
