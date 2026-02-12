@@ -24,12 +24,9 @@ import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useTheme } from '../hooks/useTheme';
 import { refreshCachedImage } from '../services/imageCacheService';
 import { playTrack } from '../services/playerService';
-import {
-  ensureCoverArtAuth,
-  getAlbum,
-  type AlbumWithSongsID3,
-  type Child,
-} from '../services/subsonicService';
+import { albumDetailStore } from '../store/albumDetailStore';
+
+import { type AlbumWithSongsID3, type Child } from '../services/subsonicService';
 
 const HERO_PADDING = 24;
 const HERO_COVER_SIZE = 600;
@@ -56,8 +53,9 @@ export function AlbumDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [album, setAlbum] = useState<AlbumWithSongsID3 | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedEntry = albumDetailStore((s) => (id ? s.albums[id] : undefined));
+  const [album, setAlbum] = useState<AlbumWithSongsID3 | null>(cachedEntry?.album ?? null);
+  const [loading, setLoading] = useState(!cachedEntry);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -81,16 +79,29 @@ export function AlbumDetailScreen() {
   }, [album, navigation, colors.textPrimary]);
 
   const handleStarChanged = useCallback(
-    (_albumId: string, starred: boolean) => {
+    (albumId: string, starred: boolean) => {
       setAlbum((prev) => {
         if (!prev) return prev;
-        return { ...prev, starred: starred ? new Date() : undefined };
+        const updated = { ...prev, starred: starred ? new Date() : undefined };
+        // Keep the persisted store in sync
+        const entry = albumDetailStore.getState().albums[albumId];
+        if (entry) {
+          albumDetailStore.setState({
+            albums: {
+              ...albumDetailStore.getState().albums,
+              [albumId]: { ...entry, album: updated },
+            },
+          });
+        }
+        return updated;
       });
     },
     []
   );
 
   /* ---- Data fetching ---- */
+  const { fetchAlbum } = albumDetailStore.getState();
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!id) {
       setError('Missing album id');
@@ -104,8 +115,7 @@ export function AlbumDetailScreen() {
       const minDelay = isRefresh
         ? new Promise((resolve) => setTimeout(resolve, 2000))
         : null;
-      await ensureCoverArtAuth();
-      const data = await getAlbum(id);
+      const data = await fetchAlbum(id);
       setAlbum(data);
       if (!data) setError('Album not found');
       if (isRefresh && data?.coverArt) {
@@ -118,9 +128,10 @@ export function AlbumDetailScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchAlbum]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Only fetch on mount if no cached data
+  useEffect(() => { if (!cachedEntry) fetchData(); }, [fetchData, cachedEntry]);
 
   const onRefresh = useCallback(() => fetchData(true), [fetchData]);
 

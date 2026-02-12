@@ -22,23 +22,16 @@ import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { SectionTitle } from '../components/SectionTitle';
 import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useTheme } from '../hooks/useTheme';
+import { refreshCachedImage } from '../services/imageCacheService';
+import { playTrack } from '../services/playerService';
+import { artistDetailStore } from '../store/artistDetailStore';
+
 import {
-  ensureCoverArtAuth,
-  getArtist,
-  getArtistInfo2,
-  getTopSongs,
   type ArtistID3,
   type ArtistInfo2,
   type ArtistWithAlbumsID3,
   type Child,
 } from '../services/subsonicService';
-import { refreshCachedImage } from '../services/imageCacheService';
-import { playTrack } from '../services/playerService';
-import {
-  getArtistBiography,
-  searchArtistMBID,
-} from '../services/musicbrainzService';
-import { stripHtml } from '../utils/formatters';
 
 const HERO_PADDING = 24;
 const HERO_IMAGE_SIZE = 180;
@@ -134,11 +127,12 @@ export function ArtistDetailScreen() {
   const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [artist, setArtist] = useState<ArtistWithAlbumsID3 | null>(null);
-  const [artistInfo, setArtistInfo] = useState<ArtistInfo2 | null>(null);
-  const [topSongs, setTopSongs] = useState<Child[]>([]);
-  const [biography, setBiography] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedEntry = artistDetailStore((s) => (id ? s.artists[id] : undefined));
+  const [artist, setArtist] = useState<ArtistWithAlbumsID3 | null>(cachedEntry?.artist ?? null);
+  const [artistInfo, setArtistInfo] = useState<ArtistInfo2 | null>(cachedEntry?.artistInfo ?? null);
+  const [topSongs, setTopSongs] = useState<Child[]>(cachedEntry?.topSongs ?? []);
+  const [biography, setBiography] = useState<string | null>(cachedEntry?.biography ?? null);
+  const [loading, setLoading] = useState(!cachedEntry);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bioExpanded, setBioExpanded] = useState(false);
@@ -163,16 +157,29 @@ export function ArtistDetailScreen() {
   }, [artist, navigation, colors.textPrimary]);
 
   const handleStarChanged = useCallback(
-    (_artistId: string, starred: boolean) => {
+    (artistId: string, starred: boolean) => {
       setArtist((prev) => {
         if (!prev) return prev;
-        return { ...prev, starred: starred ? new Date() : undefined };
+        const updated = { ...prev, starred: starred ? new Date() : undefined };
+        // Keep the persisted store in sync
+        const entry = artistDetailStore.getState().artists[artistId];
+        if (entry) {
+          artistDetailStore.setState({
+            artists: {
+              ...artistDetailStore.getState().artists,
+              [artistId]: { ...entry, artist: updated },
+            },
+          });
+        }
+        return updated;
       });
     },
     []
   );
 
   /* ---- Data fetching ---- */
+  const { fetchArtist } = artistDetailStore.getState();
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!id) {
       setError('Missing artist id');
@@ -182,43 +189,24 @@ export function ArtistDetailScreen() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
-    setBiography(null);
     try {
       const minDelay = isRefresh
         ? new Promise((resolve) => setTimeout(resolve, 2000))
         : null;
-      await ensureCoverArtAuth();
-
-      const [artistData, infoData] = await Promise.all([
-        getArtist(id),
-        getArtistInfo2(id),
-      ]);
-
-      setArtist(artistData);
-      setArtistInfo(infoData);
-      if (!artistData) {
+      const entry = await fetchArtist(id);
+      if (!entry) {
         setError('Artist not found');
-        return;
-      }
-      if (isRefresh && artistData.coverArt) {
-        refreshCachedImage(artistData.coverArt).catch(() => {});
-      }
-
-      // Fetch top songs after we have the artist name
-      getTopSongs(artistData.name, 20).then((songs) => {
-        setTopSongs(songs);
-      });
-
-      // Resolve biography: prefer Subsonic, fall back to MusicBrainz
-      const subsonicBio = infoData?.biography ? stripHtml(infoData.biography) : null;
-      if (subsonicBio && subsonicBio.length > 0) {
-        setBiography(subsonicBio);
+        setArtist(null);
+        setArtistInfo(null);
+        setTopSongs([]);
+        setBiography(null);
       } else {
-        // Try MusicBrainz: use existing MBID from artistInfo, or search by name
-        const mbid = infoData?.musicBrainzId || (await searchArtistMBID(artistData.name));
-        if (mbid) {
-          const mbBio = await getArtistBiography(mbid);
-          if (mbBio) setBiography(stripHtml(mbBio));
+        setArtist(entry.artist);
+        setArtistInfo(entry.artistInfo);
+        setTopSongs(entry.topSongs);
+        setBiography(entry.biography);
+        if (isRefresh && entry.artist.coverArt) {
+          refreshCachedImage(entry.artist.coverArt).catch(() => {});
         }
       }
       await minDelay;
@@ -228,9 +216,10 @@ export function ArtistDetailScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchArtist]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Only fetch on mount if no cached data
+  useEffect(() => { if (!cachedEntry) fetchData(); }, [fetchData, cachedEntry]);
 
   const onRefresh = useCallback(() => fetchData(true), [fetchData]);
 

@@ -21,12 +21,10 @@ import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useTheme } from '../hooks/useTheme';
 import { refreshCachedImage } from '../services/imageCacheService';
 import { playTrack } from '../services/playerService';
-import {
-  ensureCoverArtAuth,
-  getPlaylist,
-  type PlaylistWithSongs,
-} from '../services/subsonicService';
+import { playlistDetailStore } from '../store/playlistDetailStore';
 import { formatCompactDuration } from '../utils/formatters';
+
+import { type PlaylistWithSongs } from '../services/subsonicService';
 
 const HERO_PADDING = 24;
 const HERO_COVER_SIZE = 600;
@@ -36,8 +34,9 @@ export function PlaylistDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [playlist, setPlaylist] = useState<PlaylistWithSongs | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedEntry = playlistDetailStore((s) => (id ? s.playlists[id] : undefined));
+  const [playlist, setPlaylist] = useState<PlaylistWithSongs | null>(cachedEntry?.playlist ?? null);
+  const [loading, setLoading] = useState(!cachedEntry);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +46,8 @@ export function PlaylistDetailScreen() {
   );
 
   /* ---- Data fetching ---- */
+  const { fetchPlaylist } = playlistDetailStore.getState();
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!id) {
       setError('Missing playlist id');
@@ -60,8 +61,7 @@ export function PlaylistDetailScreen() {
       const minDelay = isRefresh
         ? new Promise((resolve) => setTimeout(resolve, 2000))
         : null;
-      await ensureCoverArtAuth();
-      const data = await getPlaylist(id);
+      const data = await fetchPlaylist(id);
       setPlaylist(data);
       if (!data) setError('Playlist not found');
       if (isRefresh && data?.coverArt) {
@@ -74,9 +74,10 @@ export function PlaylistDetailScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchPlaylist]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Only fetch on mount if no cached data
+  useEffect(() => { if (!cachedEntry) fetchData(); }, [fetchData, cachedEntry]);
 
   const onRefresh = useCallback(() => fetchData(true), [fetchData]);
 
