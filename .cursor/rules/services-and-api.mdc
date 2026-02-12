@@ -1,0 +1,81 @@
+---
+description: Service layer patterns for API, playback, and caching
+globs: src/services/**/*.ts
+alwaysApply: false
+---
+
+# Service Layer Patterns
+
+## Architecture
+
+Services are plain TypeScript modules exporting async functions – no classes, no singletons. Each service file focuses on one domain.
+
+## Subsonic API (`subsonicService.ts`)
+
+- Uses `subsonic-api` library with `expo-crypto` for MD5 token auth.
+- `getApi()` returns a cached `SubsonicAPI` instance, invalidated when server/user changes.
+- Auth tokens for cover art and stream URLs are cached separately via `ensureCoverArtAuth()`.
+- All API functions check `isLoggedIn` and return `null` on failure rather than throwing.
+- Types re-exported from `subsonic-api`: `AlbumID3`, `ArtistID3`, `Child`, `Playlist`, etc.
+
+```typescript
+// Pattern for API functions
+export async function getAlbum(albumId: string): Promise<AlbumWithSongsID3 | null> {
+  const api = getApi();
+  if (!api) return null;
+  try {
+    const response = await api.getAlbum({ id: albumId });
+    return response.album ?? null;
+  } catch {
+    return null;
+  }
+}
+```
+
+- `getCoverArtUrl(coverArtId, size?)` and `getStreamUrl(trackId)` build authenticated URLs synchronously.
+- Stream URLs include playback settings from `playbackSettingsStore` (maxBitRate, format, estimateContentLength).
+
+## Player Service (`playerService.ts`)
+
+- Wraps `react-native-track-player` (RNTP).
+- `initPlayer()` sets up RNTP, registers event listeners, starts progress polling.
+- `childToTrack()` converts Subsonic `Child` to RNTP `Track` objects.
+- Updates `playerStore` from RNTP events (`PlaybackState`, `PlaybackActiveTrackChanged`).
+- Progress polling at 250ms intervals when playing, synced with `AppState`.
+
+## Playback Service (`playbackService.ts`)
+
+- Headless RNTP service for remote/lock-screen events.
+- Registered in `index.js` via `TrackPlayer.registerPlaybackService()`.
+- Uses CommonJS `module.exports` (required by RNTP).
+
+## Image Cache (`imageCacheService.ts`)
+
+- Disk cache under `Paths.document/image-cache/` using `expo-file-system`.
+- Standard sizes: 50, 150, 300, 600.
+- `getCachedImageUri()` is synchronous (file existence check).
+- `cacheAllSizes()` downloads all sizes in parallel with deduplication via a `downloading` Set.
+- Uses `expo/fetch` for image downloads.
+
+## MusicBrainz Service (`musicbrainzService.ts`)
+
+- Direct `fetch` calls with `User-Agent` header.
+- Rate limiting with delay between requests.
+- Returns `null` on any failure (best-effort enrichment).
+
+## Error Handling
+
+- Login returns a discriminated union: `{ success: true; version: string } | { success: false; error: string }`.
+- Data-fetching functions return `null` on failure rather than throwing.
+- Image caching and player sync swallow errors (best-effort).
+- Stores surface errors via `error` state field for UI display.
+
+## Adding New API Endpoints
+
+When adding a new Subsonic API call:
+
+1. Add the function to `subsonicService.ts`.
+2. Use `getApi()` to get the client, return `null` if not available.
+3. Wrap in try/catch, return `null` on failure.
+4. Re-export any new types from `subsonic-api`.
+5. Consume from a Zustand store or directly in a screen.

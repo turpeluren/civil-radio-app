@@ -1,0 +1,104 @@
+---
+description: Zustand state management patterns and conventions
+globs: src/store/**/*.ts
+alwaysApply: false
+---
+
+# Zustand Store Patterns
+
+## Store Structure
+
+Each store is a separate file in `src/store/` following this pattern:
+
+```typescript
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+
+interface MyState {
+  data: Item[];
+  loading: boolean;
+  error: string | null;
+  fetchData: () => Promise<void>;
+}
+
+export const myStore = create<MyState>()(
+  persist(
+    (set, get) => ({
+      data: [],
+      loading: false,
+      error: null,
+      fetchData: async () => {
+        set({ loading: true, error: null });
+        try {
+          const result = await someService();
+          set({ data: result, loading: false });
+        } catch (e) {
+          set({ loading: false, error: e instanceof Error ? e.message : 'Failed to load' });
+        }
+      },
+    }),
+    {
+      name: 'substreamer-my-data',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ data: state.data }),
+    }
+  )
+);
+```
+
+## Key Conventions
+
+1. **Export the store directly** (not a hook): `export const myStore = create<MyState>()(...)`.
+2. **Persist key naming:** `'substreamer-{domain}'` (e.g. `'substreamer-auth'`, `'substreamer-theme'`).
+3. **`partialize`** to exclude transient state (`loading`, `error`) from persistence.
+4. **Types co-located** with the store – define interfaces and type aliases in the same file.
+5. **Non-persistent stores** omit the `persist` wrapper (e.g. `playerStore`, `searchStore`).
+
+## Consuming Stores
+
+In components, use selector pattern for minimal re-renders:
+
+```typescript
+const isLoggedIn = authStore((s) => s.isLoggedIn);
+const albums = albumListsStore((s) => s.recentlyAdded);
+```
+
+Outside React (services, other stores), use `getState()`:
+
+```typescript
+const { serverUrl, username } = authStore.getState();
+albumListsStore.getState().refreshAll();
+```
+
+## Existing Stores
+
+| Store | Persisted | Purpose |
+|-------|-----------|---------|
+| `authStore` | Yes | Server URL, credentials, login state |
+| `themeStore` | Yes | Theme preference (light/dark/system), primary color |
+| `albumListsStore` | Yes | Home screen album lists (recent, frequent, etc.) |
+| `albumLibraryStore` | Yes | Full album library with sorting |
+| `artistLibraryStore` | Yes | Artist library |
+| `playlistLibraryStore` | Yes | Playlist library |
+| `favoritesStore` | Yes | Starred albums, artists, songs |
+| `layoutPreferencesStore` | Yes | List/grid toggle, sort order per view |
+| `playbackSettingsStore` | Yes | Stream format, bitrate, content length |
+| `playerStore` | No | Current track, queue, playback position |
+| `searchStore` | No | Search query and results |
+| `serverInfoStore` | No | Server version, type, extensions |
+| `imageCacheStore` | No | Cache statistics |
+
+## Error Handling in Stores
+
+Use `loading` / `error` state pattern:
+
+```typescript
+set({ loading: true, error: null });
+try {
+  // async work
+  set({ data: result, loading: false });
+} catch (e) {
+  set({ loading: false, error: e instanceof Error ? e.message : 'Failed to load' });
+}
+```

@@ -1,0 +1,98 @@
+---
+description: React Native component patterns, styling, and UI conventions for Substreamer
+globs: src/components/**/*.tsx,src/screens/**/*.tsx,src/app/**/*.tsx
+alwaysApply: false
+---
+
+# Component Patterns
+
+## Structure
+
+- All components are **functional** – no class components.
+- Use **`memo()`** for list-rendered items (cards, rows) and frequently re-rendered components.
+- Use **named exports** for components. Wrap memo'd components with a named function:
+
+```tsx
+export const AlbumCard = memo(function AlbumCard({ album, width }: { album: AlbumID3; width: number }) {
+  const { colors } = useTheme();
+  // ...
+});
+```
+
+## Entity Component Pairs
+
+Each entity (Album, Artist, Song, Playlist) follows a Card + Row + ListView pattern:
+
+- **Card** (`AlbumCard`) – grid display with cover art and title
+- **Row** (`AlbumRow`) – list display with thumbnail, title, and metadata
+- **ListView** (`AlbumListView`) – FlatList wrapper supporting list/grid toggle, pull-to-refresh, empty states, and alphabet scrolling
+
+Export `ROW_HEIGHT` from row components for `getItemLayout` optimizations.
+
+## Styling
+
+- Use `StyleSheet.create()` at module scope for static styles.
+- Apply theme colors inline via `useTheme()`:
+
+```tsx
+<Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+```
+
+- Use `useMemo` for dynamic `StyleSheet.create` when many styles depend on theme colors.
+- Use `Pressable` with function styles for pressed states:
+
+```tsx
+<Pressable style={({ pressed }) => [styles.row, { backgroundColor: colors.card }, pressed && styles.pressed]}>
+```
+
+## Cover Art
+
+Always use `CachedImage` for Subsonic cover art – never raw `<Image>`:
+
+```tsx
+<CachedImage coverArtId={album.coverArt} size={300} style={styles.cover} resizeMode="cover" />
+```
+
+Standard sizes: 50 (thumbnails), 150 (small), 300 (cards/lists), 600 (hero/detail).
+
+## FlatList Performance
+
+- Provide `getItemLayout` using exported `ROW_HEIGHT` for list mode.
+- Use `keyExtractor={(item) => item.id}`.
+- Set `windowSize={11}`, `maxToRenderPerBatch`, `initialNumToRender`, `removeClippedSubviews`.
+- Memoize `renderItem` with `useCallback`.
+- Grid: `numColumns={2}` with `columnWrapperStyle` for gaps.
+
+## Modals and Bottom Sheets
+
+Use RN `Modal` with transparent backdrop for bottom sheets:
+
+```tsx
+<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+  <Pressable style={styles.backdrop} onPress={onClose} />
+  <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16) }]}>
+    <View style={[styles.handle, { backgroundColor: colors.border }]} />
+    {/* content */}
+  </View>
+</Modal>
+```
+
+Use `useSafeAreaInsets()` for bottom padding.
+
+## Theming
+
+- Access theme via `useTheme()` which returns `{ theme, colors, preference, primaryColor }`.
+- `ThemeColors` interface defines: `background`, `card`, `textPrimary`, `textSecondary`, `label`, `border`, `primary`, `red`, `inputBg`.
+- Supports light/dark/system modes with optional primary color override.
+- Pass `colors` as a prop to memo'd child components to avoid re-renders from hook calls.
+
+## Layout Constants
+
+Define reusable layout values as constants at the top of files:
+
+```tsx
+const GRID_COLUMNS = 2;
+const GRID_GAP = 10;
+const LIST_PADDING = 16;
+const COVER_SIZE = 300;
+```

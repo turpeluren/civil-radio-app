@@ -1,0 +1,78 @@
+---
+description: Substreamer project architecture, structure, and conventions
+alwaysApply: true
+---
+
+# Substreamer – Project Overview
+
+Substreamer is a React Native music streaming client for Subsonic-compatible servers (Subsonic, Navidrome, etc.), built with Expo SDK 54, React 19, and TypeScript (strict mode).
+
+## Tech Stack
+
+- **Framework:** Expo ~54 / React Native 0.81 (New Architecture enabled)
+- **Routing:** Expo Router (file-based) with Stack + Tab navigators
+- **State:** Zustand with AsyncStorage persistence
+- **API:** `subsonic-api` library for Subsonic REST protocol
+- **Audio:** `react-native-track-player` (RNTP) for streaming and background playback
+- **Image caching:** Custom disk cache via `expo-file-system`
+- **Styling:** `StyleSheet.create` + inline theme colors (no CSS-in-JS libraries)
+- **Path alias:** `@/*` maps to `./src/*`
+
+## Directory Structure
+
+```
+src/
+  app/            # Expo Router routes (thin wrappers that import from screens/)
+    _layout.tsx   # Root Stack layout, auth guard, splash screen
+    (tabs)/       # Bottom tab navigator group
+    album/[id]    # Dynamic routes for entities
+    artist/[id]
+    playlist/[id]
+  screens/        # Screen components with business logic
+  components/     # Reusable UI components (28+)
+  hooks/          # Custom hooks (useTheme, useCachedCoverArt, useColorExtraction)
+  services/       # API clients and external integrations
+  store/          # Zustand stores (13 stores)
+  constants/      # Theme definitions
+  utils/          # Formatting and color helpers
+  assets/         # App icons, splash images
+```
+
+## Key Architectural Patterns
+
+1. **Route/Screen separation:** Route files in `app/` are thin wrappers that render screen components from `screens/`. Keep business logic in screens, not routes.
+2. **Zustand stores** manage all app state. Persistent stores use `persist` middleware with `createJSONStorage(() => AsyncStorage)`.
+3. **Services** are plain modules exporting async functions (no classes). `subsonicService.ts` wraps the `subsonic-api` library.
+4. **CachedImage** is the standard component for all cover art rendering – never use raw `<Image>` for Subsonic artwork.
+5. **`useTheme()`** provides `{ theme, colors }` – all components consume colors from this hook rather than importing theme constants directly.
+
+## Naming Conventions
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Component files | PascalCase | `AlbumCard.tsx` |
+| Screen files | kebab-case | `album-detail.tsx` |
+| Route files | kebab-case / `[id]` | `album/[id].tsx` |
+| Components | PascalCase | `AlbumCard` |
+| Hooks | camelCase with `use` prefix | `useTheme` |
+| Stores | camelCase with `Store` suffix | `playerStore` |
+| Constants | UPPER_SNAKE_CASE | `ROW_HEIGHT`, `COVER_SIZE` |
+| Handler functions | `handle` prefix | `handlePress` |
+| Callback props | `on` prefix | `onPress`, `onClose` |
+| Props interfaces | `ComponentNameProps` | `TrackRowProps` |
+
+## Import Organization
+
+Order imports as: external packages, then internal modules, then type-only imports.
+
+```typescript
+import { useRouter } from 'expo-router';
+import { memo, useCallback } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
+
+import { CachedImage } from './CachedImage';
+import { useTheme } from '../hooks/useTheme';
+import { type AlbumID3 } from '../services/subsonicService';
+```
+
+Use `type` keyword for type-only imports: `import { type AlbumID3 } from '...'`.
