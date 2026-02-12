@@ -8,6 +8,7 @@ import AnimatedSplashScreen from '../components/AnimatedSplashScreen';
 import { useTheme } from '../hooks/useTheme';
 import { getImageCacheStats, initImageCache } from '../services/imageCacheService';
 import { initPlayer } from '../services/playerService';
+import { fetchScanStatus } from '../services/scanService';
 import { albumListsStore } from '../store/albumListsStore';
 import { imageCacheStore } from '../store/imageCacheStore';
 import { authStore, clearPersistedData } from '../store/authStore';
@@ -56,6 +57,7 @@ export default function RootLayout() {
     fetchServerInfo().then((info) => {
       if (info) serverInfoStore.getState().setServerInfo(info);
     });
+    fetchScanStatus();
     albumListsStore.getState().refreshAll();
   }, [rehydrated, isLoggedIn]);
 

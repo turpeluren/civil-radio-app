@@ -8,6 +8,7 @@ import SubsonicAPI, {
   type Child,
   type Playlist,
   type PlaylistWithSongs,
+  type ScanStatus,
 } from 'subsonic-api';
 
 import { authStore } from '../store/authStore';
@@ -102,7 +103,7 @@ export function clearApiCache(): void {
   cachedCoverArtToken = null;
 }
 
-export type { AlbumID3, AlbumWithSongsID3, ArtistID3, ArtistInfo2, ArtistWithAlbumsID3, Child, Playlist, PlaylistWithSongs };
+export type { AlbumID3, AlbumWithSongsID3, ArtistID3, ArtistInfo2, ArtistWithAlbumsID3, Child, Playlist, PlaylistWithSongs, ScanStatus };
 
 export async function ensureCoverArtAuth(): Promise<void> {
   const { isLoggedIn, serverUrl, username, password } = authStore.getState();
@@ -467,4 +468,54 @@ export async function unstarArtist(artistId: string): Promise<void> {
   const api = getApi();
   if (!api) return;
   await api.unstar({ artistId });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Library Scan                                                       */
+/* ------------------------------------------------------------------ */
+
+export interface ScanStatusResult {
+  scanning: boolean;
+  count: number;
+  lastScan: number | null;
+  folderCount: number | null;
+}
+
+/**
+ * Fetch the current scan status from the server.
+ */
+export async function getScanStatus(): Promise<ScanStatusResult | null> {
+  const api = getApi();
+  if (!api) return null;
+  try {
+    const response = await api.getScanStatus();
+    return {
+      scanning: response.scanStatus.scanning,
+      count: response.scanStatus.count ?? 0,
+      lastScan: response.lastScan ?? null,
+      folderCount: response.folderCount ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start a library scan on the server.
+ * @param fullScan Only supported by Navidrome – performs a full scan instead of incremental.
+ */
+export async function startScan(fullScan?: boolean): Promise<ScanStatusResult | null> {
+  const api = getApi();
+  if (!api) return null;
+  try {
+    const response = await api.startScan(fullScan != null ? { fullScan } : undefined);
+    return {
+      scanning: response.scanStatus.scanning,
+      count: response.scanStatus.count ?? 0,
+      lastScan: null,
+      folderCount: null,
+    };
+  } catch {
+    return null;
+  }
 }

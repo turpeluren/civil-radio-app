@@ -1,12 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useTheme } from '../hooks/useTheme';
 import { clearImageCache } from '../services/imageCacheService';
+import {
+  fetchScanStatus,
+  startScan as startLibraryScan,
+  stopPolling,
+} from '../services/scanService';
 import { imageCacheStore, getImageCount } from '../store/imageCacheStore';
 import { clearApiCache } from '../services/subsonicService';
 import type { ThemePreference } from '../store/themeStore';
@@ -22,6 +27,7 @@ import {
   type MaxBitRate,
   type StreamFormat,
 } from '../store/playbackSettingsStore';
+import { scanStatusStore } from '../store/scanStatusStore';
 import { serverInfoStore } from '../store/serverInfoStore';
 import { albumDetailStore } from '../store/albumDetailStore';
 import { artistDetailStore } from '../store/artistDetailStore';
@@ -29,6 +35,7 @@ import { playlistDetailStore } from '../store/playlistDetailStore';
 
 const AUTH_PERSIST_KEY = 'substreamer-auth';
 const SERVER_INFO_PERSIST_KEY = 'substreamer-server-info';
+const SCAN_STATUS_PERSIST_KEY = 'substreamer-scan-status';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -148,6 +155,33 @@ export function SettingsScreen() {
     }))
   );
 
+  const scanScanning = scanStatusStore((s) => s.scanning);
+  const scanCount = scanStatusStore((s) => s.count);
+  const scanLastScan = scanStatusStore((s) => s.lastScan);
+  const scanFolderCount = scanStatusStore((s) => s.folderCount);
+  const scanLoading = scanStatusStore((s) => s.loading);
+
+  const isNavidrome = serverInfo.serverType?.toLowerCase() === 'navidrome';
+
+  useEffect(() => {
+    fetchScanStatus();
+  }, []);
+
+  const handleStartScan = useCallback(() => {
+    startLibraryScan();
+  }, []);
+
+  const handleFullScan = useCallback(() => {
+    Alert.alert(
+      'Full Scan',
+      'Full scans re-read all files and may take a long time. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Start', onPress: () => startLibraryScan(true) },
+      ],
+    );
+  }, []);
+
   const albumLayout = layoutPreferencesStore((s) => s.albumLayout);
   const artistLayout = layoutPreferencesStore((s) => s.artistLayout);
   const playlistLayout = layoutPreferencesStore((s) => s.playlistLayout);
@@ -196,10 +230,12 @@ export function SettingsScreen() {
     serverInfo.extensions.length > 0;
 
   const handleLogout = async () => {
+    stopPolling();
     authStore.getState().clearSession();
     serverInfoStore.getState().clearServerInfo();
+    scanStatusStore.getState().clearScanStatus();
     clearApiCache();
-    await AsyncStorage.multiRemove([AUTH_PERSIST_KEY, SERVER_INFO_PERSIST_KEY]);
+    await AsyncStorage.multiRemove([AUTH_PERSIST_KEY, SERVER_INFO_PERSIST_KEY, SCAN_STATUS_PERSIST_KEY]);
     router.replace('/login');
   };
 
@@ -317,6 +353,102 @@ export function SettingsScreen() {
             No server information available. Log in to see details.
           </Text>
         )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Library scan</Text>
+        <View style={[styles.card, dynamicStyles.card]}>
+          <InfoRow
+            label="Status"
+            value={
+              scanScanning
+                ? scanCount > 0
+                  ? `Scanning\u2026 (${scanCount.toLocaleString()} items)`
+                  : 'Scanning\u2026'
+                : 'Idle'
+            }
+            labelColor={colors.textPrimary}
+            valueColor={scanScanning ? colors.primary : colors.textSecondary}
+            borderColor={colors.border}
+          />
+          {scanCount > 0 && (
+            <InfoRow
+              label="Track count"
+              value={scanCount.toLocaleString()}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
+              borderColor={colors.border}
+            />
+          )}
+          {scanLastScan != null && (
+            <InfoRow
+              label="Last scan"
+              value={new Date(scanLastScan).toLocaleString()}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
+              borderColor={colors.border}
+            />
+          )}
+          {scanFolderCount != null && (
+            <InfoRow
+              label="Media folders"
+              value={String(scanFolderCount)}
+              labelColor={colors.textPrimary}
+              valueColor={colors.textSecondary}
+              borderColor={colors.border}
+            />
+          )}
+          <View style={[styles.scanButtons, { borderTopColor: colors.border }]}>
+            <Pressable
+              onPress={handleStartScan}
+              disabled={scanScanning || scanLoading}
+              style={({ pressed }) => [
+                styles.scanButton,
+                pressed && styles.themeRowPressed,
+                (scanScanning || scanLoading) && styles.scanButtonDisabled,
+              ]}
+            >
+              {scanLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="refresh-outline" size={18} color={scanScanning ? colors.textSecondary : colors.primary} />
+              )}
+              <Text
+                style={[
+                  styles.scanButtonText,
+                  { color: scanScanning ? colors.textSecondary : colors.primary },
+                ]}
+              >
+                Quick Scan
+              </Text>
+            </Pressable>
+            {isNavidrome && (
+              <Pressable
+                onPress={handleFullScan}
+                disabled={scanScanning || scanLoading}
+                style={({ pressed }) => [
+                  styles.scanButton,
+                  pressed && styles.themeRowPressed,
+                  (scanScanning || scanLoading) && styles.scanButtonDisabled,
+                ]}
+              >
+                {scanLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="search-outline" size={18} color={scanScanning ? colors.textSecondary : colors.primary} />
+                )}
+                <Text
+                  style={[
+                    styles.scanButtonText,
+                    { color: scanScanning ? colors.textSecondary : colors.primary },
+                  ]}
+                >
+                  Full Scan
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -961,6 +1093,27 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   clearCacheText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  scanButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 24,
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  scanButtonDisabled: {
+    opacity: 0.5,
+  },
+  scanButtonText: {
     fontSize: 15,
     fontWeight: '600',
   },
