@@ -7,14 +7,14 @@ import WaveformLogo from './WaveformLogo';
 const PRIMARY = '#1D9BF0';
 
 /** Max time (ms) before we force-finish, even if the animation glitches. */
-const SAFETY_TIMEOUT = 4000;
+const SAFETY_TIMEOUT = 5000;
 
 type Props = {
   onFinish: () => void;
 };
 
 export default function AnimatedSplashScreen({ onFinish }: Props) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const onFinishRef = useRef(onFinish);
   const didFinish = useRef(false);
@@ -38,14 +38,25 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
         tension: 120,
       });
 
+    const growIn = Animated.spring(scale, {
+      toValue: 1.15,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 80,
+    });
+
     const anim = Animated.sequence([
+      // Phase 1-2: grow from nothing to pulse peak, settle to resting
+      growIn,
+      pulse(1),
+      // Phase 3: two additional pulses
       Animated.sequence([pulse(1.15), pulse(1)]),
       Animated.sequence([pulse(1.15), pulse(1)]),
-      Animated.delay(300),
+      // Phase 4: fade out
       Animated.timing(opacity, {
         toValue: 0,
         duration: 500,
-        easing: Easing.out(Easing.ease),
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]);

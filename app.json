@@ -32,9 +32,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#1D9BF0",
-          "image": "./src/assets/splash-icon.png",
-          "imageWidth": 200
+          "backgroundColor": "#1D9BF0"
         }
       ],
       "./plugins/silence-hermes-warning"
