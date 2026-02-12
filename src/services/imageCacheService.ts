@@ -9,6 +9,7 @@
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
+import { readDirectoryAsync } from 'expo-file-system/legacy';
 import { fetch } from 'expo/fetch';
 
 import { imageCacheStore } from '../store/imageCacheStore';
@@ -214,6 +215,44 @@ export function listCachedImages(): CachedImageEntry[] {
 
     if (!groups.has(coverArtId)) groups.set(coverArtId, []);
     groups.get(coverArtId)!.push({ size, fileName: name, uri: item.uri });
+  }
+
+  const entries: CachedImageEntry[] = [];
+  for (const [coverArtId, files] of groups) {
+    files.sort((a, b) => a.size - b.size);
+    entries.push({ coverArtId, files });
+  }
+  entries.sort((a, b) => a.coverArtId.localeCompare(b.coverArtId));
+  return entries;
+}
+
+/**
+ * Async version of {@link listCachedImages} that uses the legacy
+ * `readDirectoryAsync` API so the directory listing runs on a native
+ * background thread instead of blocking the JS thread.
+ */
+export async function listCachedImagesAsync(): Promise<CachedImageEntry[]> {
+  const dir = ensureCacheDir();
+  let fileNames: string[];
+  try {
+    fileNames = await readDirectoryAsync(dir.uri);
+  } catch {
+    return [];
+  }
+
+  const dirUri = dir.uri.endsWith('/') ? dir.uri : `${dir.uri}/`;
+  const groups = new Map<string, CachedFileEntry[]>();
+
+  for (const name of fileNames) {
+    const match = FILE_NAME_RE.exec(name);
+    if (!match) continue;
+
+    const coverArtId = match[1];
+    const size = Number(match[2]);
+    const uri = `${dirUri}${name}`;
+
+    if (!groups.has(coverArtId)) groups.set(coverArtId, []);
+    groups.get(coverArtId)!.push({ size, fileName: name, uri });
   }
 
   const entries: CachedImageEntry[] = [];

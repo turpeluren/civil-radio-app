@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,7 @@ import {
 import { useTheme } from '../hooks/useTheme';
 import {
   deleteCachedImage,
-  listCachedImages,
+  listCachedImagesAsync,
   refreshCachedImage,
   type CachedImageEntry,
 } from '../services/imageCacheService';
@@ -23,7 +23,7 @@ const THUMB_SIZE = 50;
 
 type RowStatus = 'idle' | 'refreshing' | 'success' | 'error';
 
-function CacheRow({
+const CacheRow = memo(function CacheRow({
   entry,
   colors,
   status,
@@ -102,7 +102,7 @@ function CacheRow({
       </View>
     </View>
   );
-}
+});
 
 export function CacheBrowserScreen() {
   const { colors } = useTheme();
@@ -111,18 +111,23 @@ export function CacheBrowserScreen() {
   const [loading, setLoading] = useState(true);
   const [statusMap, setStatusMap] = useState<Map<string, RowStatus>>(new Map());
 
-  const loadEntries = useCallback(() => {
-    setEntries(listCachedImages());
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    listCachedImagesAsync().then((result) => {
+      if (!cancelled) {
+        setEntries(result);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
-
-  const handlePullRefresh = useCallback(() => {
+  const handlePullRefresh = useCallback(async () => {
     setRefreshing(true);
-    setEntries(listCachedImages());
+    const result = await listCachedImagesAsync();
+    setEntries(result);
     setRefreshing(false);
   }, []);
 
@@ -134,8 +139,9 @@ export function CacheBrowserScreen() {
     (coverArtId: string) => {
       setItemStatus(coverArtId, 'refreshing');
       refreshCachedImage(coverArtId)
-        .then(() => {
-          setEntries(listCachedImages());
+        .then(() => listCachedImagesAsync())
+        .then((result) => {
+          setEntries(result);
           setItemStatus(coverArtId, 'success');
           // Clear the success badge after 3 seconds.
           setTimeout(() => setItemStatus(coverArtId, 'idle'), 3000);
@@ -171,17 +177,20 @@ export function CacheBrowserScreen() {
     [],
   );
 
+  const statusMapRef = useRef(statusMap);
+  statusMapRef.current = statusMap;
+
   const renderItem = useCallback(
     ({ item }: { item: CachedImageEntry }) => (
       <CacheRow
         entry={item}
         colors={colors}
-        status={statusMap.get(item.coverArtId) ?? 'idle'}
+        status={statusMapRef.current.get(item.coverArtId) ?? 'idle'}
         onRefresh={handleRefresh}
         onDelete={handleDelete}
       />
     ),
-    [colors, statusMap, handleRefresh, handleDelete],
+    [colors, handleRefresh, handleDelete],
   );
 
   const keyExtractor = useCallback(
@@ -203,6 +212,7 @@ export function CacheBrowserScreen() {
         data={entries}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        extraData={statusMap}
         refreshing={refreshing}
         onRefresh={handlePullRefresh}
         contentContainerStyle={entries.length === 0 ? styles.emptyContainer : undefined}
