@@ -30,6 +30,8 @@ export interface PlayerProgressBarProps {
   colors: ThemeColors;
   /** Called when the user finishes seeking (finger released). */
   onSeek: (seconds: number) => void;
+  /** Whether the player is currently buffering. */
+  isBuffering?: boolean;
 }
 
 export function PlayerProgressBar({
@@ -38,6 +40,7 @@ export function PlayerProgressBar({
   bufferedPosition = 0,
   colors,
   onSeek,
+  isBuffering = false,
 }: PlayerProgressBarProps) {
   const trackWidth = useRef(0);
   const trackPageX = useRef(0);
@@ -211,6 +214,14 @@ export function PlayerProgressBar({
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>
           {formatTrackDuration(displayPosition)}
         </Text>
+        <Text
+          style={[
+            styles.bufferingLabel,
+            { color: colors.textSecondary, opacity: isBuffering ? 1 : 0 },
+          ]}
+        >
+          Buffering…
+        </Text>
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>
           -{formatTrackDuration(remaining)}
         </Text>
@@ -261,5 +272,9 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 12,
     fontVariant: ['tabular-nums'],
+  },
+  bufferingLabel: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });

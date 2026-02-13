@@ -149,11 +149,6 @@ export function PlayerView({ onClose }: PlayerViewProps) {
           >
             {currentTrack.artist ?? 'Unknown Artist'}
           </Text>
-          {isBuffering && (
-            <Text style={[styles.bufferingLabel, { color: colors.textSecondary }]}>
-              Buffering…
-            </Text>
-          )}
         </View>
 
         {/* Progress bar */}
@@ -164,6 +159,7 @@ export function PlayerView({ onClose }: PlayerViewProps) {
             bufferedPosition={bufferedPosition}
             colors={colors}
             onSeek={handleSeek}
+            isBuffering={isBuffering}
           />
         </View>
 
@@ -418,11 +414,6 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 16,
     marginTop: 4,
-  },
-  bufferingLabel: {
-    fontSize: 13,
-    marginTop: 4,
-    fontStyle: 'italic',
   },
   progressSection: {
     paddingHorizontal: HERO_PADDING,
