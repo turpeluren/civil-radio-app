@@ -54,6 +54,7 @@ export function PlayerView({ onClose }: PlayerViewProps) {
   const bufferedPosition = playerStore((s) => s.bufferedPosition);
   const queue = playerStore((s) => s.queue);
   const error = playerStore((s) => s.error);
+  const queueLoading = playerStore((s) => s.queueLoading);
 
   const isPlaying =
     playbackState === 'playing' || playbackState === 'buffering';
@@ -123,142 +124,153 @@ export function PlayerView({ onClose }: PlayerViewProps) {
           <View style={styles.headerSpacer} />
         </View>
 
-        {/* Hero cover art */}
-        <View style={styles.hero}>
-          <View style={styles.heroImageWrap}>
-            <CachedImage
-              coverArtId={currentTrack.coverArt}
-              size={HERO_COVER_SIZE}
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
-          </View>
-        </View>
-
-        {/* Track info */}
-        <View style={styles.trackInfo}>
-          <Text
-            style={[styles.trackTitle, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            {currentTrack.title}
-          </Text>
-          <Text
-            style={[styles.trackArtist, { color: colors.textSecondary }]}
-            numberOfLines={1}
-          >
-            {currentTrack.artist ?? 'Unknown Artist'}
-          </Text>
-        </View>
-
-        {/* Progress bar */}
-        <View style={styles.progressSection}>
-          <PlayerProgressBar
-            position={position}
-            duration={duration}
-            bufferedPosition={bufferedPosition}
-            colors={colors}
-            onSeek={handleSeek}
-            isBuffering={isBuffering}
-          />
-        </View>
-
-        {/* Error banner */}
-        {error != null && (
-          <View
-            style={[
-              styles.errorBanner,
-              { backgroundColor: `${colors.red}18` },
-            ]}
-          >
-            <Text
-              style={[styles.errorText, { color: colors.red }]}
-              numberOfLines={2}
-            >
-              {error}
+        {queueLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.textSecondary} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+              Loading...
             </Text>
-            <Pressable
-              onPress={retryPlayback}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.retryButton,
-                { borderColor: colors.red },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.retryText, { color: colors.red }]}>
-                Retry
+          </View>
+        ) : (
+          <>
+            {/* Hero cover art */}
+            <View style={styles.hero}>
+              <View style={styles.heroImageWrap}>
+                <CachedImage
+                  coverArtId={currentTrack.coverArt}
+                  size={HERO_COVER_SIZE}
+                  style={styles.heroImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </View>
+
+            {/* Track info */}
+            <View style={styles.trackInfo}>
+              <Text
+                style={[styles.trackTitle, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {currentTrack.title}
               </Text>
-            </Pressable>
-          </View>
-        )}
+              <Text
+                style={[styles.trackArtist, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {currentTrack.artist ?? 'Unknown Artist'}
+              </Text>
+            </View>
 
-        {/* Playback controls */}
-        <View style={styles.controls}>
-          <Pressable
-            onPress={skipToPrevious}
-            hitSlop={12}
-            style={({ pressed }) => pressed && styles.pressed}
-          >
-            <Ionicons
-              name="play-back"
-              size={32}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-
-          <Pressable
-            onPress={togglePlayPause}
-            style={({ pressed }) => [
-              styles.playPauseButton,
-              { backgroundColor: colors.textPrimary },
-              pressed && styles.playPausePressed,
-            ]}
-          >
-            {isBuffering ? (
-              <ActivityIndicator size="small" color={colors.background} />
-            ) : (
-              <Ionicons
-                name={isPlaying ? 'pause' : 'play'}
-                size={32}
-                color={colors.background}
-                style={!isPlaying ? styles.playIcon : undefined}
-              />
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={skipToNext}
-            hitSlop={12}
-            style={({ pressed }) => pressed && styles.pressed}
-          >
-            <Ionicons
-              name="play-forward"
-              size={32}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-        </View>
-
-        {/* Queue section */}
-        {queue.length > 0 && (
-          <View style={styles.queueSection}>
-            <Text
-              style={[styles.queueHeader, { color: colors.textSecondary }]}
-            >
-              Queue
-            </Text>
-            {queue.map((track, index) => (
-              <QueueItem
-                key={`${track.id}-${index}`}
-                track={track}
-                index={index}
-                isActive={track.id === currentTrack.id}
+            {/* Progress bar */}
+            <View style={styles.progressSection}>
+              <PlayerProgressBar
+                position={position}
+                duration={duration}
+                bufferedPosition={bufferedPosition}
                 colors={colors}
-                onPress={handleQueueItemPress}
+                onSeek={handleSeek}
+                isBuffering={isBuffering}
               />
-            ))}
-          </View>
+            </View>
+
+            {/* Error banner */}
+            {error != null && (
+              <View
+                style={[
+                  styles.errorBanner,
+                  { backgroundColor: `${colors.red}18` },
+                ]}
+              >
+                <Text
+                  style={[styles.errorText, { color: colors.red }]}
+                  numberOfLines={2}
+                >
+                  {error}
+                </Text>
+                <Pressable
+                  onPress={retryPlayback}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.retryButton,
+                    { borderColor: colors.red },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={[styles.retryText, { color: colors.red }]}>
+                    Retry
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Playback controls */}
+            <View style={styles.controls}>
+              <Pressable
+                onPress={skipToPrevious}
+                hitSlop={12}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Ionicons
+                  name="play-back"
+                  size={32}
+                  color={colors.textPrimary}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={togglePlayPause}
+                style={({ pressed }) => [
+                  styles.playPauseButton,
+                  { backgroundColor: colors.textPrimary },
+                  pressed && styles.playPausePressed,
+                ]}
+              >
+                {isBuffering ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Ionicons
+                    name={isPlaying ? 'pause' : 'play'}
+                    size={32}
+                    color={colors.background}
+                    style={!isPlaying ? styles.playIcon : undefined}
+                  />
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={skipToNext}
+                hitSlop={12}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Ionicons
+                  name="play-forward"
+                  size={32}
+                  color={colors.textPrimary}
+                />
+              </Pressable>
+            </View>
+
+            {/* Queue section */}
+            {queue.length > 0 && (
+              <View style={styles.queueSection}>
+                <Text
+                  style={[styles.queueHeader, { color: colors.textSecondary }]}
+                >
+                  Queue
+                </Text>
+                {queue.map((track, index) => (
+                  <QueueItem
+                    key={`${track.id}-${index}`}
+                    track={track}
+                    index={index}
+                    isActive={track.id === currentTrack.id}
+                    colors={colors}
+                    onPress={handleQueueItemPress}
+                  />
+                ))}
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </View>
@@ -378,6 +390,16 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 36,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 120,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
   },
   hero: {
     width: '100%',

@@ -29,6 +29,7 @@ export function MiniPlayer() {
   const playbackState = playerStore((s) => s.playbackState);
   const position = playerStore((s) => s.position);
   const duration = playerStore((s) => s.duration);
+  const queueLoading = playerStore((s) => s.queueLoading);
 
   const progress = duration > 0 ? position / duration : 0;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -152,23 +153,34 @@ export function MiniPlayer() {
         onPress={openPlayer}
         style={({ pressed }) => [styles.touchable, pressed && styles.pressed]}
       >
-        {/* Cover art */}
-        <CachedImage
-          coverArtId={currentTrack.coverArt}
-          size={300}
-          style={styles.cover}
-          resizeMode="cover"
-        />
+        {queueLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+              Loading...
+            </Text>
+          </View>
+        ) : (
+          <>
+            {/* Cover art */}
+            <CachedImage
+              coverArtId={currentTrack.coverArt}
+              size={300}
+              style={styles.cover}
+              resizeMode="cover"
+            />
 
-        {/* Track info */}
-        <View style={styles.info}>
-          <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
-            {currentTrack.title}
-          </Text>
-          <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
-            {currentTrack.artist ?? 'Unknown Artist'}
-          </Text>
-        </View>
+            {/* Track info */}
+            <View style={styles.info}>
+              <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
+                {currentTrack.title}
+              </Text>
+              <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
+                {currentTrack.artist ?? 'Unknown Artist'}
+              </Text>
+            </View>
+          </>
+        )}
       </Pressable>
 
       {/* Play / Pause / Buffering */}
@@ -244,6 +256,15 @@ const styles = StyleSheet.create({
   artist: {
     fontSize: 12,
     marginTop: 1,
+  },
+  loadingRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    marginLeft: 10,
   },
   playButton: {
     marginLeft: 8,

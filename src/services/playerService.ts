@@ -330,22 +330,28 @@ async function syncStoreFromNative(): Promise<void> {
  */
 export async function playTrack(track: Child, queue: Child[]): Promise<void> {
   isUserSkipping = true;
-  await ensureCoverArtAuth();
+  playerStore.getState().setQueueLoading(true);
 
-  currentChildQueue = queue;
-  playerStore.getState().setQueue(queue);
+  try {
+    await ensureCoverArtAuth();
 
-  const rnTracks = queue.map(childToTrack);
-  const startIndex = queue.findIndex((c) => c.id === track.id);
+    currentChildQueue = queue;
+    playerStore.getState().setQueue(queue);
 
-  await TrackPlayer.reset();
-  await TrackPlayer.add(rnTracks);
+    const rnTracks = queue.map(childToTrack);
+    const startIndex = queue.findIndex((c) => c.id === track.id);
 
-  if (startIndex > 0) {
-    await TrackPlayer.skip(startIndex);
+    await TrackPlayer.reset();
+    await TrackPlayer.add(rnTracks);
+
+    if (startIndex > 0) {
+      await TrackPlayer.skip(startIndex);
+    }
+
+    await TrackPlayer.play();
+  } finally {
+    playerStore.getState().setQueueLoading(false);
   }
-
-  await TrackPlayer.play();
 }
 
 /** Toggle between play and pause. */

@@ -33,6 +33,8 @@ export interface PlayerState {
   bufferedPosition: number;
   /** Last playback error message, or null when healthy. */
   error: string | null;
+  /** True while `playTrack()` is loading the queue and skipping to the start index. */
+  queueLoading: boolean;
 
   /* ---- Setters (called by playerService) ---- */
   setCurrentTrack: (track: Child | null) => void;
@@ -40,6 +42,7 @@ export interface PlayerState {
   setQueue: (queue: Child[]) => void;
   setProgress: (position: number, duration: number, buffered: number) => void;
   setError: (error: string | null) => void;
+  setQueueLoading: (loading: boolean) => void;
 }
 
 export const playerStore = create<PlayerState>()((set) => ({
@@ -50,6 +53,7 @@ export const playerStore = create<PlayerState>()((set) => ({
   duration: 0,
   bufferedPosition: 0,
   error: null,
+  queueLoading: false,
 
   setCurrentTrack: (track) => set({ currentTrack: track }),
   setPlaybackState: (playbackState) => set({ playbackState }),
@@ -61,4 +65,5 @@ export const playerStore = create<PlayerState>()((set) => ({
       bufferedPosition: buffered,
     })),
   setError: (error) => set({ error }),
+  setQueueLoading: (loading) => set({ queueLoading: loading }),
 }));
