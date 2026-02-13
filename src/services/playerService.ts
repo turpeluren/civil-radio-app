@@ -64,6 +64,8 @@ let isPlayerReady = false;
 let currentChildQueue: Child[] = [];
 /** Interval handle for progress polling (null when not polling). */
 let progressInterval: ReturnType<typeof setInterval> | null = null;
+/** Guard flag to prevent duplicate skipToNext calls during end-of-track stall handling. */
+let isAutoAdvancing = false;
 
 /* ------------------------------------------------------------------ */
 /*  Progress polling                                                   */
@@ -127,17 +129,44 @@ export async function initPlayer(): Promise<void> {
 
   // --- Event listeners that push state into the Zustand store ---
 
-  TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+  TrackPlayer.addEventListener(Event.PlaybackState, async ({ state }) => {
     const store = playerStore.getState();
     store.setPlaybackState(mapState(state));
 
     if (state === State.Playing) {
       // Clear any previous error when playback resumes successfully.
       if (store.error) store.setError(null);
+      isAutoAdvancing = false;
       startProgressPolling();
     } else if (state === State.Buffering || state === State.Loading) {
       // Keep polling during buffering so the UI can show buffer progress.
       startProgressPolling();
+
+      // Detect end-of-track stalls for transcoded streams.
+      // When the server sends an estimated Content-Length that exceeds the
+      // real audio data, the native player stalls in Buffering instead of
+      // firing State.Ended.  If the current position is at or past the
+      // metadata duration we treat it as track-complete and skip forward.
+      if (state === State.Buffering && !isAutoAdvancing) {
+        try {
+          const { position, duration } = await TrackPlayer.getProgress();
+          const metadataDuration = store.currentTrack?.duration ?? 0;
+          // Use native duration when available, otherwise fall back to metadata.
+          const effectiveDuration =
+            duration > 0 ? duration : metadataDuration;
+
+          if (effectiveDuration > 0 && position >= effectiveDuration - 2) {
+            isAutoAdvancing = true;
+            await TrackPlayer.skipToNext().catch(() => {
+              // No next track in queue — stop playback.
+              isAutoAdvancing = false;
+              TrackPlayer.stop();
+            });
+          }
+        } catch {
+          /* progress not available yet — ignore */
+        }
+      }
     } else {
       stopProgressPolling();
     }
