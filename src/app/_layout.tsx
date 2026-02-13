@@ -12,6 +12,7 @@ import { fetchScanStatus } from '../services/scanService';
 import { albumListsStore } from '../store/albumListsStore';
 import { imageCacheStore } from '../store/imageCacheStore';
 import { authStore, clearPersistedData } from '../store/authStore';
+import { favoritesStore } from '../store/favoritesStore';
 import { fetchServerInfo } from '../services/subsonicService';
 import { serverInfoStore } from '../store/serverInfoStore';
 
@@ -59,6 +60,7 @@ export default function RootLayout() {
     });
     fetchScanStatus();
     albumListsStore.getState().refreshAll();
+    favoritesStore.getState().fetchStarred();
   }, [rehydrated, isLoggedIn]);
 
   // --- Auth-based navigation ---
