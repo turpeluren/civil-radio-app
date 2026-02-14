@@ -13,6 +13,7 @@ import TrackPlayer, {
 
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { playerStore, type PlaybackStatus } from '../store/playerStore';
+import { serverInfoStore } from '../store/serverInfoStore';
 import { addCompletedScrobble, sendNowPlaying } from './scrobbleService';
 import {
   ensureCoverArtAuth,
@@ -96,6 +97,17 @@ let previousActiveChild: Child | null = null;
  * natural auto-advance and avoid scrobbling partially-played tracks.
  */
 let isUserSkipping = false;
+/**
+ * Seconds added to getProgress().position to compensate for transcoded
+ * stream recovery.  When we reload a track with `timeOffset`, the native
+ * player resets to position 0, but the real song position is `positionOffset`.
+ * Reset to 0 on every genuine track change.
+ */
+let positionOffset = 0;
+/** True while we are reloading the current track for stream recovery. */
+let isRecoveringStream = false;
+/** Consecutive polls where the buffer has not grown (for underrun detection). */
+let bufferStallPollCount = 0;
 
 /* ------------------------------------------------------------------ */
 /*  Progress polling                                                   */
@@ -108,9 +120,39 @@ function startProgressPolling() {
     try {
       const { position, duration, buffered } = await TrackPlayer.getProgress();
 
+      // --- Transcoded stream: detect approaching buffer underrun ---
+      // When duration === 0 (transcoded stream without native duration),
+      // the native player cannot use Range requests to resume from the
+      // current position.  If the buffer stalls and position catches up,
+      // the native player will re-fetch the URL and the server will
+      // transcode from second 0, causing the audio to restart.
+      //
+      // To prevent this we proactively reload the track with a
+      // `timeOffset` parameter so the server resumes from the right spot.
+      const bufferGrowing = buffered > lastRawBuffered + 0.5;
+
+      if (duration === 0 && buffered > 10 && position > 5 && !isRecoveringStream) {
+        if (!bufferGrowing) {
+          bufferStallPollCount++;
+        } else {
+          bufferStallPollCount = 0;
+        }
+
+        // Buffer stalled for ≥3 s (12 × 250 ms) and position within 8 s
+        // of the buffer edge → recover before the native player runs out.
+        if (bufferStallPollCount >= 12 && position > buffered - 8) {
+          const adjustedPos = position + positionOffset;
+          isRecoveringStream = true;
+          recoverTranscodedStream(adjustedPos);
+          return; // Skip the rest of this poll cycle.
+        }
+      } else if (bufferGrowing) {
+        bufferStallPollCount = 0;
+      }
+
       // --- Detect when the entire stream has been downloaded --------
       if (!isFullyBuffered) {
-        if (buffered > lastRawBuffered + 0.5) {
+        if (bufferGrowing) {
           // Buffer is still growing — reset the stall counter.
           lastRawBuffered = buffered;
           positionPastBufferCount = 0;
@@ -118,8 +160,11 @@ function startProgressPolling() {
           // Position has advanced well past the stalled buffer value
           // while playback hasn't stalled — data must be available.
           positionPastBufferCount++;
-          // After ~1 s (4 × 250 ms) of this, declare fully buffered.
-          if (positionPastBufferCount >= 4) {
+          // After ~1 s (4 × 250 ms) of this, declare fully buffered —
+          // but ONLY when the native player reports a real duration.
+          // When duration === 0 (transcoded), position exceeding the
+          // buffer means a buffer underrun, not full buffering.
+          if (positionPastBufferCount >= 4 && duration > 0) {
             isFullyBuffered = true;
           }
         }
@@ -136,7 +181,8 @@ function startProgressPolling() {
         maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
       }
 
-      playerStore.getState().setProgress(position, duration, maxBufferedSeen);
+      const adjustedPosition = position + positionOffset;
+      playerStore.getState().setProgress(adjustedPosition, duration, maxBufferedSeen);
     } catch {
       /* player not ready */
     }
@@ -148,6 +194,61 @@ function stopProgressPolling() {
   if (progressInterval) {
     clearInterval(progressInterval);
     progressInterval = null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Transcoded stream recovery                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reload the current track with `timeOffset` so the server resumes
+ * transcoding from the given position instead of from the start.
+ *
+ * Called when we detect the buffer is about to run out on a transcoded
+ * stream (duration === 0).  Without this, the native player would
+ * re-request the URL and the server would start from second 0.
+ */
+async function recoverTranscodedStream(adjustedPosition: number): Promise<void> {
+  try {
+    // Only attempt recovery if the server supports the transcodeOffset
+    // OpenSubsonic extension — otherwise timeOffset will be ignored and
+    // the server will transcode from the start again.
+    const supportsOffset = serverInfoStore
+      .getState()
+      .extensions.some((e) => e.name === 'transcodeOffset');
+    if (!supportsOffset) return;
+
+    const activeTrack = await TrackPlayer.getActiveTrack();
+    if (!activeTrack?.id) return;
+
+    const child = currentChildQueue.find((c) => c.id === activeTrack.id);
+    if (!child) return;
+
+    const timeOffset = Math.floor(adjustedPosition);
+    const newUrl = getStreamUrl(child.id, timeOffset);
+    if (!newUrl) return;
+
+    // Set offset BEFORE load so event handlers know we're recovering.
+    positionOffset = adjustedPosition;
+
+    // Reset buffer tracking for the fresh stream segment.
+    maxBufferedSeen = 0;
+    isFullyBuffered = false;
+    lastRawBuffered = 0;
+    positionPastBufferCount = 0;
+    bufferStallPollCount = 0;
+
+    await TrackPlayer.load({
+      ...activeTrack,
+      url: newUrl,
+    });
+    await TrackPlayer.play();
+  } catch {
+    // Recovery failed — reset offset so the UI doesn't jump.
+    positionOffset = 0;
+  } finally {
+    isRecoveringStream = false;
   }
 }
 
@@ -206,15 +307,16 @@ export async function initPlayer(): Promise<void> {
       // real audio data, the native player stalls in Buffering instead of
       // firing State.Ended.  If the current position is at or past the
       // metadata duration we treat it as track-complete and skip forward.
-      if (state === State.Buffering && !isAutoAdvancing) {
+      if (state === State.Buffering && !isAutoAdvancing && !isRecoveringStream) {
         try {
           const { position, duration } = await TrackPlayer.getProgress();
+          const adjustedPos = position + positionOffset;
           const metadataDuration = store.currentTrack?.duration ?? 0;
           // Use native duration when available, otherwise fall back to metadata.
           const effectiveDuration =
             duration > 0 ? duration : metadataDuration;
 
-          if (effectiveDuration > 0 && position >= effectiveDuration - 2) {
+          if (effectiveDuration > 0 && adjustedPos >= effectiveDuration - 2) {
             isAutoAdvancing = true;
             await TrackPlayer.skipToNext().catch(() => {
               // No next track in queue — stop playback.
@@ -238,6 +340,20 @@ export async function initPlayer(): Promise<void> {
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, ({ track }) => {
+    const sameTrack =
+      previousActiveChild?.id != null && previousActiveChild?.id === track?.id;
+
+    // During stream recovery (load() with timeOffset) the active track
+    // may fire with the same ID — don't scrobble, don't reset offset.
+    if (isRecoveringStream && sameTrack) {
+      maxBufferedSeen = 0;
+      isFullyBuffered = false;
+      lastRawBuffered = 0;
+      positionPastBufferCount = 0;
+      bufferStallPollCount = 0;
+      return;
+    }
+
     // Scrobble: if the previous track finished naturally (not a user skip),
     // record it as a completed scrobble.
     if (previousActiveChild && !isUserSkipping) {
@@ -248,6 +364,10 @@ export async function initPlayer(): Promise<void> {
     isFullyBuffered = false;
     lastRawBuffered = 0;
     positionPastBufferCount = 0;
+    bufferStallPollCount = 0;
+
+    // Reset transcoded stream recovery offset for genuine track changes.
+    positionOffset = 0;
 
     let resolvedChild: Child | null = null;
     if (track != null && track.id) {
@@ -293,6 +413,7 @@ async function syncStoreFromNative(): Promise<void> {
     }
 
     const { position, duration, buffered } = await TrackPlayer.getProgress();
+
     if (isFullyBuffered) {
       const metaDuration =
         playerStore.getState().currentTrack?.duration ?? 0;
@@ -302,7 +423,8 @@ async function syncStoreFromNative(): Promise<void> {
     } else {
       maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
     }
-    playerStore.getState().setProgress(position, duration, maxBufferedSeen);
+    const adjustedPosition = position + positionOffset;
+    playerStore.getState().setProgress(adjustedPosition, duration, maxBufferedSeen);
 
     if (
       state.state === State.Playing ||
@@ -330,6 +452,7 @@ async function syncStoreFromNative(): Promise<void> {
  */
 export async function playTrack(track: Child, queue: Child[]): Promise<void> {
   isUserSkipping = true;
+  positionOffset = 0;
   playerStore.getState().setQueueLoading(true);
 
   try {
@@ -386,10 +509,14 @@ export async function skipToPrevious(): Promise<void> {
  * close as possible without the seek silently failing.
  */
 export async function seekTo(position: number): Promise<void> {
+  // Convert the UI-level position (which may include a recovery offset)
+  // back to the native player's timeline.
+  const nativeTarget = Math.max(0, position - positionOffset);
+
   // If the entire stream has been downloaded, seek freely — all data is
   // available even if the native player doesn't report it.
   if (isFullyBuffered) {
-    await TrackPlayer.seekTo(position);
+    await TrackPlayer.seekTo(nativeTarget);
     return;
   }
 
@@ -403,7 +530,7 @@ export async function seekTo(position: number): Promise<void> {
   //     reliable duration metadata).
   //  2. The stream is transcoded (non-raw format or bitrate-limited).
   //  3. The seek target is beyond the effective buffered range.
-  if (duration === 0 && position > effectiveBuffered && effectiveBuffered > 0) {
+  if (duration === 0 && nativeTarget > effectiveBuffered && effectiveBuffered > 0) {
     const { streamFormat, maxBitRate } = playbackSettingsStore.getState();
     const isTranscoding = streamFormat !== 'raw' || maxBitRate != null;
 
@@ -413,7 +540,7 @@ export async function seekTo(position: number): Promise<void> {
     }
   }
 
-  await TrackPlayer.seekTo(position);
+  await TrackPlayer.seekTo(nativeTarget);
 }
 
 /** Skip to a specific track in the queue by index. */
