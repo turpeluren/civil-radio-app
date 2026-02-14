@@ -67,8 +67,6 @@ let isPlayerReady = false;
 let currentChildQueue: Child[] = [];
 /** Interval handle for progress polling (null when not polling). */
 let progressInterval: ReturnType<typeof setInterval> | null = null;
-/** Guard flag to prevent duplicate skipToNext calls during end-of-track stall handling. */
-let isAutoAdvancing = false;
 /**
  * Highest buffered position (in seconds) observed for the current track.
  * The native player sometimes reports a stale or lower `buffered` value
@@ -77,18 +75,12 @@ let isAutoAdvancing = false;
  */
 let maxBufferedSeen = 0;
 /**
- * Set to true when we detect that the native player has finished downloading
- * the entire stream.  Detection: playback position advances past the stalled
- * `buffered` value for several consecutive polls while the player stays in
- * Playing state — the data must be available even though it isn't reported.
- * When true, the effective buffered value is set to the metadata duration so
- * the UI shows 100 % and seeking is unrestricted.
+ * Set to true when the PlaybackBufferFull event fires, indicating the
+ * native player has finished downloading the entire stream.  When true,
+ * the effective buffered value is set to the metadata duration so the UI
+ * shows 100% and seeking is unrestricted.
  */
 let isFullyBuffered = false;
-/** The last raw `buffered` value from RNTP, used to detect stalls. */
-let lastRawBuffered = 0;
-/** How many consecutive polls position has exceeded the stalled buffered value. */
-let positionPastBufferCount = 0;
 /** The previously active Child, used for scrobble-on-completion. */
 let previousActiveChild: Child | null = null;
 /**
@@ -106,8 +98,6 @@ let isUserSkipping = false;
 let positionOffset = 0;
 /** True while we are reloading the current track for stream recovery. */
 let isRecoveringStream = false;
-/** Consecutive polls where the buffer has not grown (for underrun detection). */
-let bufferStallPollCount = 0;
 
 /* ------------------------------------------------------------------ */
 /*  Progress polling                                                   */
@@ -120,42 +110,8 @@ function startProgressPolling() {
     try {
       const { position, duration, buffered } = await TrackPlayer.getProgress();
 
-      // --- Track buffer stall for transcoded stream recovery ----------
-      // The native player sometimes stops reporting buffer growth even
-      // though data is available.  We track the stall duration here so
-      // the PlaybackState Buffering handler can distinguish a real
-      // buffer underrun from a normal mid-stream rebuffer.
-      const bufferGrowing = buffered > lastRawBuffered + 0.5;
-
-      if (duration === 0 && buffered > 0 && !bufferGrowing) {
-        bufferStallPollCount++;
-      } else if (bufferGrowing) {
-        bufferStallPollCount = 0;
-      }
-
-      // --- Detect when the entire stream has been downloaded --------
-      if (!isFullyBuffered) {
-        if (bufferGrowing) {
-          // Buffer is still growing — reset the stall counter.
-          lastRawBuffered = buffered;
-          positionPastBufferCount = 0;
-        } else if (position > lastRawBuffered + 1) {
-          // Position has advanced well past the stalled buffer value
-          // while playback hasn't stalled — data must be available.
-          positionPastBufferCount++;
-          // After ~1 s (4 × 250 ms) of this, declare fully buffered.
-          if (positionPastBufferCount >= 4) {
-            isFullyBuffered = true;
-          }
-        }
-      }
-
-      // --- Compute effective buffered value -------------------------
+      // Compute effective buffered value using high-water mark.
       if (isFullyBuffered) {
-        // Once we know the entire stream is downloaded, the buffered
-        // value must be at least as large as the store's effective
-        // duration so the UI always shows 100%.  Include the native
-        // duration to avoid flicker when it differs from metaDuration.
         const metaDuration =
           playerStore.getState().currentTrack?.duration ?? 0;
         maxBufferedSeen = Math.max(
@@ -219,9 +175,6 @@ async function recoverTranscodedStream(adjustedPosition: number): Promise<void> 
     // Reset buffer tracking for the fresh stream segment.
     maxBufferedSeen = 0;
     isFullyBuffered = false;
-    lastRawBuffered = 0;
-    positionPastBufferCount = 0;
-    bufferStallPollCount = 0;
 
     await TrackPlayer.load({
       ...activeTrack,
@@ -277,7 +230,7 @@ export async function initPlayer(): Promise<void> {
 
   // --- Event listeners that push state into the Zustand store ---
 
-  TrackPlayer.addEventListener(Event.PlaybackState, async ({ state }) => {
+  TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
     const store = playerStore.getState();
     store.setPlaybackState(mapState(state));
 
@@ -285,57 +238,10 @@ export async function initPlayer(): Promise<void> {
       // Clear any previous error and retrying state when playback resumes.
       if (store.error) store.setError(null);
       if (store.retrying) store.setRetrying(false);
-      isAutoAdvancing = false;
       startProgressPolling();
     } else if (state === State.Buffering || state === State.Loading) {
       // Keep polling during buffering so the UI can show buffer progress.
       startProgressPolling();
-
-      if (state === State.Buffering && !isAutoAdvancing && !isRecoveringStream) {
-        try {
-          const { position, duration } = await TrackPlayer.getProgress();
-          const adjustedPos = position + positionOffset;
-          const metadataDuration = store.currentTrack?.duration ?? 0;
-          const effectiveDuration =
-            duration > 0 ? duration : metadataDuration;
-
-          // --- Transcoded stream buffer underrun recovery ---------------
-          // When the native player enters Buffering on a transcoded stream
-          // (duration === 0) whose buffer has been stalled and position has
-          // caught up, it will re-fetch the URL and the server will
-          // transcode from second 0.  Recover with timeOffset so the
-          // server resumes from the correct position.
-          if (
-            duration === 0 &&
-            position > 5 &&
-            lastRawBuffered > 10 &&
-            bufferStallPollCount >= 12 &&
-            position >= lastRawBuffered - 2 &&
-            adjustedPos < effectiveDuration - 5
-          ) {
-            isRecoveringStream = true;
-            recoverTranscodedStream(adjustedPos);
-            return;
-          }
-
-          // --- End-of-track stall detection -----------------------------
-          // When the server sends an estimated Content-Length that exceeds
-          // the real audio data, the native player stalls in Buffering
-          // instead of firing State.Ended.  If the current position is at
-          // or past the metadata duration we treat it as track-complete
-          // and skip forward.
-          if (effectiveDuration > 0 && adjustedPos >= effectiveDuration - 2) {
-            isAutoAdvancing = true;
-            await TrackPlayer.skipToNext().catch(() => {
-              // No next track in queue — stop playback.
-              isAutoAdvancing = false;
-              TrackPlayer.stop();
-            });
-          }
-        } catch {
-          /* progress not available yet — ignore */
-        }
-      }
     } else {
       stopProgressPolling();
     }
@@ -344,9 +250,28 @@ export async function initPlayer(): Promise<void> {
   TrackPlayer.addEventListener(Event.PlaybackError, async (e) => {
     const message =
       (e as { message?: string }).message ?? 'Playback error occurred';
+    const errorPosition = (e as { position?: number }).position ?? 0;
     const store = playerStore.getState();
 
-    // If we're not already retrying, auto-retry once before surfacing the error.
+    // --- Transcoded stream recovery ----------------------------------
+    // If the error occurred mid-stream on a transcoded track, attempt to
+    // recover by reloading with a timeOffset so the server resumes from
+    // the failure position.  This replaces the old polling-based heuristic.
+    if (!isRecoveringStream && errorPosition > 5) {
+      const adjustedPos = errorPosition + positionOffset;
+      const metadataDuration = store.currentTrack?.duration ?? 0;
+      if (metadataDuration > 0 && adjustedPos < metadataDuration - 5) {
+        const { streamFormat, maxBitRate } = playbackSettingsStore.getState();
+        const isTranscoding = streamFormat !== 'raw' || maxBitRate != null;
+        if (isTranscoding) {
+          isRecoveringStream = true;
+          recoverTranscodedStream(adjustedPos);
+          return;
+        }
+      }
+    }
+
+    // --- Normal error handling with auto-retry -----------------------
     if (!store.retrying) {
       store.setError(message);
       store.setRetrying(true);
@@ -402,6 +327,34 @@ export async function initPlayer(): Promise<void> {
     }
   });
 
+  TrackPlayer.addEventListener(Event.PlaybackSeekCompleted, (e) => {
+    console.log(
+      '[Player] Seek completed: position',
+      e.position,
+      'didFinish',
+      e.didFinish
+    );
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackEndedWithReason, (e) => {
+    console.log(
+      '[Player] Playback ended: reason',
+      e.reason,
+      'track',
+      e.track,
+      'position',
+      e.position
+    );
+
+    // Scrobble when a track plays until the end.
+    if (
+      (e.reason === 'playedUntilEnd' || e.reason === 'PLAYED_UNTIL_END') &&
+      previousActiveChild
+    ) {
+      addCompletedScrobble(previousActiveChild);
+    }
+  });
+
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, ({ track }) => {
     const sameTrack =
       previousActiveChild?.id != null && previousActiveChild?.id === track?.id;
@@ -411,9 +364,6 @@ export async function initPlayer(): Promise<void> {
     if (isRecoveringStream && sameTrack) {
       maxBufferedSeen = 0;
       isFullyBuffered = false;
-      lastRawBuffered = 0;
-      positionPastBufferCount = 0;
-      bufferStallPollCount = 0;
       return;
     }
 
@@ -425,9 +375,6 @@ export async function initPlayer(): Promise<void> {
 
     maxBufferedSeen = 0;
     isFullyBuffered = false;
-    lastRawBuffered = 0;
-    positionPastBufferCount = 0;
-    bufferStallPollCount = 0;
 
     // Reset transcoded stream recovery offset for genuine track changes.
     positionOffset = 0;
