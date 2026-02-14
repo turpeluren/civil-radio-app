@@ -41,18 +41,23 @@ export const SongRow = memo(function SongRow({ song, onPress }: { song: Child; o
           {song.artist ?? 'Unknown Artist'}
         </Text>
         <View style={styles.meta}>
-          <Ionicons name="disc-outline" size={14} color={colors.primary} />
-          <Text
-            style={[styles.metaText, { color: colors.textSecondary }]}
-            numberOfLines={1}
-          >
-            {song.album ?? 'Unknown Album'}
-          </Text>
-          <View style={styles.metaSpacer} />
-          <Ionicons name="time-outline" size={14} color={colors.primary} />
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {duration}
-          </Text>
+          <View style={styles.metaAlbum}>
+            <Ionicons name="disc-outline" size={14} color={colors.primary} />
+            <View style={styles.albumTextWrapper}>
+              <Text
+                style={[styles.albumText, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {song.album ?? 'Unknown Album'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.metaDuration}>
+            <Ionicons name="time-outline" size={14} color={colors.primary} />
+            <Text style={[styles.durationText, { color: colors.textSecondary }]}>
+              {duration}
+            </Text>
+          </View>
         </View>
       </View>
     </Pressable>
@@ -93,12 +98,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 3,
   },
-  metaText: {
+  metaAlbum: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  albumTextWrapper: {
+    flex: 1,
+    marginLeft: 3,
+  },
+  albumText: {
+    fontSize: 13,
+  },
+  metaDuration: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  durationText: {
     fontSize: 13,
     marginLeft: 3,
-    flexShrink: 1,
-  },
-  metaSpacer: {
-    width: 10,
   },
 });
