@@ -33,6 +33,8 @@ export interface PlayerState {
   bufferedPosition: number;
   /** Last playback error message, or null when healthy. */
   error: string | null;
+  /** Whether the player is currently auto-retrying after an error. */
+  retrying: boolean;
   /** True while `playTrack()` is loading the queue and skipping to the start index. */
   queueLoading: boolean;
 
@@ -42,6 +44,7 @@ export interface PlayerState {
   setQueue: (queue: Child[]) => void;
   setProgress: (position: number, duration: number, buffered: number) => void;
   setError: (error: string | null) => void;
+  setRetrying: (retrying: boolean) => void;
   setQueueLoading: (loading: boolean) => void;
 }
 
@@ -53,6 +56,7 @@ export const playerStore = create<PlayerState>()((set) => ({
   duration: 0,
   bufferedPosition: 0,
   error: null,
+  retrying: false,
   queueLoading: false,
 
   setCurrentTrack: (track) => set({ currentTrack: track }),
@@ -65,5 +69,6 @@ export const playerStore = create<PlayerState>()((set) => ({
       bufferedPosition: buffered,
     })),
   setError: (error) => set({ error }),
+  setRetrying: (retrying) => set({ retrying }),
   setQueueLoading: (loading) => set({ queueLoading: loading }),
 }));

@@ -6,7 +6,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { type ThemeColors } from '../constants/theme';
 import { formatTrackDuration } from '../utils/formatters';
@@ -32,6 +39,12 @@ export interface PlayerProgressBarProps {
   onSeek: (seconds: number) => void;
   /** Whether the player is currently buffering. */
   isBuffering?: boolean;
+  /** Playback error message to display, or null when healthy. */
+  error?: string | null;
+  /** Whether the player is currently auto-retrying after an error. */
+  retrying?: boolean;
+  /** Called when the user taps the manual retry button. */
+  onRetry?: () => void;
 }
 
 export function PlayerProgressBar({
@@ -41,6 +54,9 @@ export function PlayerProgressBar({
   colors,
   onSeek,
   isBuffering = false,
+  error = null,
+  retrying = false,
+  onRetry,
 }: PlayerProgressBarProps) {
   const trackWidth = useRef(0);
   const trackPageX = useRef(0);
@@ -214,14 +230,44 @@ export function PlayerProgressBar({
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>
           {formatTrackDuration(displayPosition)}
         </Text>
-        <Text
-          style={[
-            styles.bufferingLabel,
-            { color: colors.textSecondary, opacity: isBuffering ? 1 : 0 },
-          ]}
-        >
-          Buffering…
-        </Text>
+        {error != null && !retrying ? (
+          <View style={styles.centerStatus}>
+            <Text
+              style={[styles.statusLabel, { color: colors.red }]}
+              numberOfLines={1}
+            >
+              {error}
+            </Text>
+            {onRetry != null && (
+              <Pressable
+                onPress={onRetry}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  { borderColor: colors.red },
+                  pressed && styles.retryPressed,
+                ]}
+              >
+                <Text style={[styles.retryText, { color: colors.red }]}>
+                  Retry
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ) : retrying ? (
+          <Text style={[styles.statusLabel, { color: colors.red }]}>
+            Retrying…
+          </Text>
+        ) : (
+          <Text
+            style={[
+              styles.statusLabel,
+              { color: colors.textSecondary, opacity: isBuffering ? 1 : 0 },
+            ]}
+          >
+            Buffering…
+          </Text>
+        )}
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>
           -{formatTrackDuration(remaining)}
         </Text>
@@ -273,8 +319,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontVariant: ['tabular-nums'],
   },
-  bufferingLabel: {
+  centerStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    marginHorizontal: 8,
+  },
+  statusLabel: {
     fontSize: 12,
     fontStyle: 'italic',
+    flexShrink: 1,
+  },
+  retryButton: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  retryPressed: {
+    opacity: 0.6,
+  },
+  retryText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

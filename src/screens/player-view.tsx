@@ -54,6 +54,7 @@ export function PlayerView({ onClose }: PlayerViewProps) {
   const bufferedPosition = playerStore((s) => s.bufferedPosition);
   const queue = playerStore((s) => s.queue);
   const error = playerStore((s) => s.error);
+  const retrying = playerStore((s) => s.retrying);
   const queueLoading = playerStore((s) => s.queueLoading);
 
   const isPlaying =
@@ -170,38 +171,11 @@ export function PlayerView({ onClose }: PlayerViewProps) {
                 colors={colors}
                 onSeek={handleSeek}
                 isBuffering={isBuffering}
+                error={error}
+                retrying={retrying}
+                onRetry={retryPlayback}
               />
             </View>
-
-            {/* Error banner */}
-            {error != null && (
-              <View
-                style={[
-                  styles.errorBanner,
-                  { backgroundColor: `${colors.red}18` },
-                ]}
-              >
-                <Text
-                  style={[styles.errorText, { color: colors.red }]}
-                  numberOfLines={2}
-                >
-                  {error}
-                </Text>
-                <Pressable
-                  onPress={retryPlayback}
-                  hitSlop={8}
-                  style={({ pressed }) => [
-                    styles.retryButton,
-                    { borderColor: colors.red },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={[styles.retryText, { color: colors.red }]}>
-                    Retry
-                  </Text>
-                </Pressable>
-              </View>
-            )}
 
             {/* Playback controls */}
             <View style={styles.controls}>
@@ -464,30 +438,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: HERO_PADDING,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  errorText: {
-    flex: 1,
-    fontSize: 13,
-  },
-  retryButton: {
-    marginLeft: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  retryText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   queueSection: {
     paddingHorizontal: 16,

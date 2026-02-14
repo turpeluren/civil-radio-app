@@ -152,11 +152,15 @@ function startProgressPolling() {
 
       // --- Compute effective buffered value -------------------------
       if (isFullyBuffered) {
+        // Once we know the entire stream is downloaded, the buffered
+        // value must be at least as large as the store's effective
+        // duration so the UI always shows 100%.  Include the native
+        // duration to avoid flicker when it differs from metaDuration.
         const metaDuration =
           playerStore.getState().currentTrack?.duration ?? 0;
-        maxBufferedSeen = metaDuration > 0
-          ? metaDuration
-          : Math.max(maxBufferedSeen, buffered, position);
+        maxBufferedSeen = Math.max(
+          maxBufferedSeen, metaDuration, duration, buffered, position
+        );
       } else {
         maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
       }
@@ -253,7 +257,6 @@ export async function initPlayer(): Promise<void> {
       minBuffer: 86400,
       // maxBuffer is Android-only (ExoPlayer); generous value for parity.
       maxBuffer: 300,
-      waitForBuffer: true,
     });
   } catch {
     // setupPlayer throws if already initialised (e.g. after a fast refresh).
@@ -269,7 +272,7 @@ export async function initPlayer(): Promise<void> {
       Capability.Stop,
       Capability.SeekTo,
     ],
-    compactCapabilities: [Capability.Play, Capability.Pause],
+    // compactCapabilities removed in RNTP v5
   });
 
   // --- Event listeners that push state into the Zustand store ---
@@ -279,8 +282,9 @@ export async function initPlayer(): Promise<void> {
     store.setPlaybackState(mapState(state));
 
     if (state === State.Playing) {
-      // Clear any previous error when playback resumes successfully.
+      // Clear any previous error and retrying state when playback resumes.
       if (store.error) store.setError(null);
+      if (store.retrying) store.setRetrying(false);
       isAutoAdvancing = false;
       startProgressPolling();
     } else if (state === State.Buffering || state === State.Loading) {
@@ -337,10 +341,65 @@ export async function initPlayer(): Promise<void> {
     }
   });
 
-  TrackPlayer.addEventListener(Event.PlaybackError, (e) => {
+  TrackPlayer.addEventListener(Event.PlaybackError, async (e) => {
     const message =
       (e as { message?: string }).message ?? 'Playback error occurred';
-    playerStore.getState().setError(message);
+    const store = playerStore.getState();
+
+    // If we're not already retrying, auto-retry once before surfacing the error.
+    if (!store.retrying) {
+      store.setError(message);
+      store.setRetrying(true);
+      // Brief delay before retrying to let transient issues settle.
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        await TrackPlayer.retry();
+        // If retry succeeds, the PlaybackState -> Playing handler clears
+        // the error.  If it fails, this listener fires again and we'll
+        // hit the else branch below.
+      } catch {
+        // retry() itself threw — surface the error immediately.
+        playerStore.getState().setRetrying(false);
+      }
+    } else {
+      // Auto-retry already attempted and failed — show error for manual retry.
+      store.setRetrying(false);
+      store.setError(message);
+    }
+  });
+
+  // --- Playback diagnostic events ---
+
+  TrackPlayer.addEventListener(Event.PlaybackStalled, (e) => {
+    console.warn(
+      '[Player] Playback stalled at position',
+      e.position,
+      'track',
+      e.track
+    );
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackErrorLog, (e) => {
+    for (const entry of e.entries) {
+      console.warn(
+        '[Player] Error log entry:',
+        entry.errorStatusCode,
+        entry.errorDomain,
+        entry.errorComment ?? '',
+        entry.uri ?? ''
+      );
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackBufferEmpty, (e) => {
+    console.warn('[Player] Buffer empty:', e.isEmpty);
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackBufferFull, (e) => {
+    console.warn('[Player] Buffer full:', e.isFull);
+    if (e.isFull) {
+      isFullyBuffered = true;
+    }
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, ({ track }) => {
@@ -421,9 +480,9 @@ async function syncStoreFromNative(): Promise<void> {
     if (isFullyBuffered) {
       const metaDuration =
         playerStore.getState().currentTrack?.duration ?? 0;
-      maxBufferedSeen = metaDuration > 0
-        ? metaDuration
-        : Math.max(maxBufferedSeen, buffered, position);
+      maxBufferedSeen = Math.max(
+        maxBufferedSeen, metaDuration, duration, buffered, position
+      );
     } else {
       maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
     }
