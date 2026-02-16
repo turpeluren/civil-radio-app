@@ -7,14 +7,14 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -103,6 +103,65 @@ export function PlayerView({ onClose }: PlayerViewProps) {
     );
   }, [onClose]);
 
+  const renderQueueItem = useCallback(
+    ({ item, index }: { item: Child; index: number }) => (
+      <QueueItem
+        track={item}
+        index={index}
+        isActive={item.id === currentTrack?.id}
+        colors={colors}
+        onPress={handleQueueItemPress}
+      />
+    ),
+    [currentTrack?.id, colors, handleQueueItemPress],
+  );
+
+  const keyExtractor = useCallback(
+    (item: Child, index: number) => `${item.id}-${index}`,
+    [],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <PlayerListHeader
+        currentTrack={currentTrack}
+        colors={colors}
+        insets={insets}
+        onClose={onClose}
+        queueLoading={queueLoading}
+        marqueeScrolling={marqueeScrolling}
+        position={position}
+        duration={duration}
+        bufferedPosition={bufferedPosition}
+        isBuffering={isBuffering}
+        isPlaying={isPlaying}
+        error={error}
+        retrying={retrying}
+        handleSeek={handleSeek}
+        handleClearQueue={handleClearQueue}
+        queueLength={queue.length}
+      />
+    ),
+    [
+      currentTrack,
+      colors,
+      insets,
+      onClose,
+      queueLoading,
+      marqueeScrolling,
+      position,
+      duration,
+      bufferedPosition,
+      isBuffering,
+      isPlaying,
+      error,
+      retrying,
+      handleSeek,
+      handleClearQueue,
+      queue.length,
+    ],
+  );
+
   if (!currentTrack) return null;
 
   return (
@@ -120,188 +179,234 @@ export function PlayerView({ onClose }: PlayerViewProps) {
         />
       </Animated.View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top, paddingBottom: insets.bottom + 24 },
-        ]}
+      <FlashList
+        data={queue}
+        renderItem={renderQueueItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={listHeader}
+        estimatedItemSize={60}
+        drawDistance={200}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Header bar */}
-        <View style={styles.header}>
-          <Pressable
-            onPress={onClose}
-            hitSlop={12}
-            style={({ pressed }) => [
-              styles.closeButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons
-              name="chevron-down"
-              size={28}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.textSecondary }]}>
-            Now Playing
-          </Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
-        {queueLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.textSecondary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Loading...
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* Hero cover art */}
-            <View style={styles.hero}>
-              <View style={styles.heroImageWrap}>
-                <CachedImage
-                  coverArtId={currentTrack.coverArt}
-                  size={HERO_COVER_SIZE}
-                  style={styles.heroImage}
-                  resizeMode="cover"
-                />
-              </View>
-            </View>
-
-            {/* Track info */}
-            <View style={styles.trackInfo}>
-              {marqueeScrolling ? (
-                <MarqueeText
-                  style={[styles.trackTitle, { color: colors.textPrimary }]}
-                >
-                  {currentTrack.title}
-                </MarqueeText>
-              ) : (
-                <Text
-                  style={[styles.trackTitle, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
-                  {currentTrack.title}
-                </Text>
-              )}
-              <Text
-                style={[styles.trackArtist, { color: colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {currentTrack.artist ?? 'Unknown Artist'}
-              </Text>
-            </View>
-
-            {/* Progress bar */}
-            <View style={styles.progressSection}>
-              <PlayerProgressBar
-                position={position}
-                duration={duration}
-                bufferedPosition={bufferedPosition}
-                colors={colors}
-                onSeek={handleSeek}
-                isBuffering={isBuffering}
-                error={error}
-                retrying={retrying}
-                onRetry={retryPlayback}
-              />
-            </View>
-
-            {/* Playback controls */}
-            <View style={styles.controls}>
-              <Pressable
-                onPress={skipToPrevious}
-                hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Ionicons
-                  name="play-back"
-                  size={32}
-                  color={colors.textPrimary}
-                />
-              </Pressable>
-
-              <Pressable
-                onPress={togglePlayPause}
-                style={({ pressed }) => [
-                  styles.playPauseButton,
-                  { backgroundColor: colors.textPrimary },
-                  pressed && styles.playPausePressed,
-                ]}
-              >
-                {isBuffering ? (
-                  <ActivityIndicator size="small" color={colors.background} />
-                ) : (
-                  <Ionicons
-                    name={isPlaying ? 'pause' : 'play'}
-                    size={32}
-                    color={colors.background}
-                    style={!isPlaying ? styles.playIcon : undefined}
-                  />
-                )}
-              </Pressable>
-
-              <Pressable
-                onPress={skipToNext}
-                hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Ionicons
-                  name="play-forward"
-                  size={32}
-                  color={colors.textPrimary}
-                />
-              </Pressable>
-            </View>
-
-            {/* Queue section */}
-            {queue.length > 0 && (
-              <View style={styles.queueSection}>
-                <View style={styles.queueHeaderRow}>
-                  <Text
-                    style={[styles.queueHeader, { color: colors.textSecondary }]}
-                  >
-                    Queue
-                  </Text>
-                  <Pressable
-                    onPress={handleClearQueue}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                      styles.clearButton,
-                      { borderColor: colors.primary, opacity: pressed ? 0.5 : 0.75 },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.clearButtonText,
-                        { color: colors.primary },
-                      ]}
-                    >
-                      Clear
-                    </Text>
-                  </Pressable>
-                </View>
-                {queue.map((track, index) => (
-                  <QueueItem
-                    key={`${track.id}-${index}`}
-                    track={track}
-                    index={index}
-                    isActive={track.id === currentTrack.id}
-                    colors={colors}
-                    onPress={handleQueueItemPress}
-                  />
-                ))}
-              </View>
-            )}
-          </>
-        )}
-      </ScrollView>
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      />
     </View>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  List header (hero, controls, queue heading)                        */
+/* ------------------------------------------------------------------ */
+
+interface PlayerListHeaderProps {
+  currentTrack: Child | null;
+  colors: {
+    textPrimary: string;
+    textSecondary: string;
+    primary: string;
+    background: string;
+    border: string;
+  };
+  insets: { top: number; bottom: number };
+  onClose: () => void;
+  queueLoading: boolean;
+  marqueeScrolling: boolean;
+  position: number;
+  duration: number;
+  bufferedPosition: number;
+  isBuffering: boolean;
+  isPlaying: boolean;
+  error: string | null;
+  retrying: boolean;
+  handleSeek: (seconds: number) => void;
+  handleClearQueue: () => void;
+  queueLength: number;
+}
+
+const PlayerListHeader = memo(function PlayerListHeader({
+  currentTrack,
+  colors,
+  insets,
+  onClose,
+  queueLoading,
+  marqueeScrolling,
+  position,
+  duration,
+  bufferedPosition,
+  isBuffering,
+  isPlaying,
+  error,
+  retrying,
+  handleSeek,
+  handleClearQueue,
+  queueLength,
+}: PlayerListHeaderProps) {
+  if (!currentTrack) return null;
+
+  return (
+    <View style={{ paddingTop: insets.top }}>
+      {/* Header bar */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={({ pressed }) => [
+            styles.closeButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            name="chevron-down"
+            size={28}
+            color={colors.textPrimary}
+          />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.textSecondary }]}>
+          Now Playing
+        </Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {queueLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.textSecondary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Loading...
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* Hero cover art */}
+          <View style={styles.hero}>
+            <View style={styles.heroImageWrap}>
+              <CachedImage
+                coverArtId={currentTrack.coverArt}
+                size={HERO_COVER_SIZE}
+                style={styles.heroImage}
+                resizeMode="cover"
+              />
+            </View>
+          </View>
+
+          {/* Track info */}
+          <View style={styles.trackInfo}>
+            {marqueeScrolling ? (
+              <MarqueeText
+                style={[styles.trackTitle, { color: colors.textPrimary }]}
+              >
+                {currentTrack.title}
+              </MarqueeText>
+            ) : (
+              <Text
+                style={[styles.trackTitle, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {currentTrack.title}
+              </Text>
+            )}
+            <Text
+              style={[styles.trackArtist, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {currentTrack.artist ?? 'Unknown Artist'}
+            </Text>
+          </View>
+
+          {/* Progress bar */}
+          <View style={styles.progressSection}>
+            <PlayerProgressBar
+              position={position}
+              duration={duration}
+              bufferedPosition={bufferedPosition}
+              colors={colors}
+              onSeek={handleSeek}
+              isBuffering={isBuffering}
+              error={error}
+              retrying={retrying}
+              onRetry={retryPlayback}
+            />
+          </View>
+
+          {/* Playback controls */}
+          <View style={styles.controls}>
+            <Pressable
+              onPress={skipToPrevious}
+              hitSlop={12}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Ionicons
+                name="play-back"
+                size={32}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={togglePlayPause}
+              style={({ pressed }) => [
+                styles.playPauseButton,
+                { backgroundColor: colors.textPrimary },
+                pressed && styles.playPausePressed,
+              ]}
+            >
+              {isBuffering ? (
+                <ActivityIndicator size="small" color={colors.background} />
+              ) : (
+                <Ionicons
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={32}
+                  color={colors.background}
+                  style={!isPlaying ? styles.playIcon : undefined}
+                />
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={skipToNext}
+              hitSlop={12}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Ionicons
+                name="play-forward"
+                size={32}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          </View>
+
+          {/* Queue section header */}
+          {queueLength > 0 && (
+            <View style={styles.queueSection}>
+              <View style={styles.queueHeaderRow}>
+                <Text
+                  style={[styles.queueHeader, { color: colors.textSecondary }]}
+                >
+                  Queue
+                </Text>
+                <Pressable
+                  onPress={handleClearQueue}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.clearButton,
+                    { borderColor: colors.primary, opacity: pressed ? 0.5 : 0.75 },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.clearButtonText,
+                      { color: colors.primary },
+                    ]}
+                  >
+                    Clear
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </>
+      )}
+    </View>
+  );
+});
 
 /* ------------------------------------------------------------------ */
 /*  Queue item                                                         */
@@ -320,7 +425,7 @@ interface QueueItemProps {
   onPress: (index: number) => void;
 }
 
-function QueueItem({ track, index, isActive, colors, onPress }: QueueItemProps) {
+const QueueItem = memo(function QueueItem({ track, index, isActive, colors, onPress }: QueueItemProps) {
   const handlePress = useCallback(() => {
     onPress(index);
   }, [index, onPress]);
@@ -378,7 +483,7 @@ function QueueItem({ track, index, isActive, colors, onPress }: QueueItemProps) 
       </Text>
     </Pressable>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                             */
@@ -387,13 +492,6 @@ function QueueItem({ track, index, isActive, colors, onPress }: QueueItemProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  content: {
-    paddingHorizontal: 0,
   },
   header: {
     flexDirection: 'row',
@@ -526,6 +624,7 @@ const queueStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   coverWrap: {
