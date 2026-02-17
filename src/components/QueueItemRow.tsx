@@ -17,7 +17,7 @@ import type { ThemeColors } from '../constants/theme';
 
 const COVER_SIZE = 40;
 
-/** Total row height (paddingVertical 14*2 + cover 40 = 68). Exported for estimatedItemSize. */
+/** Total row height (paddingVertical 20*2 + cover 40 = 80). */
 export const QUEUE_ROW_HEIGHT = 80;
 
 /* ------------------------------------------------------------------ */
@@ -30,6 +30,7 @@ export interface QueueItemRowProps {
   isActive: boolean;
   colors: Pick<ThemeColors, 'textPrimary' | 'textSecondary' | 'primary' | 'border' | 'red'>;
   onPress: (index: number) => void;
+  onLongPress?: (track: Child) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -42,10 +43,15 @@ export const QueueItemRow = memo(function QueueItemRow({
   isActive,
   colors,
   onPress,
+  onLongPress,
 }: QueueItemRowProps) {
   const handlePress = useCallback(() => {
     onPress(index);
   }, [index, onPress]);
+
+  const handleLongPress = useCallback(() => {
+    onLongPress?.(track);
+  }, [onLongPress, track]);
 
   const starred = useIsStarred('song', track.id);
 
@@ -88,7 +94,7 @@ export const QueueItemRow = memo(function QueueItemRow({
   );
 
   return (
-    <SwipeableRow rightActions={rightActions} leftActions={leftActions} enableFullSwipeRight enableFullSwipeLeft actionPanelBackground="transparent" onPress={handlePress}>
+    <SwipeableRow rightActions={rightActions} leftActions={leftActions} enableFullSwipeRight enableFullSwipeLeft actionPanelBackground="transparent" onPress={handlePress} onLongPress={onLongPress ? handleLongPress : undefined}>
       <View style={[styles.row, { borderBottomColor: colors.border }]}>
         {/* Cover art with now-playing overlay */}
         <View style={styles.coverWrap}>
@@ -117,10 +123,15 @@ export const QueueItemRow = memo(function QueueItemRow({
           )}
         </View>
 
-        {/* Duration */}
-        <Text style={[styles.duration, { color: isActive ? colors.primary : colors.textSecondary }]}>
-          {durationText}
-        </Text>
+        {/* Starred indicator + Duration */}
+        <View style={styles.trailing}>
+          {starred && (
+            <Ionicons name="heart" size={14} color={colors.red} />
+          )}
+          <Text style={[styles.duration, { color: isActive ? colors.primary : colors.textSecondary }]}>
+            {durationText}
+          </Text>
+        </View>
       </View>
     </SwipeableRow>
   );
@@ -162,13 +173,19 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
+    fontWeight: '600',
   },
   artist: {
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 2,
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 12,
   },
   duration: {
     fontSize: 15,
-    marginLeft: 12,
   },
 });

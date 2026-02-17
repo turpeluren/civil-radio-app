@@ -23,14 +23,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CachedImage } from '../components/CachedImage';
 import { MarqueeText } from '../components/MarqueeText';
+import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { PlaybackRateButton } from '../components/PlaybackRateButton';
 import { PlayerProgressBar } from '../components/PlayerProgressBar';
 import { RepeatButton } from '../components/RepeatButton';
 import { ShuffleButton } from '../components/ShuffleButton';
 import { QueueItemRow } from '../components/QueueItemRow';
 import { closeOpenRow } from '../components/SwipeableRow';
+import { type ThemeColors } from '../constants/theme';
 import { useColorExtraction } from '../hooks/useColorExtraction';
+import { useIsStarred } from '../hooks/useIsStarred';
 import { useTheme } from '../hooks/useTheme';
+import { toggleStar } from '../services/moreOptionsService';
 import {
   clearQueue,
   retryPlayback,
@@ -43,6 +47,7 @@ import {
 } from '../services/playerService';
 import { type Child } from '../services/subsonicService';
 import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
+import { moreOptionsStore } from '../store/moreOptionsStore';
 import { playerStore } from '../store/playerStore';
 
 
@@ -88,6 +93,10 @@ export function PlayerView({ onClose }: PlayerViewProps) {
 
   const handleQueueItemPress = useCallback((index: number) => {
     skipToTrack(index);
+  }, []);
+
+  const handleQueueItemLongPress = useCallback((track: Child) => {
+    moreOptionsStore.getState().show({ type: 'song', item: track });
   }, []);
 
   const handleClearQueue = useCallback(() => {
@@ -159,9 +168,10 @@ export function PlayerView({ onClose }: PlayerViewProps) {
         isActive={index === currentTrackIndex}
         colors={colors}
         onPress={handleQueueItemPress}
+        onLongPress={handleQueueItemLongPress}
       />
     ),
-    [currentTrackIndex, colors, handleQueueItemPress],
+    [currentTrackIndex, colors, handleQueueItemPress, handleQueueItemLongPress],
   );
 
   const keyExtractor = useCallback(
@@ -236,7 +246,6 @@ export function PlayerView({ onClose }: PlayerViewProps) {
         renderItem={renderQueueItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={listHeader}
-        estimatedItemSize={60}
         onScrollBeginDrag={closeOpenRow}
         drawDistance={200}
         showsVerticalScrollIndicator={false}
@@ -270,9 +279,47 @@ export function PlayerView({ onClose }: PlayerViewProps) {
           </View>
         </Animated.View>
       )}
+
     </View>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Favorite button                                                    */
+/* ------------------------------------------------------------------ */
+
+const FavoriteButton = memo(function FavoriteButton({
+  trackId,
+  colors,
+}: {
+  trackId: string;
+  colors: { red: string; textSecondary: string };
+}) {
+  const starred = useIsStarred('song', trackId);
+
+  const handleToggle = useCallback(() => {
+    toggleStar('song', trackId);
+  }, [trackId]);
+
+  return (
+    <Pressable
+      onPress={handleToggle}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={starred ? 'Remove from favorites' : 'Add to favorites'}
+      style={({ pressed }) => [
+        styles.favoriteButton,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Ionicons
+        name={starred ? 'heart' : 'heart-outline'}
+        size={24}
+        color={starred ? colors.red : colors.textSecondary}
+      />
+    </Pressable>
+  );
+});
 
 /* ------------------------------------------------------------------ */
 /*  List header (hero, controls, queue heading)                        */
@@ -280,13 +327,7 @@ export function PlayerView({ onClose }: PlayerViewProps) {
 
 interface PlayerListHeaderProps {
   currentTrack: Child | null;
-  colors: {
-    textPrimary: string;
-    textSecondary: string;
-    primary: string;
-    background: string;
-    border: string;
-  };
+  colors: ThemeColors;
   insets: { top: number; bottom: number };
   onClose: () => void;
   queueLoading: boolean;
@@ -348,7 +389,12 @@ const PlayerListHeader = memo(function PlayerListHeader({
         <Text style={[styles.headerTitle, { color: colors.textSecondary }]}>
           Now Playing
         </Text>
-        <View style={styles.headerSpacer} />
+        <MoreOptionsButton
+          onPress={() =>
+            moreOptionsStore.getState().show({ type: 'song', item: currentTrack })
+          }
+          color={colors.textPrimary}
+        />
       </View>
 
       {queueLoading ? (
@@ -374,26 +420,31 @@ const PlayerListHeader = memo(function PlayerListHeader({
 
           {/* Track info */}
           <View style={styles.trackInfo}>
-            {marqueeScrolling ? (
-              <MarqueeText
-                style={[styles.trackTitle, { color: colors.textPrimary }]}
-              >
-                {currentTrack.title}
-              </MarqueeText>
-            ) : (
-              <Text
-                style={[styles.trackTitle, { color: colors.textPrimary }]}
-                numberOfLines={1}
-              >
-                {currentTrack.title}
-              </Text>
-            )}
-            <Text
-              style={[styles.trackArtist, { color: colors.textSecondary }]}
-              numberOfLines={1}
-            >
-              {currentTrack.artist ?? 'Unknown Artist'}
-            </Text>
+            <View style={styles.trackInfoRow}>
+              <View style={styles.trackInfoText}>
+                {marqueeScrolling ? (
+                  <MarqueeText
+                    style={[styles.trackTitle, { color: colors.textPrimary }]}
+                  >
+                    {currentTrack.title}
+                  </MarqueeText>
+                ) : (
+                  <Text
+                    style={[styles.trackTitle, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {currentTrack.title}
+                  </Text>
+                )}
+                <Text
+                  style={[styles.trackArtist, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {currentTrack.artist ?? 'Unknown Artist'}
+                </Text>
+              </View>
+              <FavoriteButton trackId={currentTrack.id} colors={colors} />
+            </View>
           </View>
 
           {/* Progress bar */}
@@ -541,9 +592,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  headerSpacer: {
-    width: 36,
-  },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
@@ -582,6 +630,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: HERO_PADDING,
     marginBottom: 16,
   },
+  trackInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trackInfoText: {
+    flex: 1,
+    minWidth: 0,
+  },
   trackTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -589,6 +645,10 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 16,
     marginTop: 4,
+  },
+  favoriteButton: {
+    paddingLeft: 12,
+    paddingVertical: 4,
   },
   progressSection: {
     paddingHorizontal: HERO_PADDING,
