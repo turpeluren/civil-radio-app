@@ -8,7 +8,7 @@
 
 import Constants from 'expo-constants';
 import { useEffect, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { Animated, InteractionManager } from 'react-native';
 
 import { useCachedCoverArt } from './useCachedCoverArt';
 import { type ExtractedColors, getProminentColor } from '../utils/colors';
@@ -50,22 +50,27 @@ export function useColorExtraction(
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const { getColors } = await import('react-native-image-colors');
-        const result = await getColors(uri, {
-          fallback: fallbackColor,
-          quality: 'low',
-        });
-        if (cancelled) return;
-        const prominent = getProminentColor(result as ExtractedColors);
-        setCoverBackgroundColor(prominent ?? null);
-      } catch {
-        if (!cancelled) setCoverBackgroundColor(null);
-      }
-    })();
+    const handle = InteractionManager.runAfterInteractions(() => {
+      (async () => {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (cancelled) return;
+          const { getColors } = await import('react-native-image-colors');
+          const result = await getColors(uri, {
+            fallback: fallbackColor,
+            quality: 'low',
+          });
+          if (cancelled) return;
+          const prominent = getProminentColor(result as ExtractedColors);
+          setCoverBackgroundColor(prominent ?? null);
+        } catch {
+          if (!cancelled) setCoverBackgroundColor(null);
+        }
+      })();
+    });
     return () => {
       cancelled = true;
+      handle.cancel();
     };
   }, [coverArtId, cachedUri, fallbackColor]);
 
