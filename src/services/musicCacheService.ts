@@ -101,8 +101,8 @@ export function initMusicCache(): void {
   }
   cacheDir = dir;
 
-  recoverStalledDownloads();
   populateTrackMaps();
+  recoverStalledDownloads();
 }
 
 /**
@@ -463,6 +463,9 @@ async function downloadTrack(
     await File.downloadFileAsync(url, tmpDest);
 
     const dest = new File(itemDir, fileName);
+    if (dest.exists) {
+      try { dest.delete(); } catch { /* best-effort */ }
+    }
     tmpDest.move(dest);
 
     const bytes = dest.exists ? dest.size ?? 0 : 0;
