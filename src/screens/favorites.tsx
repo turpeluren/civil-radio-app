@@ -1,24 +1,25 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AlbumListView } from '../components/AlbumListView';
 import { ArtistListView } from '../components/ArtistListView';
-import { DownloadButton } from '../components/DownloadButton';
 import { SongListView } from '../components/SongListView';
 import { useTheme } from '../hooks/useTheme';
 import {
   STARRED_SONGS_ITEM_ID,
   enqueueStarredSongsDownload,
   deleteStarredSongsDownload,
+  getLocalTrackUri,
 } from '../services/musicCacheService';
 import { minDelay } from '../utils/stringHelpers';
+import { filterBarStore } from '../store/filterBarStore';
 import {
   layoutPreferencesStore,
   type ItemLayout,
 } from '../store/layoutPreferencesStore';
 import { favoritesStore } from '../store/favoritesStore';
+import { musicCacheStore } from '../store/musicCacheStore';
 
 /* ------------------------------------------------------------------ */
 /*  Segment types                                                     */
@@ -80,7 +81,7 @@ function SegmentControl({
 
 export function FavoritesScreen() {
   const { colors } = useTheme();
-  const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const [activeSegment, setActiveSegment] = useState<Segment>('songs');
 
   /* ---- Store: favorites data ---- */
@@ -118,7 +119,7 @@ export function FavoritesScreen() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- Header right: download + layout toggle ---- */
+  /* ---- Configure filter bar ---- */
   const handleDownloadStarred = useCallback(() => {
     enqueueStarredSongsDownload();
   }, []);
@@ -128,6 +129,8 @@ export function FavoritesScreen() {
   }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
+
     const layoutMap: Record<Segment, { layout: ItemLayout; toggle: () => void }> = {
       songs: { layout: favSongLayout, toggle: toggleSongLayout },
       albums: { layout: favAlbumLayout, toggle: toggleAlbumLayout },
@@ -135,38 +138,27 @@ export function FavoritesScreen() {
     };
 
     const current = layoutMap[activeSegment];
-    const showDownloadButton = activeSegment === 'songs' && songs.length > 0;
-
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerRight}>
-          {showDownloadButton && (
-            <DownloadButton
-              itemId={STARRED_SONGS_ITEM_ID}
-              type="playlist"
-              size={22}
-              onDownload={handleDownloadStarred}
-              onDelete={handleDeleteStarred}
-            />
-          )}
-          <Pressable
-            onPress={current.toggle}
-            style={({ pressed }) => [
-              styles.headerButton,
-              pressed && styles.headerButtonPressed,
-            ]}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={current.layout === 'list' ? 'grid-outline' : 'list-outline'}
-              size={22}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-        </View>
-      ),
+    const store = filterBarStore.getState();
+    store.setLayoutToggle({
+      layout: current.layout,
+      onToggle: current.toggle,
     });
+    store.setHideDownloaded(activeSegment === 'artists');
+    store.setHideFavorites(false);
+
+    const showDownloadButton = activeSegment === 'songs' && songs.length > 0;
+    store.setDownloadButtonConfig(
+      showDownloadButton
+        ? {
+            itemId: STARRED_SONGS_ITEM_ID,
+            type: 'playlist',
+            onDownload: handleDownloadStarred,
+            onDelete: handleDeleteStarred,
+          }
+        : null,
+    );
   }, [
+    isFocused,
     activeSegment,
     songs.length,
     favSongLayout,
@@ -177,9 +169,32 @@ export function FavoritesScreen() {
     toggleArtistLayout,
     handleDownloadStarred,
     handleDeleteStarred,
-    navigation,
-    colors.textPrimary,
   ]);
+
+  /* ---- Filter state ---- */
+  const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
+  const cachedItems = musicCacheStore((s) => s.cachedItems);
+
+  const filteredSongs = useMemo(() => {
+    if (!downloadedOnly) return songs;
+    return songs.filter((s) => getLocalTrackUri(s.id) !== null);
+  }, [songs, downloadedOnly, cachedItems]);
+
+  const filteredAlbums = useMemo(() => {
+    if (!downloadedOnly) return albums;
+    return albums.filter((a) => a.id in cachedItems);
+  }, [albums, downloadedOnly, cachedItems]);
+
+  const filteredArtists = useMemo(() => {
+    if (!downloadedOnly) return artists;
+    const downloadedArtistIds = new Set<string>();
+    for (const album of albums) {
+      if (album.id in cachedItems && album.artistId) {
+        downloadedArtistIds.add(album.artistId);
+      }
+    }
+    return artists.filter((a) => downloadedArtistIds.has(a.id));
+  }, [artists, albums, downloadedOnly, cachedItems]);
 
   /* ---- Pull-to-refresh ---- */
   const [refreshing, setRefreshing] = useState(false);
@@ -198,7 +213,7 @@ export function FavoritesScreen() {
       <View style={styles.content}>
         {activeSegment === 'songs' && (
           <SongListView
-            songs={songs}
+            songs={filteredSongs}
             layout={favSongLayout}
             loading={loading}
             error={error}
@@ -210,7 +225,7 @@ export function FavoritesScreen() {
         )}
         {activeSegment === 'albums' && (
           <AlbumListView
-            albums={albums}
+            albums={filteredAlbums}
             layout={favAlbumLayout}
             loading={loading}
             error={error}
@@ -222,7 +237,7 @@ export function FavoritesScreen() {
         )}
         {activeSegment === 'artists' && (
           <ArtistListView
-            artists={artists}
+            artists={filteredArtists}
             layout={favArtistLayout}
             loading={loading}
             error={error}
@@ -275,16 +290,5 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerButton: {
-    padding: 4,
-    marginRight: 8,
-  },
-  headerButtonPressed: {
-    opacity: 0.6,
   },
 });

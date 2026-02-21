@@ -10,12 +10,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FilterBar } from './FilterBar';
 import { useTheme } from '../hooks/useTheme';
 import { searchStore } from '../store/searchStore';
 
 const DEBOUNCE_MS = 300;
 
-export function SearchableHeader({ options, route }: BottomTabHeaderProps) {
+export function SearchableHeader({ route }: BottomTabHeaderProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -69,14 +70,6 @@ export function SearchableHeader({ options, route }: BottomTabHeaderProps) {
     };
   }, []);
 
-  const headerRight =
-    options.headerRight != null
-      ? options.headerRight({
-          tintColor: colors.textPrimary,
-          canGoBack: false,
-        })
-      : null;
-
   return (
     <View
       style={[
@@ -113,8 +106,8 @@ export function SearchableHeader({ options, route }: BottomTabHeaderProps) {
             </Pressable>
           )}
         </View>
-        {headerRight}
       </View>
+      <FilterBar routeName={route.name} />
     </View>
   );
 }

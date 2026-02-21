@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -11,12 +12,18 @@ import {
 } from 'react-native';
 
 import { AlbumCard } from '../components/AlbumCard';
+import { PlaylistCard } from '../components/PlaylistCard';
 import { useTheme } from '../hooks/useTheme';
-import type { AlbumID3 } from '../services/subsonicService';
+import type { AlbumID3, Playlist } from '../services/subsonicService';
+import { albumLibraryStore } from '../store/albumLibraryStore';
 import {
   albumListsStore,
   type AlbumListType,
 } from '../store/albumListsStore';
+import { favoritesStore } from '../store/favoritesStore';
+import { filterBarStore } from '../store/filterBarStore';
+import { musicCacheStore } from '../store/musicCacheStore';
+import { playlistLibraryStore } from '../store/playlistLibraryStore';
 
 const CARD_WIDTH = 150;
 const CARD_GAP = 12;
@@ -127,12 +134,148 @@ function AlbumSection({
   );
 }
 
+function DownloadedAlbumSection({
+  albums,
+  colors,
+}: {
+  albums: AlbumID3[];
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const renderItem = useCallback(
+    ({ item }: { item: AlbumID3 }) => (
+      <AlbumCard album={item} width={CARD_WIDTH} />
+    ),
+    []
+  );
+  const keyExtractor = useCallback((item: AlbumID3) => item.id, []);
+
+  if (albums.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 16 }]}>
+        Downloaded Albums
+      </Text>
+      <FlashList
+        data={albums}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+        ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+      />
+    </View>
+  );
+}
+
+function PlaylistSection({
+  playlists,
+  colors,
+}: {
+  playlists: Playlist[];
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const renderItem = useCallback(
+    ({ item }: { item: Playlist }) => (
+      <PlaylistCard playlist={item} width={CARD_WIDTH} />
+    ),
+    []
+  );
+  const keyExtractor = useCallback((item: Playlist) => item.id, []);
+
+  if (playlists.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 16 }]}>
+        Downloaded Playlists
+      </Text>
+      <FlashList
+        data={playlists}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+        ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+      />
+    </View>
+  );
+}
+
+const SECTION_ORDER: AlbumListType[] = [
+  'recentlyAdded',
+  'recentlyPlayed',
+  'frequentlyPlayed',
+  'randomSelection',
+];
+
 export function HomeScreen() {
   const { colors } = useTheme();
+  const isFocused = useIsFocused();
+
   const recentlyAdded = albumListsStore((s) => s.recentlyAdded);
   const recentlyPlayed = albumListsStore((s) => s.recentlyPlayed);
   const frequentlyPlayed = albumListsStore((s) => s.frequentlyPlayed);
   const randomSelection = albumListsStore((s) => s.randomSelection);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    const store = filterBarStore.getState();
+    store.setLayoutToggle(null);
+    store.setDownloadButtonConfig(null);
+    store.setHideDownloaded(false);
+    store.setHideFavorites(false);
+  }, [isFocused]);
+
+  const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
+  const favoritesOnly = filterBarStore((s) => s.favoritesOnly);
+  const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const starredAlbums = favoritesStore((s) => s.albums);
+
+  const allLibraryAlbums = albumLibraryStore((s) => s.albums);
+  const allPlaylists = playlistLibraryStore((s) => s.playlists);
+
+  const allSections: Record<AlbumListType, AlbumID3[]> = useMemo(
+    () => ({
+      recentlyAdded,
+      recentlyPlayed,
+      frequentlyPlayed,
+      randomSelection,
+    }),
+    [recentlyAdded, recentlyPlayed, frequentlyPlayed, randomSelection],
+  );
+
+  const filteredSections = useMemo(() => {
+    if (!downloadedOnly && !favoritesOnly) return allSections;
+
+    const starredIds = favoritesOnly
+      ? new Set(starredAlbums.map((a) => a.id))
+      : null;
+
+    const result: Record<string, AlbumID3[]> = {};
+    for (const key of SECTION_ORDER) {
+      result[key] = allSections[key].filter((album) => {
+        if (downloadedOnly && !(album.id in cachedItems)) return false;
+        if (starredIds && !starredIds.has(album.id)) return false;
+        return true;
+      });
+    }
+    return result as Record<AlbumListType, AlbumID3[]>;
+  }, [allSections, downloadedOnly, favoritesOnly, cachedItems, starredAlbums]);
+
+  const hasAnyFilters = downloadedOnly || favoritesOnly;
+
+  const downloadedAlbums = useMemo(() => {
+    if (!downloadedOnly) return [];
+    return allLibraryAlbums.filter((a) => a.id in cachedItems);
+  }, [downloadedOnly, allLibraryAlbums, cachedItems]);
+
+  const downloadedPlaylists = useMemo(() => {
+    if (!downloadedOnly) return [];
+    return allPlaylists.filter((p) => p.id in cachedItems);
+  }, [downloadedOnly, allPlaylists, cachedItems]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -141,26 +284,24 @@ export function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <AlbumSection
-          listType="recentlyAdded"
-          albums={recentlyAdded}
-          colors={colors}
-        />
-        <AlbumSection
-          listType="recentlyPlayed"
-          albums={recentlyPlayed}
-          colors={colors}
-        />
-        <AlbumSection
-          listType="frequentlyPlayed"
-          albums={frequentlyPlayed}
-          colors={colors}
-        />
-        <AlbumSection
-          listType="randomSelection"
-          albums={randomSelection}
-          colors={colors}
-        />
+        {downloadedOnly && (
+          <>
+            <DownloadedAlbumSection albums={downloadedAlbums} colors={colors} />
+            <PlaylistSection playlists={downloadedPlaylists} colors={colors} />
+          </>
+        )}
+        {SECTION_ORDER.map((key) => {
+          const sectionAlbums = filteredSections[key];
+          if (hasAnyFilters && sectionAlbums.length === 0) return null;
+          return (
+            <AlbumSection
+              key={key}
+              listType={key}
+              albums={sectionAlbums}
+              colors={colors}
+            />
+          );
+        })}
       </ScrollView>
     </View>
   );

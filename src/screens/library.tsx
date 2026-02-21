@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '../hooks/useTheme';
+import { filterBarStore } from '../store/filterBarStore';
 import {
   layoutPreferencesStore,
   type ItemLayout,
@@ -72,7 +72,7 @@ function SegmentControl({
 
 export function LibraryScreen() {
   const { colors } = useTheme();
-  const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const [activeSegment, setActiveSegment] = useState<Segment>('albums');
 
   const albumLayout = layoutPreferencesStore((s) => s.albumLayout);
@@ -94,8 +94,9 @@ export function LibraryScreen() {
     setPlaylistLayout(playlistLayout === 'list' ? 'grid' : 'list');
   }, [playlistLayout, setPlaylistLayout]);
 
-  // Set a header-right toggle button for segments that support layout switching
   useEffect(() => {
+    if (!isFocused) return;
+
     const layoutMap: Record<Segment, { layout: ItemLayout; toggle: () => void }> = {
       albums: { layout: albumLayout, toggle: toggleAlbumLayout },
       artists: { layout: artistLayout, toggle: toggleArtistLayout },
@@ -103,25 +104,16 @@ export function LibraryScreen() {
     };
 
     const current = layoutMap[activeSegment];
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={current.toggle}
-          style={({ pressed }) => [
-            styles.headerButton,
-            pressed && styles.headerButtonPressed,
-          ]}
-          hitSlop={8}
-        >
-          <Ionicons
-            name={current.layout === 'list' ? 'grid-outline' : 'list-outline'}
-            size={22}
-            color={colors.textPrimary}
-          />
-        </Pressable>
-      ),
+    const store = filterBarStore.getState();
+    store.setLayoutToggle({
+      layout: current.layout,
+      onToggle: current.toggle,
     });
+    store.setDownloadButtonConfig(null);
+    store.setHideDownloaded(activeSegment === 'artists');
+    store.setHideFavorites(activeSegment === 'playlists');
   }, [
+    isFocused,
     activeSegment,
     albumLayout,
     artistLayout,
@@ -129,17 +121,35 @@ export function LibraryScreen() {
     toggleAlbumLayout,
     toggleArtistLayout,
     togglePlaylistLayout,
-    navigation,
-    colors.textPrimary,
   ]);
+
+  const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
+  const favoritesOnly = filterBarStore((s) => s.favoritesOnly);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SegmentControl selected={activeSegment} onSelect={setActiveSegment} />
       <View style={styles.content}>
-        {activeSegment === 'albums' && <AlbumLibraryListScreen layout={albumLayout} />}
-        {activeSegment === 'artists' && <ArtistListScreen layout={artistLayout} />}
-        {activeSegment === 'playlists' && <PlaylistListScreen layout={playlistLayout} />}
+        {activeSegment === 'albums' && (
+          <AlbumLibraryListScreen
+            layout={albumLayout}
+            downloadedOnly={downloadedOnly}
+            favoritesOnly={favoritesOnly}
+          />
+        )}
+        {activeSegment === 'artists' && (
+          <ArtistListScreen
+            layout={artistLayout}
+            downloadedOnly={downloadedOnly}
+            favoritesOnly={favoritesOnly}
+          />
+        )}
+        {activeSegment === 'playlists' && (
+          <PlaylistListScreen
+            layout={playlistLayout}
+            downloadedOnly={downloadedOnly}
+          />
+        )}
       </View>
     </View>
   );
@@ -183,12 +193,5 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  headerButton: {
-    padding: 4,
-    marginRight: 8,
-  },
-  headerButtonPressed: {
-    opacity: 0.6,
   },
 });

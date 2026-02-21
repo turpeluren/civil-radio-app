@@ -1,24 +1,62 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ArtistListView, type ArtistLayout } from '../components/ArtistListView';
 import { useTheme } from '../hooks/useTheme';
+import { albumLibraryStore } from '../store/albumLibraryStore';
 import { artistLibraryStore } from '../store/artistLibraryStore';
+import { favoritesStore } from '../store/favoritesStore';
+import { musicCacheStore } from '../store/musicCacheStore';
 import { minDelay } from '../utils/stringHelpers';
 
-export function ArtistListScreen({ layout = 'list' }: { layout?: ArtistLayout }) {
+export function ArtistListScreen({
+  layout = 'list',
+  downloadedOnly = false,
+  favoritesOnly = false,
+}: {
+  layout?: ArtistLayout;
+  downloadedOnly?: boolean;
+  favoritesOnly?: boolean;
+}) {
   const { colors } = useTheme();
   const artists = artistLibraryStore((s) => s.artists);
   const loading = artistLibraryStore((s) => s.loading);
   const error = artistLibraryStore((s) => s.error);
   const fetchAllArtists = artistLibraryStore((s) => s.fetchAllArtists);
 
-  // Auto-fetch when mounted if the store has no data
+  const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const allAlbums = albumLibraryStore((s) => s.albums);
+  const starredArtists = favoritesStore((s) => s.artists);
+
   useEffect(() => {
     if (artists.length === 0 && !loading) {
       fetchAllArtists();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredArtists = useMemo(() => {
+    if (!downloadedOnly && !favoritesOnly) return artists;
+
+    const starredIds = favoritesOnly
+      ? new Set(starredArtists.map((a) => a.id))
+      : null;
+
+    let downloadedArtistIds: Set<string> | null = null;
+    if (downloadedOnly) {
+      downloadedArtistIds = new Set<string>();
+      for (const album of allAlbums) {
+        if (album.id in cachedItems && album.artistId) {
+          downloadedArtistIds.add(album.artistId);
+        }
+      }
+    }
+
+    return artists.filter((artist) => {
+      if (downloadedArtistIds && !downloadedArtistIds.has(artist.id)) return false;
+      if (starredIds && !starredIds.has(artist.id)) return false;
+      return true;
+    });
+  }, [artists, downloadedOnly, favoritesOnly, cachedItems, allAlbums, starredArtists]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,7 +71,7 @@ export function ArtistListScreen({ layout = 'list' }: { layout?: ArtistLayout })
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ArtistListView
-        artists={artists}
+        artists={filteredArtists}
         layout={layout}
         loading={loading}
         error={error}
