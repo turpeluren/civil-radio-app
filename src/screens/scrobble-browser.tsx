@@ -146,12 +146,13 @@ export function ScrobbleBrowserScreen() {
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
   const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
 
+
   const completedReversed = useMemo(
     () => [...completedScrobbles].reverse(),
     [completedScrobbles],
   );
 
-  const keyExtractor = useCallback((item: Scrobble) => item.id, []);
+  const keyExtractor = useCallback((item: Scrobble, index: number) => `${item.id}-${index}`, []);
 
   const renderItem = useCallback(
     ({ item }: { item: Scrobble }) => <ScrobbleRow scrobble={item} colors={colors} />,

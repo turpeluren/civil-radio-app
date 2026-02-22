@@ -29,12 +29,15 @@ export const pendingScrobbleStore = create<PendingScrobbleState>()(
       pendingScrobbles: [],
 
       addScrobble: (song, time) =>
-        set((state) => ({
-          pendingScrobbles: [
-            ...state.pendingScrobbles,
-            { id: `${time}-${Math.random().toString(36).slice(2, 8)}`, song, time },
-          ],
-        })),
+        set((state) => {
+          if (!song?.id || !song.title) return state;
+          return {
+            pendingScrobbles: [
+              ...state.pendingScrobbles,
+              { id: `${time}-${Math.random().toString(36).slice(2, 8)}`, song, time },
+            ],
+          };
+        }),
 
       removeScrobble: (id) =>
         set((state) => ({

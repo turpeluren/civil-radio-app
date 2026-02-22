@@ -71,6 +71,7 @@ export async function sendNowPlaying(songId: string): Promise<void> {
  * persisted pending queue and processing is triggered immediately.
  */
 export function addCompletedScrobble(song: Child): void {
+  if (!song?.id || !song.title) return;
   pendingScrobbleStore.getState().addScrobble(song, Date.now());
   processScrobbles();
 }
@@ -99,9 +100,18 @@ async function processScrobbles(): Promise<void> {
     // Snapshot the queue – iterate over a copy so mutations don't
     // interfere with the loop.
     const pending = [...pendingScrobbleStore.getState().pendingScrobbles];
+    const completedIds = new Set(
+      completedScrobbleStore.getState().completedScrobbles.map((s) => s.id),
+    );
     let anySucceeded = false;
 
     for (const item of pending) {
+      // Skip items already in the completed store (persistence race).
+      if (completedIds.has(item.id)) {
+        pendingScrobbleStore.getState().removeScrobble(item.id);
+        continue;
+      }
+
       let success = false;
 
       try {

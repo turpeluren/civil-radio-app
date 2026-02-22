@@ -54,6 +54,15 @@ export const completedScrobbleStore = create<CompletedScrobbleState>()(
 
       addCompleted: (scrobble) =>
         set((state) => {
+          if (
+            !scrobble.id ||
+            !scrobble.song?.id ||
+            !scrobble.song.title ||
+            state.completedScrobbles.some((s) => s.id === scrobble.id)
+          ) {
+            return state;
+          }
+
           const artist = scrobble.song.artist;
           const newArtists =
             artist && !(artist in state.stats.uniqueArtists)
@@ -85,7 +94,19 @@ export const completedScrobbleStore = create<CompletedScrobbleState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        // Backfill stats for users who have scrobbles from before this feature
+
+        const seen = new Set<string>();
+        const before = state.completedScrobbles.length;
+        state.completedScrobbles = state.completedScrobbles.filter((s) => {
+          if (!s.id || !s.song?.id || !s.song.title || seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        });
+        if (state.completedScrobbles.length !== before) {
+          state.rebuildStats();
+          return;
+        }
+
         if (
           state.stats.totalPlays === 0 &&
           state.completedScrobbles.length > 0
