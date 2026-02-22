@@ -79,7 +79,7 @@ function startOfDay(ts: number): number {
   return d.getTime();
 }
 
-function computeStreaks(scrobbles: ScrobbleRecord[]): {
+export function computeStreaks(scrobbles: Pick<ScrobbleRecord, 'time'>[]): {
   longest: number;
   current: number;
 } {

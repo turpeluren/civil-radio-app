@@ -14,6 +14,7 @@ import {
 import { AlbumCard } from '../components/AlbumCard';
 import { DownloadedIcon } from '../components/DownloadedIcon';
 import { PlaylistCard } from '../components/PlaylistCard';
+import { computeStreaks } from '../hooks/usePlaybackAnalytics';
 import { useTheme } from '../hooks/useTheme';
 import type { AlbumID3, Playlist } from '../services/subsonicService';
 import { albumLibraryStore } from '../store/albumLibraryStore';
@@ -228,12 +229,14 @@ export function HomeScreen() {
   const uniqueArtistCount = completedScrobbleStore(
     (s) => Object.keys(s.stats.uniqueArtists).length
   );
+  const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
   const listeningStats = useMemo(() => {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const time = h > 0 ? `${h}h ${m}m` : `${m}m`;
-    return { total: totalPlays, time, artists: uniqueArtistCount };
-  }, [totalPlays, totalSeconds, uniqueArtistCount]);
+    const { current: streak } = computeStreaks(completedScrobbles);
+    return { total: totalPlays, time, artists: uniqueArtistCount, streak };
+  }, [totalPlays, totalSeconds, uniqueArtistCount, completedScrobbles]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -318,31 +321,90 @@ export function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            onPress={() => router.push('/playback-history')}
-            style={({ pressed }) => [
-              styles.listeningCard,
-              { backgroundColor: colors.card },
-              pressed && styles.listeningCardPressed,
-            ]}
-          >
-            <View style={styles.listeningLeft}>
-              <View style={[styles.listeningIconCircle, { backgroundColor: colors.primary + '18' }]}>
-                <Ionicons name="analytics" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.listeningTextWrap}>
-                <Text style={[styles.listeningTitle, { color: colors.textPrimary }]}>
-                  My Listening
-                </Text>
-                <Text style={[styles.listeningSubtitle, { color: colors.textSecondary }]}>
-                  {listeningStats.total > 0
-                    ? `${listeningStats.total.toLocaleString()} plays · ${listeningStats.time} · ${listeningStats.artists} artists`
-                    : 'Listen to some music to see your stats here'}
-                </Text>
-              </View>
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                My Listening
+              </Text>
+              <Pressable
+                onPress={() => router.push('/playback-history')}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  pressed && styles.iconButtonPressed,
+                ]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </Pressable>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </Pressable>
+            <Pressable
+              onPress={() => router.push('/playback-history')}
+              style={({ pressed }) => [
+                styles.listeningCard,
+                { backgroundColor: colors.card },
+                pressed && styles.listeningCardPressed,
+              ]}
+            >
+              {listeningStats.total > 0 ? (
+                <View style={styles.statsRow}>
+                  <View style={styles.statBlock}>
+                    <View style={[styles.statIcon, { backgroundColor: colors.primary + '18' }]}>
+                      <Ionicons name="musical-notes" size={20} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                      {listeningStats.total.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                      plays
+                    </Text>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.statBlock}>
+                    <View style={[styles.statIcon, { backgroundColor: colors.primary + '18' }]}>
+                      <Ionicons name="time" size={20} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                      {listeningStats.time}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                      listening
+                    </Text>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.statBlock}>
+                    <View style={[styles.statIcon, { backgroundColor: colors.primary + '18' }]}>
+                      <Ionicons name="people" size={20} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                      {listeningStats.artists.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                      artists
+                    </Text>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.statBlock}>
+                    <View style={[styles.statIcon, { backgroundColor: colors.primary + '18' }]}>
+                      <Ionicons name="flame" size={20} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+                      {listeningStats.streak}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                      streak
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.statsEmpty}>
+                  <Ionicons name="analytics-outline" size={24} color={colors.textSecondary} />
+                  <Text style={[styles.statsEmptyText, { color: colors.textSecondary }]}>
+                    Listen to some music to see your stats here
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
           {downloadedOnly && (
             <>
               <DownloadedAlbumSection albums={downloadedAlbums} colors={colors} />
@@ -425,39 +487,51 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   listeningCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 2,
   },
   listeningCardPressed: {
     opacity: 0.7,
   },
-  listeningLeft: {
+  statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    flex: 1,
   },
-  listeningTextWrap: {
+  statBlock: {
     flex: 1,
+    alignItems: 'center',
+    gap: 6,
   },
-  listeningIconCircle: {
+  statIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  listeningTitle: {
-    fontSize: 16,
+  statValue: {
+    fontSize: 20,
     fontWeight: '700',
   },
-  listeningSubtitle: {
-    fontSize: 12,
+  statLabel: {
+    fontSize: 13,
     fontWeight: '500',
-    marginTop: 2,
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 48,
+    opacity: 0.6,
+  },
+  statsEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  statsEmptyText: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
   },
 });
