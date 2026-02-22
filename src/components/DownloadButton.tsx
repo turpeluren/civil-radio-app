@@ -10,7 +10,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { CircularProgress } from './CircularProgress';
 import { DownloadedIcon } from './DownloadedIcon';
@@ -110,6 +110,8 @@ export const DownloadButton = memo(function DownloadButton({
         />
       ) : downloadStatus === 'complete' ? (
         <DownloadedIcon size={size} circleColor={colors.primary} arrowColor="#fff" />
+      ) : downloadStatus === 'queued' ? (
+        <ActivityIndicator size={size} color={colors.primary} />
       ) : (
         <Ionicons
           name="arrow-down-circle-outline"
