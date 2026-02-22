@@ -205,11 +205,27 @@ export const SwipeableRow = memo(function SwipeableRow({
 
   /* ---- Tap / long-press handlers ---- */
 
+  const pressOpacity = useSharedValue(1);
+
+  const handlePressIn = useCallback(() => {
+    if (isOpenRef.current) return;
+    pressOpacity.value = withTiming(0.7, { duration: 80 });
+  }, [pressOpacity]);
+
+  const handlePressOut = useCallback(() => {
+    pressOpacity.value = withTiming(1, { duration: 150 });
+  }, [pressOpacity]);
+
+  const pressedStyle = useAnimatedStyle(() => ({
+    opacity: pressOpacity.value,
+  }));
+
   const handlePress = useCallback(() => {
     if (isOpenRef.current) {
       swipeableRef.current?.close();
       return;
     }
+    Haptics.selectionAsync();
     onPress?.();
   }, [onPress]);
 
@@ -290,9 +306,13 @@ export const SwipeableRow = memo(function SwipeableRow({
       <Pressable
         onPress={handlePress}
         onLongPress={onLongPress ? handleLongPress : undefined}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         delayLongPress={400}
       >
-        {children}
+        <Animated.View style={pressedStyle}>
+          {children}
+        </Animated.View>
       </Pressable>
     </ReanimatedSwipeable>
   );

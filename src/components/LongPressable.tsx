@@ -51,6 +51,10 @@ export const LongPressable = memo(function LongPressable({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   }, []);
 
+  const fireSelectionHaptic = useCallback(() => {
+    Haptics.selectionAsync();
+  }, []);
+
   const handleLongPress = useCallback(() => {
     onLongPress?.();
   }, [onLongPress]);
@@ -65,9 +69,7 @@ export const LongPressable = memo(function LongPressable({
       Gesture.LongPress()
         .minDuration(400)
         .onBegin(() => {
-          if (onLongPress) {
-            scale.value = withSpring(0.96, PRESS_SPRING);
-          }
+          scale.value = withSpring(0.96, PRESS_SPRING);
         })
         .onStart(() => {
           scale.value = withSpring(1, PRESS_SPRING);
@@ -86,9 +88,12 @@ export const LongPressable = memo(function LongPressable({
   const tapGesture = useMemo(
     () =>
       Gesture.Tap().onEnd(() => {
-        if (onPress) runOnJS(handlePress)();
+        if (onPress) {
+          runOnJS(fireSelectionHaptic)();
+          runOnJS(handlePress)();
+        }
       }),
-    [onPress, handlePress],
+    [onPress, handlePress, fireSelectionHaptic],
   );
 
   /* ---- Compose: tap has priority over long press ---- */
