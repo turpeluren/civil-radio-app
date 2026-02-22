@@ -12,6 +12,37 @@ npm install
 npx expo start
 ```
 
+## Releasing
+
+Releases are managed by a script that increments the version, updates the changelog, commits, tags, pushes, and creates a GitHub release.
+
+### Prerequisites
+
+[GitHub CLI](https://cli.github.com) must be installed and authenticated:
+
+```bash
+brew install gh
+gh auth login
+```
+
+### Creating a Release
+
+```bash
+npm run release -- patch   # 8.0.0 → 8.0.1
+npm run release -- minor   # 8.0.0 → 8.1.0
+npm run release -- major   # 8.0.0 → 9.0.0
+```
+
+The script will:
+
+1. Increment the version in `app.json` and `package.json`
+2. Collect all commits since the last release tag
+3. Prepend a new entry to `CHANGELOG.md`
+4. Commit the changes, create a git tag, and push to origin
+5. Create a GitHub release with the changelog as release notes
+
+The working tree must be clean (no uncommitted changes) before running.
+
 ## Data Migration System
 
 Substreamer includes a versioned data migration system that runs automatically during the animated splash screen on app launch. Migrations handle changes to stored data or cached files between app versions.
