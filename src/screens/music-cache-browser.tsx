@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { CachedImage } from '../components/CachedImage';
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import {
   deleteCachedItem,
@@ -253,20 +254,15 @@ export function MusicCacheBrowserScreen() {
     [],
   );
 
-  const emptyMessage = filter.trim().length > 0
-    ? 'No matching downloads'
-    : 'No downloaded music';
+  const isFiltered = filter.trim().length > 0;
+  const emptyMessage = isFiltered ? 'No matching downloads' : 'No downloaded music';
+  const emptySubtitle = isFiltered ? undefined : 'Download albums or playlists for offline listening';
 
   const listEmpty = useMemo(
     () => (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="musical-notes-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {emptyMessage}
-        </Text>
-      </View>
+      <EmptyState icon="musical-notes-outline" title={emptyMessage} subtitle={emptySubtitle} />
     ),
-    [colors.textSecondary, emptyMessage],
+    [emptyMessage, emptySubtitle],
   );
 
   const listHeader = useMemo(
@@ -324,17 +320,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 6,
   },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   emptyListContent: {
     flex: 1,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
   },
   rowContainer: {
     borderBottomWidth: StyleSheet.hairlineWidth,

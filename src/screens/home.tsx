@@ -13,6 +13,7 @@ import {
 
 import { AlbumCard } from '../components/AlbumCard';
 import { DownloadedIcon } from '../components/DownloadedIcon';
+import { EmptyState } from '../components/EmptyState';
 import { PlaylistCard } from '../components/PlaylistCard';
 import { computeStreaks } from '../hooks/usePlaybackAnalytics';
 import { useTheme } from '../hooks/useTheme';
@@ -304,17 +305,16 @@ export function HomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {offlineEmpty ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="cloud-offline-outline" size={56} color={colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-            No downloaded music
-          </Text>
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="No downloaded music"
+        >
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
             Tap the{' '}
             <DownloadedIcon size={15} circleColor={colors.primary} arrowColor="#fff" />
             {' '}button on an album, playlist, or your favorite songs list to download it for offline listening
           </Text>
-        </View>
+        </EmptyState>
       ) : (
         <ScrollView
           style={styles.scroll}
@@ -463,18 +463,6 @@ const styles = StyleSheet.create({
   },
   iconButtonPressed: {
     opacity: 0.6,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,

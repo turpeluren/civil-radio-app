@@ -11,6 +11,7 @@ import {
 import { useTheme } from '../hooks/useTheme';
 import type { Playlist } from '../services/subsonicService';
 import { getFirstLetter } from '../utils/stringHelpers';
+import { EmptyState } from './EmptyState';
 import { PlaylistCard } from './PlaylistCard';
 import { PlaylistRow } from './PlaylistRow';
 import { closeOpenRow } from './SwipeableRow';
@@ -41,6 +42,12 @@ export interface PlaylistListViewProps {
   refreshing?: boolean;
   /** Show the A-Z alphabet scroller on the right */
   showAlphabetScroller?: boolean;
+  /** Custom empty-state message */
+  emptyMessage?: string;
+  /** Custom empty-state subtitle */
+  emptySubtitle?: string;
+  /** Ionicons icon name for the empty state */
+  emptyIcon?: string;
 }
 
 export function PlaylistListView({
@@ -51,6 +58,9 @@ export function PlaylistListView({
   onRefresh,
   refreshing = false,
   showAlphabetScroller = false,
+  emptyMessage = 'No playlists',
+  emptySubtitle = 'Playlists from your server will appear here. Pull to refresh to check for updates.',
+  emptyIcon = 'list-outline',
 }: PlaylistListViewProps) {
   const { colors } = useTheme();
   const listRef = useRef<FlashListRef<Playlist>>(null);
@@ -143,14 +153,17 @@ export function PlaylistListView({
         contentContainerStyle={[
           styles.listContent,
           scrollerVisible && styles.listContentWithScroller,
+          playlists.length === 0 && styles.emptyListContent,
         ]}
         drawDistance={300}
         onRefresh={onRefresh}
         refreshing={refreshing}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No playlists
-          </Text>
+          <EmptyState
+            icon={emptyIcon as any}
+            title={emptyMessage}
+            subtitle={emptySubtitle}
+          />
         }
       />
       {scrollerVisible && (
@@ -183,10 +196,12 @@ const styles = StyleSheet.create({
   listContentWithScroller: {
     paddingRight: LIST_PADDING + 20,
   },
-  errorText: {
-    fontSize: 16,
+  emptyListContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  emptyText: {
+  errorText: {
     fontSize: 16,
   },
 });

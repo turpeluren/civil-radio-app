@@ -17,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { CachedImage } from '../components/CachedImage';
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import { cancelDownload, clearDownloadQueue, retryDownload } from '../services/musicCacheService';
 import {
@@ -272,14 +273,9 @@ export function DownloadQueueScreen() {
 
   const listEmpty = useMemo(
     () => (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="cloud-download-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          No downloads in queue
-        </Text>
-      </View>
+      <EmptyState icon="cloud-download-outline" title="No downloads in queue" subtitle="Downloads you start will be tracked here" />
     ),
-    [colors.textSecondary],
+    [],
   );
 
   return (
@@ -303,17 +299,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   emptyListContent: {
     flex: 1,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
   },
   row: {
     flexDirection: 'row',

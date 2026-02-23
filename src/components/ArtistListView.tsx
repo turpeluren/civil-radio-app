@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useCallback, useMemo, useRef } from 'react';
 import {
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useTheme } from '../hooks/useTheme';
+import { EmptyState } from './EmptyState';
 import type { ArtistID3 } from '../services/subsonicService';
 import { getFirstLetter } from '../utils/stringHelpers';
 import { ArtistCard } from './ArtistCard';
@@ -42,6 +42,8 @@ export interface ArtistListViewProps {
   refreshing?: boolean;
   /** Custom empty-state message */
   emptyMessage?: string;
+  /** Custom empty-state subtitle */
+  emptySubtitle?: string;
   /** Optional Ionicons icon name for empty state */
   emptyIcon?: string;
   /** Show the A-Z alphabet scroller on the right */
@@ -55,7 +57,8 @@ export function ArtistListView({
   error = null,
   onRefresh,
   refreshing = false,
-  emptyMessage = 'No artists',
+  emptyMessage = 'No artists found',
+  emptySubtitle = 'Try adjusting your filters, or pull to refresh',
   emptyIcon,
   showAlphabetScroller = false,
 }: ArtistListViewProps) {
@@ -97,21 +100,13 @@ export function ArtistListView({
 
   const EmptyComponent = useMemo(
     () => (
-      <View style={styles.emptyContainer}>
-        {emptyIcon && (
-          <Ionicons
-            name={emptyIcon as any}
-            size={48}
-            color={colors.textSecondary}
-            style={styles.emptyIcon}
-          />
-        )}
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {emptyMessage}
-        </Text>
-      </View>
+      <EmptyState
+        icon={(emptyIcon as any) ?? 'people-outline'}
+        title={emptyMessage}
+        subtitle={emptySubtitle}
+      />
     ),
-    [emptyIcon, emptyMessage, colors.textSecondary]
+    [emptyIcon, emptyMessage, emptySubtitle]
   );
 
   /* ---- Alphabet scroller support ---- */
@@ -212,17 +207,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    fontSize: 16,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyIcon: {
-    marginBottom: 12,
-  },
-  emptyText: {
     fontSize: 16,
   },
 });

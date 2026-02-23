@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import {
   deleteCachedImage,
@@ -223,17 +224,15 @@ export function ImageCacheBrowserScreen() {
     [],
   );
 
-  const emptyMessage = filter.trim().length > 0 ? 'No matching images' : 'No cached images';
+  const isFiltered = filter.trim().length > 0;
+  const emptyMessage = isFiltered ? 'No matching images' : 'No cached images';
+  const emptySubtitle = isFiltered ? undefined : 'Images are cached automatically as you browse';
+
   const listEmpty = useMemo(
     () => (
-      <View style={styles.center}>
-        <Ionicons name="images-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {emptyMessage}
-        </Text>
-      </View>
+      <EmptyState icon="images-outline" title={emptyMessage} subtitle={emptySubtitle} />
     ),
-    [colors.textSecondary, emptyMessage],
+    [emptyMessage, emptySubtitle],
   );
 
   const listHeader = useMemo(
@@ -305,10 +304,6 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
   },
   row: {
     flexDirection: 'row',

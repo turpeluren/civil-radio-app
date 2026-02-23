@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AlbumListView } from '../components/AlbumListView';
+import { EmptyState } from '../components/EmptyState';
 import { ArtistListView } from '../components/ArtistListView';
 import { SongListView } from '../components/SongListView';
 import { useTheme } from '../hooks/useTheme';
@@ -121,6 +121,11 @@ export function FavoritesScreen() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ---- Filter state ---- */
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
+  const cachedItems = musicCacheStore((s) => s.cachedItems);
+
   /* ---- Configure filter bar ---- */
   const handleDownloadStarred = useCallback(() => {
     enqueueStarredSongsDownload();
@@ -177,11 +182,6 @@ export function FavoritesScreen() {
     handleDeleteStarred,
   ]);
 
-  /* ---- Filter state ---- */
-  const offlineMode = offlineModeStore((s) => s.offlineMode);
-  const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
-  const cachedItems = musicCacheStore((s) => s.cachedItems);
-
   const filteredSongs = useMemo(() => {
     if (!downloadedOnly) return songs;
     return songs.filter((s) => getLocalTrackUri(s.id) !== null);
@@ -227,6 +227,7 @@ export function FavoritesScreen() {
             onRefresh={handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite songs yet"
+            emptySubtitle="Star songs you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
           />
         )}
@@ -239,20 +240,17 @@ export function FavoritesScreen() {
             onRefresh={handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite albums yet"
+            emptySubtitle="Star albums you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
           />
         )}
         {activeSegment === 'artists' && (
           offlineMode ? (
-            <View style={styles.offlinePlaceholder}>
-              <Ionicons name="cloud-offline-outline" size={56} color={colors.textSecondary} />
-              <Text style={[styles.offlineTitle, { color: colors.textPrimary }]}>
-                Not available offline
-              </Text>
-              <Text style={[styles.offlineSubtitle, { color: colors.textSecondary }]}>
-                Artists are not available in offline mode
-              </Text>
-            </View>
+            <EmptyState
+              icon="cloud-offline-outline"
+              title="Not available offline"
+              subtitle="Artists are not available in offline mode"
+            />
           ) : (
             <ArtistListView
               artists={filteredArtists}
@@ -262,6 +260,7 @@ export function FavoritesScreen() {
               onRefresh={handleRefresh}
               refreshing={refreshing}
               emptyMessage="No favorite artists yet"
+              emptySubtitle="Star artists you love and they will appear here, or check your filters"
               emptyIcon="heart-outline"
             />
           )
@@ -309,21 +308,5 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  offlinePlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  offlineTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  offlineSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
   },
 });

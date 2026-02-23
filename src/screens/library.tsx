@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import { filterBarStore } from '../store/filterBarStore';
 import { offlineModeStore } from '../store/offlineModeStore';
@@ -142,15 +142,11 @@ export function LibraryScreen() {
         )}
         {activeSegment === 'artists' && (
           offlineMode ? (
-            <View style={styles.offlinePlaceholder}>
-              <Ionicons name="cloud-offline-outline" size={56} color={colors.textSecondary} />
-              <Text style={[styles.offlineTitle, { color: colors.textPrimary }]}>
-                Not available offline
-              </Text>
-              <Text style={[styles.offlineSubtitle, { color: colors.textSecondary }]}>
-                Artists are not available in offline mode
-              </Text>
-            </View>
+            <EmptyState
+              icon="cloud-offline-outline"
+              title="Not available offline"
+              subtitle="Artists are not available in offline mode"
+            />
           ) : (
             <ArtistListScreen
               layout={artistLayout}
@@ -208,21 +204,5 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  offlinePlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  offlineTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  offlineSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
   },
 });

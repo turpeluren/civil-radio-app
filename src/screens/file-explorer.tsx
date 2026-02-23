@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 
 interface RootEntry {
@@ -221,11 +222,7 @@ export function FileExplorerScreen() {
       </Pressable>
 
       {entries && entries.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Empty directory
-          </Text>
-        </View>
+        <EmptyState icon="folder-open-outline" title="Empty directory" subtitle="This directory contains no files or folders" />
       ) : (
         <FlatList
           data={entries}
@@ -292,14 +289,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 32,
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 15,
   },
   pressed: {
     opacity: 0.7,

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
 import {
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useTheme } from '../hooks/useTheme';
+import { EmptyState } from './EmptyState';
 import { playTrack } from '../services/playerService';
 import type { Child } from '../services/subsonicService';
 import { SongCard } from './SongCard';
@@ -41,6 +41,8 @@ export interface SongListViewProps {
   refreshing?: boolean;
   /** Custom empty-state message */
   emptyMessage?: string;
+  /** Custom empty-state subtitle */
+  emptySubtitle?: string;
   /** Optional Ionicons icon name for empty state */
   emptyIcon?: string;
 }
@@ -52,7 +54,8 @@ export function SongListView({
   error = null,
   onRefresh,
   refreshing = false,
-  emptyMessage = 'No songs',
+  emptyMessage = 'No songs found',
+  emptySubtitle = 'Try adjusting your filters, or pull to refresh',
   emptyIcon,
 }: SongListViewProps) {
   const { colors } = useTheme();
@@ -94,21 +97,13 @@ export function SongListView({
 
   const EmptyComponent = useMemo(
     () => (
-      <View style={styles.emptyContainer}>
-        {emptyIcon && (
-          <Ionicons
-            name={emptyIcon as any}
-            size={48}
-            color={colors.textSecondary}
-            style={styles.emptyIcon}
-          />
-        )}
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {emptyMessage}
-        </Text>
-      </View>
+      <EmptyState
+        icon={(emptyIcon as any) ?? 'musical-notes-outline'}
+        title={emptyMessage}
+        subtitle={emptySubtitle}
+      />
     ),
-    [emptyIcon, emptyMessage, colors.textSecondary]
+    [emptyIcon, emptyMessage, emptySubtitle]
   );
 
   if (loading && songs.length === 0) {
@@ -170,17 +165,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    fontSize: 16,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyIcon: {
-    marginBottom: 12,
-  },
-  emptyText: {
     fontSize: 16,
   },
 });

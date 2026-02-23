@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -9,6 +8,7 @@ import {
 } from 'react-native';
 
 import { AlbumRow } from '../components/AlbumRow';
+import { EmptyState } from '../components/EmptyState';
 import { ArtistRow } from '../components/ArtistRow';
 import { SongRow } from '../components/SongRow';
 import { useTheme } from '../hooks/useTheme';
@@ -175,24 +175,11 @@ export function SearchScreen() {
   if (!query.trim() || (!hasResults && !loading)) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="search-outline"
-            size={56}
-            color={colors.textSecondary}
-            style={styles.emptyIcon}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-            {!query.trim()
-              ? 'Search for music'
-              : 'No results found'}
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            {!query.trim()
-              ? 'Find songs, albums, and artists'
-              : `No results for "${query}"`}
-          </Text>
-        </View>
+        <EmptyState
+          icon="search-outline"
+          title={!query.trim() ? 'Search for music' : 'No results found'}
+          subtitle={!query.trim() ? 'Find songs, albums, and artists' : `No results for "${query}"`}
+        />
       </View>
     );
   }
@@ -235,23 +222,5 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
     marginLeft: 4,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emptyIcon: {
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
   },
 });

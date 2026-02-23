@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { EmptyState as EmptyStateComponent } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import { completedScrobbleStore, type CompletedScrobble } from '../store/completedScrobbleStore';
 import { pendingScrobbleStore, type PendingScrobble } from '../store/pendingScrobbleStore';
@@ -116,23 +116,16 @@ const ScrobbleRow = memo(function ScrobbleRow({
 /*  Empty State                                                        */
 /* ------------------------------------------------------------------ */
 
-function EmptyState({
-  segment,
-  colors,
-}: {
-  segment: Segment;
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
+function ScrobbleEmptyState({ segment }: { segment: Segment }) {
   const icon = segment === 'completed' ? 'checkmark-done-outline' : 'time-outline';
   const message =
     segment === 'completed' ? 'No completed scrobbles yet' : 'No pending scrobbles';
+  const subtitle =
+    segment === 'completed'
+      ? 'Scrobbles will appear here after tracks finish playing'
+      : 'Pending scrobbles are sent to your server automatically';
 
-  return (
-    <View style={styles.emptyContainer}>
-      <Ionicons name={icon} size={56} color={colors.textSecondary} />
-      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{message}</Text>
-    </View>
-  );
+  return <EmptyStateComponent icon={icon} title={message} subtitle={subtitle} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,13 +153,13 @@ export function ScrobbleBrowserScreen() {
   );
 
   const completedEmpty = useCallback(
-    () => <EmptyState segment="completed" colors={colors} />,
-    [colors],
+    () => <ScrobbleEmptyState segment="completed" />,
+    [],
   );
 
   const pendingEmpty = useCallback(
-    () => <EmptyState segment="pending" colors={colors} />,
-    [colors],
+    () => <ScrobbleEmptyState segment="pending" />,
+    [],
   );
 
   return (
@@ -178,8 +171,8 @@ export function ScrobbleBrowserScreen() {
             data={completedReversed}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
-            estimatedItemSize={ROW_HEIGHT}
             ListEmptyComponent={completedEmpty}
+            contentContainerStyle={completedReversed.length === 0 ? styles.emptyListContent : undefined}
           />
         )}
         {activeSegment === 'pending' && (
@@ -187,8 +180,8 @@ export function ScrobbleBrowserScreen() {
             data={pendingScrobbles}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
-            estimatedItemSize={ROW_HEIGHT}
             ListEmptyComponent={pendingEmpty}
+            contentContainerStyle={pendingScrobbles.length === 0 ? styles.emptyListContent : undefined}
           />
         )}
       </View>
@@ -235,6 +228,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  emptyListContent: {
+    flexGrow: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -258,15 +254,5 @@ const styles = StyleSheet.create({
   timeLabel: {
     fontSize: 12,
     flexShrink: 0,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 120,
-  },
-  emptyText: {
-    fontSize: 15,
-    marginTop: 12,
   },
 });

@@ -409,11 +409,16 @@ export function PlaylistDetailScreen() {
 
   const listEmpty = useMemo(
     () => (
-      <Text style={[styles.emptyTracks, { color: colors.textSecondary }]}>
-        No tracks
-      </Text>
+      <View style={styles.emptyTracks}>
+        <Text style={[styles.emptyTracksTitle, { color: colors.textPrimary }]}>
+          No tracks
+        </Text>
+        <Text style={[styles.emptyTracksSubtitle, { color: colors.textSecondary }]}>
+          When you add tracks to this playlist they will appear here. If you already have tracks, check your server is reachable and pull to refresh.
+        </Text>
+      </View>
     ),
-    [colors.textSecondary],
+    [colors.textPrimary, colors.textSecondary],
   );
 
   const gradientStart = coverBackgroundColor ?? colors.background;
@@ -609,10 +614,19 @@ const styles = StyleSheet.create({
     height: 8,
   },
   emptyTracks: {
-    fontSize: 16,
     paddingHorizontal: 16,
-    paddingTop: 16,
-    fontStyle: 'italic',
+    paddingTop: 24,
+    paddingBottom: 16,
+    alignItems: 'center',
+  },
+  emptyTracksTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptyTracksSubtitle: {
+    fontSize: 15,
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 16,

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { CachedImage } from '../components/CachedImage';
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import { albumDetailStore } from '../store/albumDetailStore';
 import { artistDetailStore } from '../store/artistDetailStore';
@@ -299,18 +300,15 @@ export function MetadataCacheBrowserScreen() {
     [],
   );
 
-  // Memoize the empty component to avoid re-creation on every render
-  const emptyMessage = filter.trim().length > 0 ? 'No matching items' : 'No cached metadata';
+  const isFiltered = filter.trim().length > 0;
+  const emptyMessage = isFiltered ? 'No matching items' : 'No cached metadata';
+  const emptySubtitle = isFiltered ? undefined : 'Metadata is cached automatically as you browse';
+
   const listEmpty = useMemo(
     () => (
-      <View style={styles.center}>
-        <Ionicons name="library-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {emptyMessage}
-        </Text>
-      </View>
+      <EmptyState icon="library-outline" title={emptyMessage} subtitle={emptySubtitle} />
     ),
-    [colors.textSecondary, emptyMessage],
+    [emptyMessage, emptySubtitle],
   );
 
   const listHeader = useMemo(
@@ -367,17 +365,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 6,
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   emptyContainer: {
     flex: 1,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
   },
   row: {
     flexDirection: 'row',
