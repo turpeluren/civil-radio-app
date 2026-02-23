@@ -155,8 +155,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 4,
+    height: 44,
   },
   chips: {
     flex: 1,
