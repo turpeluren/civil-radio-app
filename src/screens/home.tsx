@@ -85,9 +85,20 @@ function AlbumSection({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-          {config.title}
-        </Text>
+        <Pressable
+          onPress={onSeeMore}
+          style={({ pressed }) => [
+            { flex: 1 },
+            pressed && styles.iconButtonPressed,
+          ]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`See more ${config.title} albums`}
+        >
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            {config.title}
+          </Text>
+        </Pressable>
         <View style={styles.sectionHeaderActions}>
           <Pressable
             onPress={onRefresh}
@@ -323,9 +334,20 @@ export function HomeScreen() {
         >
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                My Listening
-              </Text>
+              <Pressable
+                onPress={() => router.push('/playback-history')}
+                style={({ pressed }) => [
+                  { flex: 1 },
+                  pressed && styles.iconButtonPressed,
+                ]}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View listening history"
+              >
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                  My Listening
+                </Text>
+              </Pressable>
               <Pressable
                 onPress={() => router.push('/playback-history')}
                 style={({ pressed }) => [
@@ -397,7 +419,7 @@ export function HomeScreen() {
                 </View>
               ) : (
                 <View style={styles.statsEmpty}>
-                  <Ionicons name="analytics-outline" size={24} color={colors.textSecondary} />
+                  <Ionicons name="analytics-outline" size={24} color={colors.primary} />
                   <Text style={[styles.statsEmptyText, { color: colors.textSecondary }]}>
                     Listen to some music to see your stats here
                   </Text>

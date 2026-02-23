@@ -1,0 +1,24 @@
+---
+description: Planning format – plans must end with a bulleted todo list
+alwaysApply: true
+---
+
+# Planning
+
+When creating or presenting a plan (e.g. via CreatePlan or in a planning-mode response), **always** end the plan with a **bulleted list of todos**.
+
+- Each todo is a single actionable step.
+- Use clear, imperative phrasing (e.g. "Update icon color in home.tsx", "Add primary colour to empty-state icon").
+- Keep the list proportional to the work (a small change = few bullets; a large change = more).
+
+Example:
+
+```markdown
+## Change
+Update the icon's `color` prop to `colors.primary`.
+
+## Todos
+- Update the analytics-outline icon color to `colors.primary` in `src/screens/home.tsx`
+```
+
+Without a bulleted todo list at the end, the plan is incomplete.
