@@ -126,6 +126,7 @@ export const DownloadButton = memo(function DownloadButton({
 const styles = StyleSheet.create({
   button: {
     padding: 4,
+    opacity: 1,
   },
   pressed: {
     opacity: 0.6,

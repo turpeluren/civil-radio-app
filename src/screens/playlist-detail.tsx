@@ -210,7 +210,7 @@ export function PlaylistDetailScreen() {
           </Pressable>
         ),
         headerRight: () => (
-          <Pressable onPress={handleSave} disabled={saving} hitSlop={8}>
+          <Pressable onPress={handleSave} disabled={saving} hitSlop={8} style={{ opacity: 1 }}>
             {saving ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
@@ -563,6 +563,7 @@ const styles = StyleSheet.create({
     padding: 4,
     marginLeft: 4,
     marginRight: 4,
+    opacity: 1,
   },
   headerButtonText: {
     fontSize: 17,

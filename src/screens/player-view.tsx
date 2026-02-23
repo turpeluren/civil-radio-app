@@ -96,7 +96,7 @@ export function PlayerView() {
         <Pressable
           onPress={onClose}
           hitSlop={12}
-          style={({ pressed }) => pressed && styles.pressed}
+          style={({ pressed }) => [{ opacity: 1 }, pressed && styles.pressed]}
         >
           <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
         </Pressable>

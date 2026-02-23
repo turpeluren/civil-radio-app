@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    opacity: 1,
   },
   pressed: {
     opacity: 0.6,
