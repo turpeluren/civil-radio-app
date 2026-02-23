@@ -19,6 +19,7 @@ const SETTINGS_LINKS: {
   { route: '/settings-shares', label: 'Shares', subtitle: 'Manage shared links, alternate URL', icon: 'share-social-outline' },
   { route: '/settings-account', label: 'Account', subtitle: 'Username, password, log out', icon: 'person-outline' },
   { route: '/file-explorer', label: 'File Explorer', subtitle: 'Browse app directories on disk', icon: 'document-text-outline' },
+  { route: '/migration-log', label: 'Migration Log', subtitle: 'View results of data migration tasks', icon: 'list-outline' },
 ];
 
 export function SettingsScreen() {

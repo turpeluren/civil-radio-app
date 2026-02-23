@@ -240,6 +240,10 @@ export default function RootLayout() {
           name="file-explorer"
           options={{ title: 'File Explorer', headerBackTitle: 'Settings' }}
         />
+        <Stack.Screen
+          name="migration-log"
+          options={{ title: 'Migration Log', headerBackTitle: 'Back' }}
+        />
       </Stack>
 
       {/* Global more-options bottom sheet driven by moreOptionsStore */}

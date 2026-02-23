@@ -9,7 +9,7 @@
  * See the bottom of this file for a template showing how to add new tasks.
  */
 
-import { Directory, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 /* ------------------------------------------------------------------ */
@@ -21,8 +21,8 @@ interface MigrationTask {
   id: number;
   /** Short name shown to the user during migration. */
   name: string;
-  /** The work to perform. Throw on unrecoverable failure. */
-  run: () => Promise<void>;
+  /** The work to perform. Use `log` to record findings. Throw on unrecoverable failure. */
+  run: (log: (message: string) => void) => Promise<void>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -33,7 +33,7 @@ const MIGRATION_TASKS: MigrationTask[] = [
   {
     id: 1,
     name: 'Legacy data migration',
-    run: async () => {
+    run: async (log) => {
       const legacyDirs = ['imageCache', 'musicCache', 'podcastCache'];
 
       // The previous Cordova app stored caches under cordova.file.dataDirectory
@@ -58,9 +58,57 @@ const MIGRATION_TASKS: MigrationTask[] = [
           if (dir.exists) {
             try {
               dir.delete();
+              log(`Removed: ${base.uri}${name}/`);
             } catch {
-              // Directory may have already been removed; ignore.
+              log(`Failed to remove: ${base.uri}${name}/`);
             }
+          } else {
+            log(`Not found: ${base.uri}${name}/`);
+          }
+        }
+      }
+    },
+  },
+
+  {
+    id: 2,
+    name: 'Remove legacy Ionic database',
+    run: async (log) => {
+      let dbDir: Directory | undefined;
+
+      if (Platform.OS === 'ios') {
+        dbDir = new Directory(
+          Paths.document.parentDirectory,
+          'Library',
+          'LocalDatabase',
+        );
+      } else if (Platform.OS === 'android') {
+        dbDir = new Directory(Paths.document.parentDirectory, 'databases');
+      }
+
+      if (!dbDir?.exists) {
+        log(`Database directory not found: ${dbDir?.uri ?? 'unknown'}`);
+        return;
+      }
+
+      log(`Checking directory: ${dbDir.uri}`);
+
+      const suffixes = ['', '-journal', '-wal', '-shm'];
+      const basenames = ['__substreamer3', '__substreamer3.db'];
+
+      for (const base of basenames) {
+        for (const suffix of suffixes) {
+          const fileName = base + suffix;
+          const file = new File(dbDir, fileName);
+          if (file.exists) {
+            try {
+              file.delete();
+              log(`Removed: ${fileName}`);
+            } catch {
+              log(`Failed to remove: ${fileName}`);
+            }
+          } else {
+            log(`Not found: ${fileName}`);
           }
         }
       }
@@ -79,7 +127,7 @@ const MIGRATION_TASKS: MigrationTask[] = [
   // Example:
   //
   // {
-  //   id: 2,
+  //   id: 3,
   //   name: 'Reset playback settings',
   //   run: async () => {
   //     // your migration logic here
@@ -111,12 +159,22 @@ export async function runMigrations(
   onProgress?: (task: MigrationTask) => void,
 ): Promise<number> {
   const pending = getPendingTasks(completedVersion);
+  const lines: string[] = [];
+
+  lines.push(`Migration run: ${new Date().toISOString()}`);
+  lines.push(`Platform: ${Platform.OS}`);
+  lines.push('');
 
   for (const task of pending) {
     onProgress?.(task);
-    await task.run();
+    lines.push(`--- Task ${task.id}: ${task.name} ---`);
+    await task.run((msg) => lines.push(msg));
     completedVersion = task.id;
+    lines.push('');
   }
+
+  const logFile = new File(Paths.document, 'migration-log.txt');
+  logFile.write(lines.join('\n'));
 
   return completedVersion;
 }
