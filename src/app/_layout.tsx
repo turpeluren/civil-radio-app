@@ -236,6 +236,10 @@ export default function RootLayout() {
           name="settings-audio-quality"
           options={{ title: 'Audio Quality', headerBackTitle: 'Settings' }}
         />
+        <Stack.Screen
+          name="file-explorer"
+          options={{ title: 'File Explorer', headerBackTitle: 'Settings' }}
+        />
       </Stack>
 
       {/* Global more-options bottom sheet driven by moreOptionsStore */}
