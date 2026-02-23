@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { EditShareSheet } from '../components/EditShareSheet';
+import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
 import { type Share } from '../services/subsonicService';
 import { minDelay } from '../utils/stringHelpers';
@@ -275,21 +276,11 @@ export function SettingsSharesScreen() {
               </View>
             </View>
           ) : shares.length === 0 ? (
-            <View style={[styles.card, dynamicStyles.card]}>
-              <View style={styles.emptyContainer}>
-                <Ionicons
-                  name="share-social-outline"
-                  size={40}
-                  color={colors.textSecondary}
-                />
-                <Text style={[styles.emptyText, dynamicStyles.placeholder]}>
-                  No shares yet
-                </Text>
-                <Text style={[styles.emptyHint, dynamicStyles.hint]}>
-                  Share an album, playlist, or queue to create one.
-                </Text>
-              </View>
-            </View>
+            <EmptyState
+              icon="share-social-outline"
+              title="No shares yet"
+              subtitle="Share an album, playlist, or queue to create one."
+            />
           ) : (
             <View style={[styles.card, dynamicStyles.card]}>
               {shares.map((share, index) => (
@@ -477,20 +468,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     paddingVertical: 40,
     alignItems: 'center',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  emptyHint: {
-    fontSize: 14,
-    textAlign: 'center',
   },
   shareRow: {
     flexDirection: 'row',
