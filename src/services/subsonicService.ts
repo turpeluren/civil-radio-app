@@ -364,6 +364,21 @@ export async function getTopSongs(artistName: string, count = 20): Promise<Child
 }
 
 /**
+ * Fetch similar songs for a given song ID.
+ * Returns an empty array if the server does not support this endpoint or returns no results.
+ */
+export async function getSimilarSongs(songId: string, count = 20): Promise<Child[]> {
+  const api = getApi();
+  if (!api) return [];
+  try {
+    const response = await api.getSimilarSongs({ id: songId, count });
+    return response.similarSongs?.song ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Fetch all playlists via the getPlaylists endpoint.
  */
 export async function getAllPlaylists(): Promise<Playlist[]> {

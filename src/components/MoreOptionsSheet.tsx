@@ -2,7 +2,7 @@
  * MoreOptionsSheet – unified bottom sheet for all entity types.
  *
  * Reads from `moreOptionsStore` and renders entity-specific options:
- *   - Song/Track: Favorite, Add to Playlist, Add to Queue, Go to Album, Go to Artist
+ *   - Song/Track: Favorite, Add to Playlist, Play more like this, Add to Queue, Go to Album, Go to Artist
  *   - Album: Favorite, Add to Queue, Go to Artist, Album Details
  *   - Artist: Favorite, Save Top Songs Playlist
  *   - Playlist: Add to Queue
@@ -35,6 +35,7 @@ import {
   cancelDownload,
   enqueueAlbumDownload,
   enqueuePlaylistDownload,
+  playMoreLikeThis,
   removeDownload,
   saveArtistTopSongsPlaylist,
   toggleStar,
@@ -132,6 +133,10 @@ function canDeletePlaylist(entity: MoreOptionsEntity): boolean {
   return entity.type === 'playlist';
 }
 
+function canPlayMoreLikeThis(entity: MoreOptionsEntity): boolean {
+  return entity.type === 'song';
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -198,6 +203,12 @@ export function MoreOptionsSheet() {
     if (!entity || entity.type !== 'artist') return;
     handleClose();
     saveArtistTopSongsPlaylist(entity.item);
+  }, [entity, handleClose]);
+
+  const handlePlayMoreLikeThis = useCallback(() => {
+    if (!entity || entity.type !== 'song') return;
+    handleClose();
+    playMoreLikeThis(entity.item as Child);
   }, [entity, handleClose]);
 
   const handleAddQueueToPlaylist = useCallback(() => {
@@ -366,6 +377,7 @@ export function MoreOptionsSheet() {
   const showAddToPlaylist = !offline && canAddToPlaylist(entity);
   const showAddQueueToPlaylist = !offline && source === 'player';
   const showAddToQueue = source !== 'player' && canAddToQueue(entity);
+  const showPlayMoreLikeThis = !offline && canPlayMoreLikeThis(entity);
   const showDetails = hasAlbumDetails(entity);
   const showShare = !offline && canShare(entity);
   const showDownload = canDownload(entity);
@@ -374,7 +386,7 @@ export function MoreOptionsSheet() {
 
   const hasAnyOption =
     starrable || showAddToPlaylist || showAddQueueToPlaylist ||
-    showAddToQueue || showDownload ||
+    showAddToQueue || showPlayMoreLikeThis || showDownload ||
     showAlbumLink || showArtistLink || showShare || showDetails || showDelete ||
     showSaveTopSongsPlaylist;
 
@@ -514,6 +526,27 @@ export function MoreOptionsSheet() {
                   />
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     Add to Playlist
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* Play more like this */}
+              {showPlayMoreLikeThis && (
+                <Pressable
+                  onPress={handlePlayMoreLikeThis}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="shuffle-outline"
+                    size={22}
+                    color={colors.textPrimary}
+                    style={styles.optionIcon}
+                  />
+                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
+                    Play more like this
                   </Text>
                 </Pressable>
               )}
@@ -789,6 +822,27 @@ export function MoreOptionsSheet() {
                   />
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     Add to Playlist
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* Play more like this */}
+              {showPlayMoreLikeThis && (
+                <Pressable
+                  onPress={handlePlayMoreLikeThis}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="shuffle-outline"
+                    size={22}
+                    color={colors.textPrimary}
+                    style={styles.optionIcon}
+                  />
+                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
+                    Play more like this
                   </Text>
                 </Pressable>
               )}

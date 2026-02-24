@@ -9,11 +9,12 @@ import { artistDetailStore } from '../store/artistDetailStore';
 import { favoritesStore } from '../store/favoritesStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
 import { processingOverlayStore } from '../store/processingOverlayStore';
-import { addToQueue, removeFromQueue } from './playerService';
+import { addToQueue, playTrack, removeFromQueue } from './playerService';
 import {
   createNewPlaylist,
   getAlbum,
   getPlaylist,
+  getSimilarSongs,
   starAlbum,
   starArtist,
   starSong,
@@ -127,6 +128,31 @@ export async function addPlaylistToQueue(playlist: Playlist): Promise<void> {
  */
 export async function removeItemFromQueue(index: number): Promise<void> {
   await removeFromQueue(index);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Play more like this                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Fetch similar songs for a given track and set them as the play queue.
+ * Uses processing overlay for progress, success, and error feedback.
+ */
+export async function playMoreLikeThis(song: Child): Promise<void> {
+  processingOverlayStore.getState().show('Loading…');
+
+  try {
+    const tracks = await getSimilarSongs(song.id, 20);
+    if (tracks.length === 0) {
+      processingOverlayStore.getState().showError('No similar songs found');
+      return;
+    }
+
+    await playTrack(tracks[0], tracks);
+    processingOverlayStore.getState().showSuccess('Playing similar songs');
+  } catch {
+    processingOverlayStore.getState().showError('Failed to load similar songs');
+  }
 }
 
 /* ------------------------------------------------------------------ */
