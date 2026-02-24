@@ -5,9 +5,13 @@
  * Keeps star/queue logic in one place so row and card components stay thin.
  */
 
+import { artistDetailStore } from '../store/artistDetailStore';
 import { favoritesStore } from '../store/favoritesStore';
+import { playlistLibraryStore } from '../store/playlistLibraryStore';
+import { processingOverlayStore } from '../store/processingOverlayStore';
 import { addToQueue, removeFromQueue } from './playerService';
 import {
+  createNewPlaylist,
   getAlbum,
   getPlaylist,
   starAlbum,
@@ -17,6 +21,7 @@ import {
   unstarArtist,
   unstarSong,
   type AlbumID3,
+  type ArtistID3,
   type Child,
   type Playlist,
 } from './subsonicService';
@@ -122,6 +127,44 @@ export async function addPlaylistToQueue(playlist: Playlist): Promise<void> {
  */
 export async function removeItemFromQueue(index: number): Promise<void> {
   await removeFromQueue(index);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Artist top songs playlist                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Create a new playlist from an artist's top songs.
+ * Uses cached data when available, otherwise fetches artist detail.
+ * Shows processing overlay for feedback; refreshes playlist library on success.
+ */
+export async function saveArtistTopSongsPlaylist(artist: ArtistID3): Promise<void> {
+  processingOverlayStore.getState().show('Creating…');
+
+  try {
+    let topSongs = artistDetailStore.getState().artists[artist.id]?.topSongs;
+    if (!topSongs?.length) {
+      const entry = await artistDetailStore.getState().fetchArtist(artist.id);
+      topSongs = entry?.topSongs ?? [];
+    }
+
+    if (topSongs.length === 0) {
+      processingOverlayStore.getState().showError('No top songs available');
+      return;
+    }
+
+    const songIds = topSongs.map((s) => s.id);
+    const success = await createNewPlaylist(`${artist.name} Top Songs`, songIds);
+    if (!success) {
+      processingOverlayStore.getState().showError('Failed to create playlist');
+      return;
+    }
+
+    await playlistLibraryStore.getState().fetchAllPlaylists();
+    processingOverlayStore.getState().showSuccess('Playlist Created');
+  } catch {
+    processingOverlayStore.getState().showError('Failed to create playlist');
+  }
 }
 
 /* ------------------------------------------------------------------ */

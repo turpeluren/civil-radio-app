@@ -4,7 +4,7 @@
  * Reads from `moreOptionsStore` and renders entity-specific options:
  *   - Song/Track: Favorite, Add to Playlist, Add to Queue, Go to Album, Go to Artist
  *   - Album: Favorite, Add to Queue, Go to Artist, Album Details
- *   - Artist: Favorite
+ *   - Artist: Favorite, Save Top Songs Playlist
  *   - Playlist: Add to Queue
  *
  * Rendered once at the root layout level.
@@ -36,6 +36,7 @@ import {
   enqueueAlbumDownload,
   enqueuePlaylistDownload,
   removeDownload,
+  saveArtistTopSongsPlaylist,
   toggleStar,
 } from '../services/moreOptionsService';
 import { deleteCachedItem } from '../services/musicCacheService';
@@ -191,6 +192,12 @@ export function MoreOptionsSheet() {
         addToPlaylistStore.getState().showAlbum(entity.item as AlbumID3);
       }
     }, 300);
+  }, [entity, handleClose]);
+
+  const handleSaveTopSongsPlaylist = useCallback(() => {
+    if (!entity || entity.type !== 'artist') return;
+    handleClose();
+    saveArtistTopSongsPlaylist(entity.item);
   }, [entity, handleClose]);
 
   const handleAddQueueToPlaylist = useCallback(() => {
@@ -363,11 +370,13 @@ export function MoreOptionsSheet() {
   const showShare = !offline && canShare(entity);
   const showDownload = canDownload(entity);
   const showDelete = !offline && canDeletePlaylist(entity);
+  const showSaveTopSongsPlaylist = !offline && entity?.type === 'artist';
 
   const hasAnyOption =
     starrable || showAddToPlaylist || showAddQueueToPlaylist ||
     showAddToQueue || showDownload ||
-    showAlbumLink || showArtistLink || showShare || showDetails || showDelete;
+    showAlbumLink || showArtistLink || showShare || showDetails || showDelete ||
+    showSaveTopSongsPlaylist;
 
   return (
     <>
@@ -463,6 +472,27 @@ export function MoreOptionsSheet() {
                   )}
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     {starred ? 'Remove from Favorites' : 'Add to Favorites'}
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* Save Top Songs Playlist (artist only) */}
+              {showSaveTopSongsPlaylist && (
+                <Pressable
+                  onPress={handleSaveTopSongsPlaylist}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="musical-notes-outline"
+                    size={22}
+                    color={colors.textPrimary}
+                    style={styles.optionIcon}
+                  />
+                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
+                    Save Top Songs Playlist
                   </Text>
                 </Pressable>
               )}
@@ -717,6 +747,27 @@ export function MoreOptionsSheet() {
                   )}
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     {starred ? 'Remove from Favorites' : 'Add to Favorites'}
+                  </Text>
+                </Pressable>
+              )}
+
+              {/* Save Top Songs Playlist (artist only) */}
+              {showSaveTopSongsPlaylist && (
+                <Pressable
+                  onPress={handleSaveTopSongsPlaylist}
+                  style={({ pressed }) => [
+                    styles.option,
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="musical-notes-outline"
+                    size={22}
+                    color={colors.textPrimary}
+                    style={styles.optionIcon}
+                  />
+                  <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
+                    Save Top Songs Playlist
                   </Text>
                 </Pressable>
               )}
