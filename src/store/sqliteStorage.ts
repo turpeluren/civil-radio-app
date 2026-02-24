@@ -3,6 +3,11 @@ import { type StateStorage } from 'zustand/middleware';
 
 const db = SQLite.openDatabaseSync('substreamer7.db');
 
+// Performance and reliability (expo-sqlite PRAGMA surface)
+db.execSync('PRAGMA journal_mode = WAL;');
+db.execSync('PRAGMA synchronous = NORMAL;');
+db.execSync('PRAGMA foreign_keys = ON;');
+
 db.execSync(
   'CREATE TABLE IF NOT EXISTS storage (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);'
 );
