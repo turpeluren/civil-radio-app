@@ -7,12 +7,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -76,7 +76,6 @@ export function PlayerProgressBar({
     transform: [{ scale: thumbScale.value }],
   }));
 
-  // Refs to hold the latest values for the PanResponder closure
   const dragFractionRef = useRef(dragFraction);
   dragFractionRef.current = dragFraction;
   const durationRef = useRef(duration);
@@ -90,37 +89,45 @@ export function PlayerProgressBar({
   const fractionFromPageX = (pageX: number) =>
     clamp((pageX - trackPageX.current) / (trackWidth.current || 1), 0, 1);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (_evt, gestureState) => {
-        const frac = fractionFromPageX(gestureState.x0);
-        setDragFraction(frac);
-        setIsDragging(true);
-        setPendingSeekFraction(null);
-        thumbScaleRef.current.value = withSpring(ACTIVE_THUMB_SIZE / THUMB_SIZE);
-      },
-      onPanResponderMove: (_evt, gestureState) => {
-        const frac = fractionFromPageX(gestureState.moveX);
-        setDragFraction(frac);
-      },
-      onPanResponderRelease: () => {
-        const currentDragFraction = dragFractionRef.current;
-        const currentDuration = durationRef.current;
-        const seekPosition = currentDragFraction * currentDuration;
-        setPendingSeekFraction(currentDragFraction);
+  const tapGesture = Gesture.Tap()
+    .onEnd((e) => {
+      const frac = fractionFromPageX(e.absoluteX);
+      const seekPos = frac * durationRef.current;
+      setPendingSeekFraction(frac);
+      onSeekRef.current(seekPos);
+    });
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-10, 10])
+    .onStart((e) => {
+      const frac = fractionFromPageX(e.absoluteX);
+      setDragFraction(frac);
+      setIsDragging(true);
+      setPendingSeekFraction(null);
+      thumbScaleRef.current.value = withSpring(ACTIVE_THUMB_SIZE / THUMB_SIZE);
+    })
+    .onUpdate((e) => {
+      const frac = fractionFromPageX(e.absoluteX);
+      setDragFraction(frac);
+    })
+    .onEnd(() => {
+      const currentDragFraction = dragFractionRef.current;
+      const currentDuration = durationRef.current;
+      const seekPosition = currentDragFraction * currentDuration;
+      setPendingSeekFraction(currentDragFraction);
+      setIsDragging(false);
+      onSeekRef.current(seekPosition);
+      thumbScaleRef.current.value = withSpring(1);
+    })
+    .onFinalize((_, success) => {
+      if (!success) {
         setIsDragging(false);
-        onSeekRef.current(seekPosition);
         thumbScaleRef.current.value = withSpring(1);
-      },
-      onPanResponderTerminate: () => {
-        setIsDragging(false);
-        thumbScaleRef.current.value = withSpring(1);
-      },
-    }),
-  ).current;
+      }
+    });
+
+  const seekGesture = Gesture.Race(panGesture, tapGesture);
 
   const handleLayout = useCallback(
     (e: { nativeEvent: { layout: { width: number } } }) => {
@@ -175,47 +182,48 @@ export function PlayerProgressBar({
   return (
     <View style={styles.container}>
       {/* Track + thumb */}
-      <View
-        ref={trackRef}
-        style={[styles.trackHitArea, { paddingVertical: TRACK_HIT_SLOP }]}
-        onLayout={handleLayout}
-        {...panResponder.panHandlers}
-      >
+      <GestureDetector gesture={seekGesture}>
         <View
-          style={[styles.track, { backgroundColor: colors.border }]}
-          pointerEvents="none"
+          ref={trackRef}
+          style={[styles.trackHitArea, { paddingVertical: TRACK_HIT_SLOP }]}
+          onLayout={handleLayout}
         >
-          {/* Buffered range (behind played fill) */}
           <View
+            style={[styles.track, { backgroundColor: colors.border }]}
+            pointerEvents="none"
+          >
+            {/* Buffered range (behind played fill) */}
+            <View
+              style={[
+                styles.bufferedFill,
+                {
+                  width: `${bufferedFraction * 100}%`,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
+            {/* Played range */}
+            <View
+              style={[
+                styles.fill,
+                { width: `${fraction * 100}%`, backgroundColor: colors.primary },
+              ]}
+            />
+          </View>
+          {/* Thumb */}
+          <Animated.View
+            pointerEvents="none"
             style={[
-              styles.bufferedFill,
+              styles.thumb,
               {
-                width: `${bufferedFraction * 100}%`,
-                backgroundColor: colors.primary,
+                backgroundColor: colors.textPrimary,
+                left: `${fraction * 100}%`,
               },
-            ]}
-          />
-          {/* Played range */}
-          <View
-            style={[
-              styles.fill,
-              { width: `${fraction * 100}%`, backgroundColor: colors.primary },
+              thumbAnimStyle,
             ]}
           />
         </View>
-        {/* Thumb */}
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.thumb,
-            {
-              backgroundColor: colors.textPrimary,
-              left: `${fraction * 100}%`,
-            },
-            thumbAnimStyle,
-          ]}
-        />
-      </View>
+      </GestureDetector>
       {/* Time labels */}
       <View style={styles.times}>
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>
