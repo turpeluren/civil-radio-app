@@ -129,7 +129,8 @@ export function computeStreaks(scrobbles: Pick<ScrobbleRecord, 'time'>[]): {
 
 export function usePlaybackAnalytics(
   scrobbles: ScrobbleRecord[],
-  period: TimePeriod
+  period: TimePeriod,
+  pendingScrobbles?: Pick<ScrobbleRecord, 'time'>[]
 ): PlaybackAnalytics {
   return useMemo(() => {
     const periodDays = PERIOD_DAYS[period];
@@ -281,8 +282,11 @@ export function usePlaybackAnalytics(
       }
     }
 
-    // Streaks
-    const { longest, current } = computeStreaks(filtered);
+    // Streaks – include pending scrobbles so offline plays count
+    const pendingFiltered = pendingScrobbles
+      ? (periodDays ? pendingScrobbles.filter((s) => s.time >= cutoff) : pendingScrobbles)
+      : [];
+    const { longest, current } = computeStreaks([...filtered, ...pendingFiltered]);
 
     // Average plays per day
     const uniqueDays = dayCounts.size;
@@ -306,5 +310,5 @@ export function usePlaybackAnalytics(
       peakHour,
       averagePlaysPerDay,
     };
-  }, [scrobbles, period]);
+  }, [scrobbles, period, pendingScrobbles]);
 }

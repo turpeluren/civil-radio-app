@@ -65,7 +65,7 @@ export function PlaybackHistoryScreen() {
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
   const dateFormat = layoutPreferencesStore((s) => s.dateFormat);
 
-  const analytics = usePlaybackAnalytics(completedScrobbles, period);
+  const analytics = usePlaybackAnalytics(completedScrobbles, period, pendingScrobbles);
 
   const handlePeriodChange = useCallback((p: TimePeriod) => {
     setPeriod(p);

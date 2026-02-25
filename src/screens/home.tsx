@@ -25,6 +25,7 @@ import {
 } from '../store/albumListsStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { favoritesStore } from '../store/favoritesStore';
+import { pendingScrobbleStore } from '../store/pendingScrobbleStore';
 import { filterBarStore } from '../store/filterBarStore';
 import { musicCacheStore } from '../store/musicCacheStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
@@ -242,13 +243,14 @@ export function HomeScreen() {
     (s) => Object.keys(s.stats.uniqueArtists).length
   );
   const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
+  const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
   const listeningStats = useMemo(() => {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const time = h > 0 ? `${h}h ${m}m` : `${m}m`;
-    const { current: streak } = computeStreaks(completedScrobbles);
+    const { current: streak } = computeStreaks([...completedScrobbles, ...pendingScrobbles]);
     return { total: totalPlays, time, artists: uniqueArtistCount, streak };
-  }, [totalPlays, totalSeconds, uniqueArtistCount, completedScrobbles]);
+  }, [totalPlays, totalSeconds, uniqueArtistCount, completedScrobbles, pendingScrobbles]);
 
   useEffect(() => {
     if (!isFocused) return;
