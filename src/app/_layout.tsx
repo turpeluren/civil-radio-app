@@ -9,6 +9,7 @@ import { CreateShareSheet } from '../components/CreateShareSheet';
 import { MoreOptionsSheet } from '../components/MoreOptionsSheet';
 import { PlaybackToast } from '../components/PlaybackToast';
 import { ProcessingOverlay } from '../components/ProcessingOverlay';
+import { useDownloadKeepAwake } from '../hooks/useDownloadKeepAwake';
 import { useTheme } from '../hooks/useTheme';
 import { getImageCacheStats, initImageCache } from '../services/imageCacheService';
 import { getMusicCacheStats, initMusicCache } from '../services/musicCacheService';
@@ -54,6 +55,8 @@ export default function RootLayout() {
   const { theme, colors } = useTheme();
   const router = useRouter();
   const segments = useSegments();
+
+  useDownloadKeepAwake();
 
   // --- Exclude cache dirs from iCloud backup (iOS); no-op on Android ---
   useEffect(() => {
