@@ -1,5 +1,8 @@
 # Changelog
 
+## [8.0.8] - 2026-02-25
+
+- player: fix crash on progress drag
 ## [8.0.7] - 2026-02-25
 
 - No notable changes
