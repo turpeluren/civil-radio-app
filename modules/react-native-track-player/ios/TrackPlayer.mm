@@ -42,7 +42,7 @@ RCT_EXPORT_MODULE()
 }
 
 - (nonnull facebook::react::ModuleConstants<JS::NativeTrackPlayer::Constants::Builder>)constantsToExport {
-  return [NativeTrackPlayerImpl constantsToExport];
+  return [_RCTTypedModuleConstants newWithUnsafeDictionary:[NativeTrackPlayerImpl constantsToExport]];
 }
 
 - (void)getActiveTrack:(nonnull RCTPromiseResolveBlock)resolve reject:(nonnull RCTPromiseRejectBlock)reject {

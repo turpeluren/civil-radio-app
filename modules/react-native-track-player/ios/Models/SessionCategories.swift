@@ -94,7 +94,7 @@ enum SessionCategoryOptions : String {
         case .interruptSpokenAudioAndMixWithOthers:
             return .interruptSpokenAudioAndMixWithOthers
         case .allowBluetooth:
-            return .allowBluetooth
+            return .allowBluetoothHFP
         case .allowBluetoothA2DP:
             return .allowBluetoothA2DP
         case .allowAirPlay:

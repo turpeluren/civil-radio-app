@@ -261,8 +261,7 @@ public class NativeTrackPlayerImpl: NSObject, AudioSessionControllerDelegate {
 
     @objc(isServiceRunning:rejecter:)
     public func isServiceRunning(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-        // TODO That is probably always true
-        resolve(player != nil)
+        resolve(hasInitialized)
     }
 
     @objc(updateOptions:resolver:rejecter:)
@@ -613,7 +612,7 @@ public class NativeTrackPlayerImpl: NSObject, AudioSessionControllerDelegate {
             tracks.append(track)
         }
         player.clear()
-        try? player.add(items: tracks)
+        player.add(items: tracks)
         resolve(index)
     }
 
@@ -887,7 +886,7 @@ public class NativeTrackPlayerImpl: NSObject, AudioSessionControllerDelegate {
 
 
 @objc public protocol NativeTrackPlayerImplDelegate {
-    func sendEvent(name: String, body: Any)
+    func sendEvent(name: String, body: Any?)
 }
 
 extension NativeTrackPlayerImpl {
