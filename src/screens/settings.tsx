@@ -1,9 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '../hooks/useTheme';
+
+const APP_VERSION = Constants.expoConfig?.version ?? '?';
+const BUILD_NUMBER =
+  Platform.OS === 'ios'
+    ? Constants.expoConfig?.ios?.buildNumber
+    : String(Constants.expoConfig?.android?.versionCode ?? '');
+
 
 const SETTINGS_LINKS: {
   route: string;
@@ -69,6 +77,9 @@ export function SettingsScreen() {
           </Pressable>
         ))}
       </View>
+      <Text style={[styles.versionText, { color: colors.textSecondary }]}>
+        Version {APP_VERSION} ({BUILD_NUMBER})
+      </Text>
     </ScrollView>
   );
 }
@@ -115,5 +126,10 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.8,
+  },
+  versionText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
