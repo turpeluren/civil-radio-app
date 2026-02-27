@@ -1,5 +1,12 @@
 # Changelog
 
+## [8.0.10] - 2026-02-27
+
+- offline mode: no pull to refresh in offline mode
+- add item ID for image cache browser
+- image cache: navidrome returns varying _hexsuffix as part of coverArtID's this was resulting in multiple copies of images in cache, the fix for that problem resulted in broken caching, excess downloads and missing images when offline. This fix strips the suffix from the coverArtID as we don't need it to cache bust and it doesn't give us any other value.
+- missed some files
+- appearance: remove the option to disable marquee scrolling on long titles. It's always useful and code is much simpler without this.
 ## [8.0.9] - 2026-02-27
 
 - file-system: new expo-file-system removes many async operations which makes larger recursive operations block UI interaction which is not good. This was causing slow app start up as the integrity of offline images and music are checked at start. 1) implement a custom expo module with only the required async file functions. 2) move any legacy/async operations to the new custom module (as file-system/legacy will be removed in next major expo version breaking the app) 3) split cache init functions into base init (make sure cache directories exist) and validation passes so that heavier work can run deferred. 4) refactor all of image cache and music cache to use new async functions where appropriate.
