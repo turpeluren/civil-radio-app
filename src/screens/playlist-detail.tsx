@@ -483,12 +483,14 @@ export function PlaylistDetailScreen() {
           contentInset={iosInset}
           contentOffset={iosOffset}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-              progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
-            />
+            offlineMode ? undefined : (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
+              />
+            )
           }
         />
       )}

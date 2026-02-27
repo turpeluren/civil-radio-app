@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AlbumListView } from '../components/AlbumListView';
 import { useTheme } from '../hooks/useTheme';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { minDelay } from '../utils/stringHelpers';
 import {
   ensureCoverArtAuth,
@@ -43,6 +44,7 @@ const VALID_TYPES: AlbumListType[] = [
 
 export function AlbumListScreen() {
   const { colors } = useTheme();
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
   const navigation = useNavigation();
   const params = useLocalSearchParams<{ type?: string }>();
   const type = (VALID_TYPES.includes(params.type as AlbumListType)
@@ -97,7 +99,7 @@ export function AlbumListScreen() {
         albums={albums}
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={offlineMode ? undefined : handleRefresh}
         refreshing={refreshing}
       />
     </View>

@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { PlaylistListView, type PlaylistLayout } from '../components/PlaylistListView';
 import { useTheme } from '../hooks/useTheme';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
 import { minDelay } from '../utils/stringHelpers';
 
@@ -15,6 +16,7 @@ export function PlaylistListScreen({
   downloadedOnly?: boolean;
 }) {
   const { colors } = useTheme();
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
   const playlists = playlistLibraryStore((s) => s.playlists);
   const loading = playlistLibraryStore((s) => s.loading);
   const error = playlistLibraryStore((s) => s.error);
@@ -50,7 +52,7 @@ export function PlaylistListScreen({
         layout={layout}
         loading={loading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={offlineMode ? undefined : handleRefresh}
         refreshing={refreshing}
         showAlphabetScroller
       />

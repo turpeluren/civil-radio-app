@@ -224,7 +224,7 @@ export function FavoritesScreen() {
             layout={favSongLayout}
             loading={loading}
             error={error}
-            onRefresh={handleRefresh}
+            onRefresh={offlineMode ? undefined : handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite songs yet"
             emptySubtitle="Star songs you love and they will appear here, or check your filters"
@@ -237,7 +237,7 @@ export function FavoritesScreen() {
             layout={favAlbumLayout}
             loading={loading}
             error={error}
-            onRefresh={handleRefresh}
+            onRefresh={offlineMode ? undefined : handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite albums yet"
             emptySubtitle="Star albums you love and they will appear here, or check your filters"
@@ -257,7 +257,7 @@ export function FavoritesScreen() {
               layout={favArtistLayout}
               loading={loading}
               error={error}
-              onRefresh={handleRefresh}
+              onRefresh={offlineMode ? undefined : handleRefresh}
               refreshing={refreshing}
               emptyMessage="No favorite artists yet"
               emptySubtitle="Star artists you love and they will appear here, or check your filters"

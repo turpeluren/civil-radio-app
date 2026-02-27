@@ -29,6 +29,7 @@ import { minDelay } from '../utils/stringHelpers';
 import { playTrack } from '../services/playerService';
 import { albumDetailStore } from '../store/albumDetailStore';
 import { moreOptionsStore } from '../store/moreOptionsStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 
 import type { AlbumWithSongsID3, Child } from '../services/subsonicService';
 
@@ -58,6 +59,7 @@ function groupTracksByDisc(songs: Child[]): Map<number, Child[]> {
 
 export function AlbumDetailScreen() {
   const { colors } = useTheme();
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -300,12 +302,14 @@ export function AlbumDetailScreen() {
         contentInset={Platform.OS === 'ios' ? { top: insets.top + HEADER_BAR_HEIGHT } : undefined}
         contentOffset={Platform.OS === 'ios' ? { x: 0, y: -(insets.top + HEADER_BAR_HEIGHT) } : undefined}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
-          />
+          offlineMode ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
+            />
+          )
         }
       />
     </View>

@@ -31,6 +31,7 @@ import { playTrack } from '../services/playerService';
 import { artistDetailStore } from '../store/artistDetailStore';
 import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { moreOptionsStore } from '../store/moreOptionsStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 
 import {
   type AlbumID3,
@@ -52,6 +53,7 @@ const HORIZONTAL_GAP = 10;
 
 export function ArtistDetailScreen() {
   const { colors } = useTheme();
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -394,12 +396,14 @@ export function ArtistDetailScreen() {
             : undefined
         }
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
-          />
+          offlineMode ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              progressViewOffset={insets.top + HEADER_BAR_HEIGHT}
+            />
+          )
         }
       />
     </View>

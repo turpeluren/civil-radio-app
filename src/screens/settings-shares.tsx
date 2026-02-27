@@ -25,6 +25,7 @@ import Animated, {
 import { EditShareSheet } from '../components/EditShareSheet';
 import { EmptyState } from '../components/EmptyState';
 import { useTheme } from '../hooks/useTheme';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { type Share } from '../services/subsonicService';
 import { minDelay } from '../utils/stringHelpers';
 import { authStore } from '../store/authStore';
@@ -82,6 +83,7 @@ function getShareSubtitle(share: Share): string {
 
 export function SettingsSharesScreen() {
   const { colors } = useTheme();
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
   const serverUrl = authStore((s) => s.serverUrl);
   const shareBaseUrl = shareSettingsStore((s) => s.shareBaseUrl);
 
@@ -199,11 +201,13 @@ export function SettingsSharesScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.textSecondary}
-          />
+          offlineMode ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.textSecondary}
+            />
+          )
         }
       >
         {/* Share URL Settings */}
