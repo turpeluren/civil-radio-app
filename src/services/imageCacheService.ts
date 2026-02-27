@@ -57,6 +57,13 @@ const MIME_TO_EXT: Record<string, string> = {
 /** JPEG quality for locally generated resize variants. */
 const RESIZE_COMPRESS = 0.9;
 
+/**
+ * Navidrome coverArt IDs use the format `{type}-{entityId}_{hexTimestamp}`.
+ * The hex suffix changes when art is re-indexed, but the prefix stays
+ * stable for the same entity. Matches hex digits (0-9, a-f).
+ */
+const HEX_SUFFIX_RE = /^[0-9a-f]+$/i;
+
 /* ------------------------------------------------------------------ */
 /*  Module state                                                       */
 /* ------------------------------------------------------------------ */
@@ -106,6 +113,7 @@ export function initImageCache(): void {
   cacheDir = dir;
 
   recoverStalledImageDownloads();
+  deduplicateCacheFolders();
 
   if (!appStateSubscription) {
     appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
@@ -324,6 +332,94 @@ async function processNext(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Stale duplicate cleanup                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extract the stable entity key from a Navidrome-style coverArtId by
+ * stripping the hex timestamp suffix. Returns `null` for IDs that
+ * don't follow the `{prefix}_{hexDigits}` pattern (e.g. non-Navidrome
+ * servers), so dedup is safely skipped for those.
+ */
+function entityPrefix(coverArtId: string): string | null {
+  const i = coverArtId.lastIndexOf('_');
+  if (i <= 0) return null;
+  const suffix = coverArtId.slice(i + 1);
+  if (!HEX_SUFFIX_RE.test(suffix)) return null;
+  return coverArtId.slice(0, i);
+}
+
+/**
+ * Remove cache folders that share the same entity prefix as
+ * `coverArtId` but have a different (outdated) timestamp suffix.
+ * Reuses {@link deleteCachedImage} for safe deletion with stat updates.
+ */
+function removeStaleFolders(coverArtId: string): void {
+  const prefix = entityPrefix(coverArtId);
+  if (!prefix) return;
+
+  const dir = ensureCacheDir();
+  let entries: (File | Directory)[];
+  try {
+    entries = dir.list();
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!(entry instanceof Directory)) continue;
+    const name = entry.uri.split('/').filter(Boolean).pop() ?? '';
+    if (name === coverArtId) continue;
+    if (entityPrefix(name) === prefix) {
+      deleteCachedImage(name);
+    }
+  }
+}
+
+/**
+ * Batch-deduplicate all cache folders on startup. Groups directories
+ * by entity prefix and, for each group with duplicates, keeps the one
+ * with the highest hex suffix (newest timestamp) and deletes the rest.
+ */
+function deduplicateCacheFolders(): void {
+  const dir = ensureCacheDir();
+  let entries: (File | Directory)[];
+  try {
+    entries = dir.list();
+  } catch {
+    return;
+  }
+
+  const groups = new Map<string, string[]>();
+
+  for (const entry of entries) {
+    if (!(entry instanceof Directory)) continue;
+    const name = entry.uri.split('/').filter(Boolean).pop() ?? '';
+    const prefix = entityPrefix(name);
+    if (!prefix) continue;
+    const list = groups.get(prefix) ?? [];
+    list.push(name);
+    groups.set(prefix, list);
+  }
+
+  for (const [, ids] of groups) {
+    if (ids.length <= 1) continue;
+
+    ids.sort((a, b) => {
+      const aHex = a.slice(a.lastIndexOf('_') + 1);
+      const bHex = b.slice(b.lastIndexOf('_') + 1);
+      const aVal = parseInt(aHex, 16);
+      const bVal = parseInt(bHex, 16);
+      return bVal - aVal;
+    });
+
+    for (let i = 1; i < ids.length; i++) {
+      deleteCachedImage(ids[i]);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Download + resize pipeline                                         */
 /* ------------------------------------------------------------------ */
 
@@ -345,6 +441,8 @@ async function downloadAndCacheImage(coverArtId: string): Promise<void> {
     if (getCachedImageUri(coverArtId, size)) continue;
     await generateResizedVariant(source600Uri, coverArtId, size, subDir);
   }
+
+  removeStaleFolders(coverArtId);
 }
 
 /**
