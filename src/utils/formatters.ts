@@ -88,3 +88,15 @@ export function formatBytes(bytes: number): string {
   const value = bytes / Math.pow(1024, i);
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
 }
+
+/**
+ * Format a speed in bytes per second into a compact human-readable string.
+ * Examples: "0 B/s", "856 KB/s", "12.5 MB/s".
+ */
+export function formatSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond <= 0) return '0 B/s';
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  const i = Math.min(Math.floor(Math.log(bytesPerSecond) / Math.log(1024)), units.length - 1);
+  const value = bytesPerSecond / Math.pow(1024, i);
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}

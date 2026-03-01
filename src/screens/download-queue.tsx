@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,13 +25,86 @@ import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { closeOpenRow, SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTheme } from '../hooks/useTheme';
+import { getDownloadSpeed, getActiveDownloadCount } from '../services/downloadSpeedTracker';
 import { cancelDownload, clearDownloadQueue, forceRecoverDownloadsAsync, retryDownload } from '../services/musicCacheService';
 import {
   musicCacheStore,
   type DownloadQueueItem,
 } from '../store/musicCacheStore';
+import { formatSpeed } from '../utils/formatters';
 
 const ANIMATE_MS = 400;
+const SPEED_POLL_MS = 1000;
+
+/* ------------------------------------------------------------------ */
+/*  Stats Card                                                         */
+/* ------------------------------------------------------------------ */
+
+const DownloadStatsCard = memo(function DownloadStatsCard({
+  colors,
+  queuedCount,
+}: {
+  colors: ReturnType<typeof useTheme>['colors'];
+  queuedCount: number;
+}) {
+  const [speed, setSpeed] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
+  const maxConcurrent = musicCacheStore((s) => s.maxConcurrentDownloads);
+
+  useEffect(() => {
+    const update = () => {
+      setSpeed(getDownloadSpeed());
+      setActiveCount(getActiveDownloadCount());
+    };
+    update();
+    const id = setInterval(update, SPEED_POLL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const iconBg = colors.primary + '18';
+
+  return (
+    <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
+      <View style={styles.statsRow}>
+        <View style={styles.statBlock}>
+          <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
+            <Ionicons name="cloud-download-outline" size={20} color={colors.primary} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+            {formatSpeed(speed)}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+            speed
+          </Text>
+        </View>
+        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <View style={styles.statBlock}>
+          <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
+            <Ionicons name="flash-outline" size={20} color={colors.primary} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+            {activeCount} / {maxConcurrent}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+            threads
+          </Text>
+        </View>
+        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <View style={styles.statBlock}>
+          <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
+            <Ionicons name="albums-outline" size={20} color={colors.primary} />
+          </View>
+          <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+            {queuedCount}
+          </Text>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+            in queue
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+});
 
 /* ------------------------------------------------------------------ */
 /*  Queue Row                                                          */
@@ -326,6 +399,19 @@ export function DownloadQueueScreen() {
     [],
   );
 
+  const queuedCount = useMemo(
+    () => downloadQueue.filter((q) => q.status === 'downloading' || q.status === 'queued').length,
+    [downloadQueue],
+  );
+
+  const listHeader = useMemo(
+    () =>
+      downloadQueue.length > 0 ? (
+        <DownloadStatsCard colors={colors} queuedCount={queuedCount} />
+      ) : null,
+    [downloadQueue.length, colors, queuedCount],
+  );
+
   const contentStyle = useMemo(
     () => ({
       flexGrow: 1 as const,
@@ -342,6 +428,7 @@ export function DownloadQueueScreen() {
         keyExtractor={keyExtractor}
         onDragEnd={handleDragEnd}
         onScrollBeginDrag={closeOpenRow}
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
         containerStyle={styles.container}
         contentContainerStyle={contentStyle}
@@ -357,6 +444,43 @@ export function DownloadQueueScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  statsCard: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 2,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statBlock: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 48,
+    opacity: 0.6,
   },
   headerRight: {
     flexDirection: 'row',

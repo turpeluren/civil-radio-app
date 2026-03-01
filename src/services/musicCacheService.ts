@@ -7,8 +7,8 @@
  *
  *   music-cache/{itemId}/{trackId}.{ext}
  *
- * Uses File.downloadFileAsync from expo-file-system for downloads.
- * Progress is tracked at the track-count level (not per-byte).
+ * Uses downloadFileAsyncWithProgress from expo-async-fs for native
+ * downloads with byte-level progress events.
  * Queue processing follows the sequential pattern from scrobbleService
  * (one item at a time, configurable concurrent track downloads within
  * each item).
@@ -17,8 +17,9 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { listDirectoryAsync, getDirectorySizeAsync } from 'expo-async-fs';
+import { listDirectoryAsync, getDirectorySizeAsync, downloadFileAsyncWithProgress } from 'expo-async-fs';
 import { checkStorageLimit } from './storageService';
+import { beginDownload, clearDownload } from './downloadSpeedTracker';
 import { albumDetailStore } from '../store/albumDetailStore';
 import { favoritesStore } from '../store/favoritesStore';
 import { storageLimitStore } from '../store/storageLimitStore';
@@ -524,7 +525,7 @@ type DownloadQueueItemSnapshot = Readonly<{
 }>;
 
 /**
- * Download a single track using the modern expo-file-system API.
+ * Download a single track using the native download with progress events.
  *
  * Downloads to a `.tmp` file first and renames on success, so that
  * incomplete downloads from a killed app can be identified and
@@ -544,8 +545,9 @@ async function downloadTrack(
   const tmpName = `${fileName}.tmp`;
 
   try {
+    beginDownload(track.id);
     const tmpDest = new File(itemDir, tmpName);
-    await File.downloadFileAsync(url, tmpDest);
+    await downloadFileAsyncWithProgress(url, tmpDest.uri, track.id);
 
     const dest = new File(itemDir, fileName);
     if (dest.exists) {
@@ -554,6 +556,8 @@ async function downloadTrack(
     tmpDest.move(dest);
 
     const bytes = dest.exists ? dest.size ?? 0 : 0;
+
+    clearDownload(track.id);
 
     return {
       id: track.id,
@@ -564,7 +568,7 @@ async function downloadTrack(
       duration: track.duration ?? 0,
     };
   } catch {
-    // Clean up partial tmp file on failure.
+    clearDownload(track.id);
     const tmpFile = new File(itemDir, tmpName);
     if (tmpFile.exists) {
       try { tmpFile.delete(); } catch { /* best-effort */ }
