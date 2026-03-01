@@ -1,5 +1,8 @@
 # Changelog
 
+## [8.0.13] - 2026-03-01
+
+- expo-notifications: remove unneeded push notificiation entitlement
 ## [8.0.12] - 2026-03-01
 
 - android: expo-fs-async missing deps
