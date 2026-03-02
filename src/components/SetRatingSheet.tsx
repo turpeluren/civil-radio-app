@@ -225,7 +225,7 @@ export function SetRatingSheet() {
                 </Text>
               </View>
             ) : (
-              <Text style={styles.doneText}>Done</Text>
+              <Text style={styles.doneText}>Save</Text>
             )}
           </Pressable>
         </View>
