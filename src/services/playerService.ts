@@ -7,6 +7,8 @@ import { AppState, type AppStateStatus } from 'react-native';
 import TrackPlayer, {
   Capability,
   Event,
+  IOSCategory,
+  IOSCategoryOptions,
   RepeatMode,
   State,
   type Track,
@@ -269,8 +271,11 @@ export async function initPlayer(): Promise<void> {
       // its default (true) so the player properly waits for sufficient
       // buffer before starting playback.
       minBuffer: 86400,
-      // maxBuffer is Android-only (ExoPlayer); generous value for parity.
-      maxBuffer: 300,
+      // maxBuffer is Android-only (ExoPlayer); must be >= minBuffer.
+      maxBuffer: 86400,
+      iosCategory: IOSCategory.Playback,
+      iosCategoryOptions: [IOSCategoryOptions.DuckOthers],
+      autoHandleInterruptions: true,
     });
   } catch {
     // setupPlayer throws if already initialised (e.g. after a fast refresh).
