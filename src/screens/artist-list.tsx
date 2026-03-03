@@ -63,12 +63,13 @@ export function ArtistListScreen({
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    if (offlineMode) return;
     setRefreshing(true);
     const delay = minDelay();
     await fetchAllArtists();
     await delay;
     setRefreshing(false);
-  }, [fetchAllArtists]);
+  }, [offlineMode, fetchAllArtists]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -77,9 +78,10 @@ export function ArtistListScreen({
         layout={layout}
         loading={loading}
         error={error}
-        onRefresh={offlineMode ? undefined : handleRefresh}
+        onRefresh={handleRefresh}
         refreshing={refreshing}
         showAlphabetScroller
+        scrollToTopTrigger={`${downloadedOnly}:${favoritesOnly}`}
       />
     </View>
   );

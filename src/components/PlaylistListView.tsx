@@ -48,6 +48,8 @@ export interface PlaylistListViewProps {
   emptySubtitle?: string;
   /** Ionicons icon name for the empty state */
   emptyIcon?: string;
+  /** When this value changes, the list scrolls to the top */
+  scrollToTopTrigger?: string;
 }
 
 export function PlaylistListView({
@@ -61,9 +63,12 @@ export function PlaylistListView({
   emptyMessage = 'No playlists',
   emptySubtitle = 'Playlists from your server will appear here. Pull to refresh to check for updates.',
   emptyIcon = 'list-outline',
+  scrollToTopTrigger,
 }: PlaylistListViewProps) {
   const { colors } = useTheme();
   const listRef = useRef<FlashListRef<Playlist>>(null);
+
+  const listKey = scrollToTopTrigger ? `${layout}:${scrollToTopTrigger}` : layout;
 
   const screenWidth = Dimensions.get('window').width;
   const cardWidth = useMemo(
@@ -144,7 +149,7 @@ export function PlaylistListView({
     <View style={styles.wrapper}>
       <FlashList
         ref={listRef}
-        key={layout}
+        key={listKey}
         data={playlists}
         renderItem={isGrid ? renderGridItem : renderListItem}
         keyExtractor={keyExtractor}

@@ -45,6 +45,8 @@ export interface SongListViewProps {
   emptySubtitle?: string;
   /** Optional Ionicons icon name for empty state */
   emptyIcon?: string;
+  /** When this value changes, the list scrolls to the top */
+  scrollToTopTrigger?: string;
 }
 
 export function SongListView({
@@ -57,8 +59,11 @@ export function SongListView({
   emptyMessage = 'No songs found',
   emptySubtitle = 'Try adjusting your filters, or pull to refresh',
   emptyIcon,
+  scrollToTopTrigger,
 }: SongListViewProps) {
   const { colors } = useTheme();
+
+  const listKey = scrollToTopTrigger ? `${layout}:${scrollToTopTrigger}` : layout;
 
   const screenWidth = Dimensions.get('window').width;
   const cardWidth = useMemo(
@@ -128,7 +133,7 @@ export function SongListView({
 
   return (
     <FlashList
-      key={layout}
+      key={listKey}
       data={songs}
       renderItem={isGrid ? renderGridItem : renderListItem}
       keyExtractor={keyExtractor}

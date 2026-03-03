@@ -48,6 +48,8 @@ export interface ArtistListViewProps {
   emptyIcon?: string;
   /** Show the A-Z alphabet scroller on the right */
   showAlphabetScroller?: boolean;
+  /** When this value changes, the list scrolls to the top */
+  scrollToTopTrigger?: string;
 }
 
 export function ArtistListView({
@@ -61,9 +63,12 @@ export function ArtistListView({
   emptySubtitle = 'Try adjusting your filters, or pull to refresh',
   emptyIcon,
   showAlphabetScroller = false,
+  scrollToTopTrigger,
 }: ArtistListViewProps) {
   const { colors } = useTheme();
   const listRef = useRef<FlashListRef<ArtistID3>>(null);
+
+  const listKey = scrollToTopTrigger ? `${layout}:${scrollToTopTrigger}` : layout;
 
   const screenWidth = Dimensions.get('window').width;
   const cardWidth = useMemo(
@@ -155,7 +160,7 @@ export function ArtistListView({
     <View style={styles.wrapper}>
       <FlashList
         ref={listRef}
-        key={layout}
+        key={listKey}
         data={artists}
         renderItem={isGrid ? renderGridItem : renderListItem}
         keyExtractor={keyExtractor}

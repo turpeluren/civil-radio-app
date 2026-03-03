@@ -38,12 +38,13 @@ export function PlaylistListScreen({
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    if (offlineMode) return;
     setRefreshing(true);
     const delay = minDelay();
     await fetchAllPlaylists();
     await delay;
     setRefreshing(false);
-  }, [fetchAllPlaylists]);
+  }, [offlineMode, fetchAllPlaylists]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -52,9 +53,10 @@ export function PlaylistListScreen({
         layout={layout}
         loading={loading}
         error={error}
-        onRefresh={offlineMode ? undefined : handleRefresh}
+        onRefresh={handleRefresh}
         refreshing={refreshing}
         showAlphabetScroller
+        scrollToTopTrigger={`${downloadedOnly}`}
       />
     </View>
   );

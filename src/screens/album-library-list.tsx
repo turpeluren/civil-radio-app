@@ -51,12 +51,13 @@ export function AlbumLibraryListScreen({
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    if (offlineMode) return;
     setRefreshing(true);
     const delay = minDelay();
     await fetchAllAlbums();
     await delay;
     setRefreshing(false);
-  }, [fetchAllAlbums]);
+  }, [offlineMode, fetchAllAlbums]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -65,9 +66,10 @@ export function AlbumLibraryListScreen({
         layout={layout}
         loading={loading}
         error={error}
-        onRefresh={offlineMode ? undefined : handleRefresh}
+        onRefresh={handleRefresh}
         refreshing={refreshing}
         showAlphabetScroller
+        scrollToTopTrigger={`${downloadedOnly}:${favoritesOnly}`}
       />
     </View>
   );

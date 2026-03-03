@@ -207,12 +207,13 @@ export function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    if (offlineMode) return;
     setRefreshing(true);
     const delay = minDelay();
     await fetchStarred();
     await delay;
     setRefreshing(false);
-  }, [fetchStarred]);
+  }, [offlineMode, fetchStarred]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -224,11 +225,12 @@ export function FavoritesScreen() {
             layout={favSongLayout}
             loading={loading}
             error={error}
-            onRefresh={offlineMode ? undefined : handleRefresh}
+            onRefresh={handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite songs yet"
             emptySubtitle="Star songs you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
+            scrollToTopTrigger={`${downloadedOnly}`}
           />
         )}
         {activeSegment === 'albums' && (
@@ -237,11 +239,12 @@ export function FavoritesScreen() {
             layout={favAlbumLayout}
             loading={loading}
             error={error}
-            onRefresh={offlineMode ? undefined : handleRefresh}
+            onRefresh={handleRefresh}
             refreshing={refreshing}
             emptyMessage="No favorite albums yet"
             emptySubtitle="Star albums you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
+            scrollToTopTrigger={`${downloadedOnly}`}
           />
         )}
         {activeSegment === 'artists' && (
@@ -257,11 +260,12 @@ export function FavoritesScreen() {
               layout={favArtistLayout}
               loading={loading}
               error={error}
-              onRefresh={offlineMode ? undefined : handleRefresh}
+              onRefresh={handleRefresh}
               refreshing={refreshing}
               emptyMessage="No favorite artists yet"
               emptySubtitle="Star artists you love and they will appear here, or check your filters"
               emptyIcon="heart-outline"
+              scrollToTopTrigger={`${downloadedOnly}`}
             />
           )
         )}
