@@ -187,9 +187,18 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
         pointerEvents="none"
       >
         {migrationPhase === 'done' ? (
-          <Ionicons name="checkmark-circle" size={28} color={SUCCESS} />
+          <Ionicons
+            name="checkmark-circle"
+            size={28}
+            color={SUCCESS}
+            style={{ width: 28, textAlign: 'center' }}
+          />
         ) : (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <ActivityIndicator
+            size="small"
+            color="#FFFFFF"
+            style={{ width: 28, height: 28 }}
+          />
         )}
         <Text style={styles.migrationText}>
           {migrationPhase === 'done'
