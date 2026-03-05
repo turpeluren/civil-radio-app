@@ -180,9 +180,13 @@ class QueuedAudioPlayer(
      * Does nothing if there is no next item to skip to.
      */
     fun next() {
-        playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.SKIPPED_TO_NEXT)
+        val lastIdx = currentIndex
+        val wasActive = playerState.isActive
         exoPlayer.seekToNextMediaItem()
         exoPlayer.prepare()
+        if (wasActive && lastIdx != currentIndex || repeatMode == RepeatMode.ALL) {
+            playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.SKIPPED_TO_NEXT)
+        }
     }
 
     /**
@@ -190,9 +194,13 @@ class QueuedAudioPlayer(
      * Does nothing if there is no previous item to skip to.
      */
     fun previous() {
-        playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.SKIPPED_TO_PREVIOUS)
+        val lastIdx = currentIndex
+        val wasActive = playerState.isActive
         exoPlayer.seekToPreviousMediaItem()
         exoPlayer.prepare()
+        if (wasActive && lastIdx != currentIndex || repeatMode == RepeatMode.ALL) {
+            playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.SKIPPED_TO_PREVIOUS)
+        }
     }
 
     /**

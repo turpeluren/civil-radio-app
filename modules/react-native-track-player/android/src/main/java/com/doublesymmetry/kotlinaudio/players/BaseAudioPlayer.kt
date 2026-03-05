@@ -244,15 +244,22 @@ abstract class BaseAudioPlayer internal constructor(
      */
     @CallSuper
     open fun stop() {
-        playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.PLAYER_STOPPED)
+        val wasActive = playerState.isActive
         playerState = AudioPlayerState.STOPPED
         exoPlayer.playWhenReady = false
         exoPlayer.stop()
+        if (wasActive) {
+            playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.PLAYER_STOPPED)
+        }
     }
 
     @CallSuper
     open fun clear() {
+        val wasActive = playerState.isActive
         exoPlayer.clearMediaItems()
+        if (wasActive) {
+            playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.CLEARED)
+        }
     }
 
     /**
@@ -447,6 +454,7 @@ abstract class BaseAudioPlayer internal constructor(
                 error.message
             )
             playerEventHolder.updatePlaybackError(_playbackError)
+            playerEventHolder.updatePlaybackEndedReason(PlaybackEndedReason.FAILED)
             playbackError = _playbackError
             playerState = AudioPlayerState.ERROR
         }

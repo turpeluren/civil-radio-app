@@ -63,6 +63,7 @@ class MusicService : HeadlessJsMediaService() {
     private lateinit var fakePlayer: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
     private var progressUpdateJob: Job? = null
+    private var hasEmittedBufferFull = false
     private var sessionCommands: SessionCommands? = null
     private var playerCommands: Player.Commands? = null
     private var customLayout: List<CommandButton> = listOf()
@@ -252,6 +253,14 @@ class MusicService : HeadlessJsMediaService() {
                         MusicEvents.PLAYBACK_PROGRESS_UPDATED,
                         it
                     )
+                    if (!hasEmittedBufferFull && player.duration > 0
+                        && player.bufferedPosition >= player.duration) {
+                        hasEmittedBufferFull = true
+                        Bundle().apply {
+                            putBoolean("isFull", true)
+                            emit(MusicEvents.PLAYBACK_BUFFER_FULL, this)
+                        }
+                    }
                 }
             }
         }
@@ -564,6 +573,7 @@ class MusicService : HeadlessJsMediaService() {
 
         scope.launch {
             event.audioItemTransition.collect {
+                hasEmittedBufferFull = false
                 if (it !is AudioItemTransitionReason.REPEAT) {
                     emitPlaybackTrackChangedEvents(
                         player.previousIndex,

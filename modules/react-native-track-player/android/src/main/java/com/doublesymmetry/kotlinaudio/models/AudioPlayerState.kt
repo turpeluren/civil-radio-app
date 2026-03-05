@@ -26,5 +26,10 @@ enum class AudioPlayerState {
     ENDED,
 
     /** The player stopped playing due to an error. */
-    ERROR
+    ERROR;
+
+    /** True when the player has media loaded and is playing, paused, or buffering. */
+    val isActive: Boolean
+        get() = this == PLAYING || this == PAUSED || this == READY
+                || this == BUFFERING || this == LOADING
 }
