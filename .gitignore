@@ -38,6 +38,9 @@ yarn-error.*
 # release script temp file
 .release-notes-tmp
 
+# test coverage
+coverage/
+
 # typescript
 *.tsbuildinfo
 
