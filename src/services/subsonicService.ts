@@ -108,6 +108,25 @@ export function clearApiCache(): void {
 
 export type { AlbumID3, AlbumWithSongsID3, ArtistID3, ArtistInfo2, ArtistWithAlbumsID3, Child, Playlist, PlaylistWithSongs, ScanStatus, Share };
 
+// ------------------------------------------------------------------ //
+//  Various Artists pseudo-artist                                      //
+// ------------------------------------------------------------------ //
+
+export const VARIOUS_ARTISTS_NAME = 'Various Artists';
+
+export const VARIOUS_ARTISTS_BIO =
+  'Various Artists collects compilation albums, soundtracks, tribute records and other ' +
+  'releases that feature songs from multiple artists.\n\n' +
+  'Browse the albums below to discover what\'s in your collection.';
+
+/** Sentinel coverArtId — CachedImage maps this to the bundled asset. */
+export const VARIOUS_ARTISTS_COVER_ART_ID = '__various_artists_cover__';
+
+/** Case-insensitive check for the Various Artists pseudo-artist name. */
+export function isVariousArtists(name: string | undefined): boolean {
+  return name?.trim().toLowerCase() === 'various artists';
+}
+
 export async function ensureCoverArtAuth(): Promise<void> {
   const { isLoggedIn, serverUrl, username, password } = authStore.getState();
   if (!isLoggedIn || !serverUrl || !username || !password) return;
@@ -335,7 +354,12 @@ export async function getAllArtists(): Promise<ArtistID3[]> {
   if (!api) return [];
   const response = await api.getArtists();
   const indexes = response.artists?.index ?? [];
-  return indexes.flatMap((idx) => idx.artist ?? []);
+  const artists = indexes.flatMap((idx) => idx.artist ?? []);
+  return artists.map((a) =>
+    isVariousArtists(a.name)
+      ? { ...a, name: VARIOUS_ARTISTS_NAME, coverArt: VARIOUS_ARTISTS_COVER_ART_ID }
+      : a,
+  );
 }
 
 /**
@@ -369,6 +393,7 @@ export async function getArtistInfo2(id: string): Promise<ArtistInfo2 | null> {
  * Returns an empty array if the server does not support this endpoint.
  */
 export async function getTopSongs(artistName: string, count = 20): Promise<Child[]> {
+  if (isVariousArtists(artistName)) return [];
   const api = getApi();
   if (!api) return [];
   try {

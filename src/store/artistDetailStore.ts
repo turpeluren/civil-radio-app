@@ -9,6 +9,9 @@ import {
   getArtist,
   getArtistInfo2,
   getTopSongs,
+  isVariousArtists,
+  VARIOUS_ARTISTS_BIO,
+  VARIOUS_ARTISTS_COVER_ART_ID,
   type ArtistInfo2,
   type ArtistWithAlbumsID3,
   type Child,
@@ -49,20 +52,31 @@ export const artistDetailStore = create<ArtistDetailState>()(
       fetchArtist: async (id: string) => {
         await ensureCoverArtAuth();
 
-        const [artistData, infoData] = await Promise.all([
-          getArtist(id),
-          getArtistInfo2(id),
-        ]);
-
+        const artistData = await getArtist(id);
         if (!artistData) return null;
 
-        // Fetch top songs
-        let topSongs: Child[] = [];
-        try {
-          topSongs = await getTopSongs(artistData.name, 20);
-        } catch {
-          /* non-critical */
+        // Various Artists: skip all remote enrichment, inject static data.
+        if (isVariousArtists(artistData.name)) {
+          const entry: ArtistDetailEntry = {
+            artist: {
+              ...artistData,
+              coverArt: VARIOUS_ARTISTS_COVER_ART_ID,
+            },
+            artistInfo: null,
+            topSongs: [],
+            biography: VARIOUS_ARTISTS_BIO,
+            resolvedMbid: null,
+            retrievedAt: Date.now(),
+          };
+          set({ artists: { ...get().artists, [id]: entry } });
+          return entry;
         }
+
+        // Normal artist: fetch info and top songs in parallel.
+        const [infoData, topSongs] = await Promise.all([
+          getArtistInfo2(id),
+          getTopSongs(artistData.name, 20).catch(() => [] as Child[]),
+        ]);
 
         // Resolve biography: prefer Subsonic, fall back to MusicBrainz
         let biography: string | null = null;

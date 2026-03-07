@@ -46,6 +46,7 @@ import {
 import { deleteCachedItem } from '../services/musicCacheService';
 import {
   deletePlaylist,
+  isVariousArtists,
   type AlbumID3,
   type Child,
   type Playlist,
@@ -442,9 +443,10 @@ export function MoreOptionsSheet() {
   const showShare = !offline && canShare(entity);
   const showDownload = canDownload(entity);
   const showDelete = !offline && canDeletePlaylist(entity);
-  const showSaveTopSongsPlaylist = !offline && entity?.type === 'artist';
-  const showPlaySimilarArtistsMix = !offline && canPlaySimilarArtistsMix(entity);
-  const showSetMbid = entity?.type === 'artist';
+  const isVA = entity?.type === 'artist' && isVariousArtists(entity.item.name);
+  const showSaveTopSongsPlaylist = !offline && entity?.type === 'artist' && !isVA;
+  const showPlaySimilarArtistsMix = !offline && canPlaySimilarArtistsMix(entity) && !isVA;
+  const showSetMbid = entity?.type === 'artist' && !isVA;
 
   const hasAnyOption =
     starrable || showRating || showAddToPlaylist || showAddQueueToPlaylist ||

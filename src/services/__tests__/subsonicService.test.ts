@@ -489,4 +489,73 @@ describe('API wrapper functions', () => {
     const { getTopSongs } = require('../subsonicService');
     expect(await getTopSongs('Artist')).toEqual([]);
   });
+
+  it('getTopSongs returns empty for Various Artists without calling API', async () => {
+    const { default: SubsonicAPI } = require('subsonic-api');
+    SubsonicAPI.prototype.getTopSongs = jest.fn();
+    const { getTopSongs } = require('../subsonicService');
+    expect(await getTopSongs('Various Artists')).toEqual([]);
+    expect(SubsonicAPI.prototype.getTopSongs).not.toHaveBeenCalled();
+  });
+
+  it('getTopSongs returns empty for case-variant Various Artists', async () => {
+    const { getTopSongs } = require('../subsonicService');
+    expect(await getTopSongs('various artists')).toEqual([]);
+    expect(await getTopSongs('  Various Artists  ')).toEqual([]);
+  });
+
+  it('getAllArtists normalises Various Artists entries', async () => {
+    const { default: SubsonicAPI } = require('subsonic-api');
+    SubsonicAPI.prototype.getArtists = jest.fn().mockResolvedValue({
+      artists: {
+        index: [
+          {
+            artist: [
+              { id: 'ar-1', name: 'various artists', coverArt: 'ar-1_abc' },
+              { id: 'ar-2', name: 'Radiohead', coverArt: 'ar-2_def' },
+            ],
+          },
+        ],
+      },
+    });
+    const { getAllArtists, getApi, VARIOUS_ARTISTS_NAME, VARIOUS_ARTISTS_COVER_ART_ID } = require('../subsonicService');
+    getApi();
+    const artists = await getAllArtists();
+    expect(artists).toHaveLength(2);
+    expect(artists[0].name).toBe(VARIOUS_ARTISTS_NAME);
+    expect(artists[0].coverArt).toBe(VARIOUS_ARTISTS_COVER_ART_ID);
+    expect(artists[0].id).toBe('ar-1');
+    expect(artists[1].name).toBe('Radiohead');
+    expect(artists[1].coverArt).toBe('ar-2_def');
+  });
+});
+
+describe('isVariousArtists', () => {
+  it('matches exact name', () => {
+    const { isVariousArtists } = require('../subsonicService');
+    expect(isVariousArtists('Various Artists')).toBe(true);
+  });
+
+  it('matches case-insensitively', () => {
+    const { isVariousArtists } = require('../subsonicService');
+    expect(isVariousArtists('various artists')).toBe(true);
+    expect(isVariousArtists('VARIOUS ARTISTS')).toBe(true);
+  });
+
+  it('trims whitespace', () => {
+    const { isVariousArtists } = require('../subsonicService');
+    expect(isVariousArtists('  Various Artists  ')).toBe(true);
+  });
+
+  it('rejects other names', () => {
+    const { isVariousArtists } = require('../subsonicService');
+    expect(isVariousArtists('Radiohead')).toBe(false);
+    expect(isVariousArtists('Various')).toBe(false);
+    expect(isVariousArtists('')).toBe(false);
+  });
+
+  it('handles undefined', () => {
+    const { isVariousArtists } = require('../subsonicService');
+    expect(isVariousArtists(undefined)).toBe(false);
+  });
 });

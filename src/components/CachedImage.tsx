@@ -35,7 +35,7 @@ import {
   getCachedImageUri,
 } from '../services/imageCacheService';
 import { STARRED_COVER_ART_ID } from '../services/musicCacheService';
-import { getCoverArtUrl } from '../services/subsonicService';
+import { getCoverArtUrl, VARIOUS_ARTISTS_COVER_ART_ID } from '../services/subsonicService';
 import { offlineModeStore } from '../store/offlineModeStore';
 
 /* ------------------------------------------------------------------ */
@@ -58,6 +58,11 @@ const PLACEHOLDER_COLOR = 'rgba(150,150,150,0.25)';
 /** Resolved URI for the bundled starred-songs cover art. */
 const STARRED_COVER_URI = RNImage.resolveAssetSource(
   require('../assets/starred-cover.jpg'),
+).uri;
+
+/** Resolved URI for the bundled Various Artists cover art. */
+const VARIOUS_ARTISTS_COVER_URI = RNImage.resolveAssetSource(
+  require('../assets/various-artists-cover.jpg'),
 ).uri;
 
 /* ------------------------------------------------------------------ */
@@ -97,9 +102,17 @@ export const CachedImage = memo(function CachedImage({
   placeholderColor,
   ...imageProps
 }: CachedImageProps) {
-  /* ---- resolve starred-songs sentinel to bundled asset ---- */
-  const coverArtId = rawCoverArtId === STARRED_COVER_ART_ID ? undefined : rawCoverArtId;
-  const fallbackUri = rawCoverArtId === STARRED_COVER_ART_ID ? STARRED_COVER_URI : rawFallbackUri;
+  /* ---- resolve sentinel cover art IDs to bundled assets ---- */
+  const isSentinel =
+    rawCoverArtId === STARRED_COVER_ART_ID ||
+    rawCoverArtId === VARIOUS_ARTISTS_COVER_ART_ID;
+
+  const coverArtId = isSentinel ? undefined : rawCoverArtId;
+  const fallbackUri = isSentinel
+    ? rawCoverArtId === STARRED_COVER_ART_ID
+      ? STARRED_COVER_URI
+      : VARIOUS_ARTISTS_COVER_URI
+    : rawFallbackUri;
 
   /* ---- initial synchronous cache check ---- */
   const initialCached = coverArtId ? getCachedImageUri(coverArtId, size) : null;
