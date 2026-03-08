@@ -16,7 +16,9 @@ function makeEntry(songCount: number, duration: number, entries: Array<{ id: str
       name: 'Playlist',
       songCount,
       duration,
-      entry: entries.map((e) => ({ id: e.id, title: 'Song', duration: e.duration ?? 180 })),
+      changed: new Date(),
+      created: new Date(),
+      entry: entries.map((e) => ({ id: e.id, title: 'Song', isDir: false as const, duration: e.duration ?? 180 })),
     },
     retrievedAt: Date.now(),
   };
@@ -29,7 +31,7 @@ beforeEach(() => {
 
 describe('fetchPlaylist', () => {
   it('fetches and stores playlist data', async () => {
-    const mockData = { id: 'pl-1', name: 'Test', songCount: 2, duration: 360, entry: [{ id: 's1' }, { id: 's2' }] };
+    const mockData = { id: 'pl-1', name: 'Test', songCount: 2, duration: 360, changed: new Date(), created: new Date(), entry: [{ id: 's1', isDir: false as const }, { id: 's2', isDir: false as const }] };
     mockGetPlaylist.mockResolvedValue(mockData);
     const result = await playlistDetailStore.getState().fetchPlaylist('pl-1');
     expect(result).toEqual(mockData);
@@ -49,7 +51,7 @@ describe('fetchPlaylist', () => {
   it('overwrites existing entry on re-fetch', async () => {
     const old = makeEntry(1, 100, [{ id: 's1' }]);
     playlistDetailStore.setState({ playlists: { 'pl-1': old } });
-    const newData = { id: 'pl-1', name: 'Updated', songCount: 2, duration: 200, entry: [{ id: 's1' }, { id: 's2' }] };
+    const newData = { id: 'pl-1', name: 'Updated', songCount: 2, duration: 200, changed: new Date(), created: new Date(), entry: [{ id: 's1', isDir: false as const }, { id: 's2', isDir: false as const }] };
     mockGetPlaylist.mockResolvedValue(newData);
     await playlistDetailStore.getState().fetchPlaylist('pl-1');
     expect(playlistDetailStore.getState().playlists['pl-1']!.playlist.name).toBe('Updated');
@@ -157,9 +159,11 @@ describe('removeTrack', () => {
         name: 'Playlist',
         songCount: 2,
         duration: 180,
+        changed: new Date(),
+        created: new Date(),
         entry: [
-          { id: 's1', title: 'Song', duration: 180 },
-          { id: 's2', title: 'Song2' },
+          { id: 's1', title: 'Song', isDir: false as const, duration: 180 },
+          { id: 's2', title: 'Song2', isDir: false as const },
         ],
       },
       retrievedAt: Date.now(),

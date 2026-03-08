@@ -11,7 +11,7 @@ function makeQueueItem(overrides?: Partial<{ itemId: string; name: string }>) {
     itemId: 'album-1',
     type: 'album' as const,
     name: 'Album',
-    tracks: [{ id: 's1', title: 'Song', artist: 'A' }],
+    tracks: [{ id: 's1', title: 'Song', artist: 'A', isDir: false }],
     totalTracks: 1,
     ...overrides,
   };

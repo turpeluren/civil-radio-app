@@ -15,7 +15,7 @@ jest.mock('expo-file-system', () => ({
 
 beforeEach(() => {
   storageLimitStore.setState({
-    limitMode: 'unlimited',
+    limitMode: 'none',
     maxCacheSizeGB: 0,
     isStorageFull: false,
   });

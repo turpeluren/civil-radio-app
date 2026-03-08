@@ -18,6 +18,6 @@ describe('getProminentColor', () => {
 
   it('handles non-string values', () => {
     expect(getProminentColor({ primary: 123 as unknown as string })).toBeNull();
-    expect(getProminentColor({ darkVibrant: null })).toBeNull();
+    expect(getProminentColor({ darkVibrant: undefined })).toBeNull();
   });
 });
