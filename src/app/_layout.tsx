@@ -1,7 +1,27 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
+import { LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+// Both expo-router (RouterFontUtils.swift) and react-native-screens
+// (RNSBarButtonItem.mm, RNSScreenStackHeaderConfig.mm) call
+// setTitleTextAttributes(_:for:) with UIControlStateSelected on
+// UIBarButtonItem, which UIKit does not support — it only accepts
+// .normal, .highlighted, .disabled, and .focused. The warning is
+// harmless (UIKit silently maps .selected → .highlighted) but floods
+// the console on every toolbar update.
+LogBox.ignoreLogs([
+  'button text attributes only respected for',
+  // React Native's Fabric ScrollView (RCTScrollViewComponentView.mm)
+  // implements focusItemsInRect: to support tvOS/keyboard focus
+  // navigation. UIKit logs a warning for every scroll view on screen
+  // because the override disables its internal linear-focus-movement
+  // cache optimisation. This affects all ScrollView-based components
+  // (FlashList, FlatList, DraggableFlatList, etc.) and is a known
+  // React Native issue with no user-side fix.
+  'RCTScrollViewComponentView implements focusItemsInRect:',
+]);
 
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import AnimatedSplashScreen from '../components/AnimatedSplashScreen';
