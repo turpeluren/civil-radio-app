@@ -1,5 +1,6 @@
 import {
   completedScrobbleStore,
+  type AnalyticsAggregates,
   type CompletedScrobble,
   type ListeningStats,
 } from '../completedScrobbleStore';
@@ -10,6 +11,15 @@ const EMPTY_STATS: ListeningStats = {
   totalPlays: 0,
   totalListeningSeconds: 0,
   uniqueArtists: {},
+};
+
+const EMPTY_AGGREGATES: AnalyticsAggregates = {
+  artistCounts: {},
+  albumCounts: {},
+  songCounts: {},
+  genreCounts: {},
+  hourBuckets: new Array(24).fill(0),
+  dayCounts: {},
 };
 
 function validScrobble(overrides?: Partial<CompletedScrobble>): CompletedScrobble {
@@ -25,6 +35,7 @@ function resetStore() {
   completedScrobbleStore.setState({
     completedScrobbles: [],
     stats: { ...EMPTY_STATS },
+    aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
   });
 }
 
@@ -115,6 +126,109 @@ describe('addCompleted', () => {
   });
 });
 
+describe('aggregates – incremental updates', () => {
+  it('updates artistCounts incrementally', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'ArtistX', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'ArtistX', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '3', song: { id: 's3', title: 'C', artist: 'ArtistY', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.artistCounts['ArtistX']).toBe(2);
+    expect(aggregates.artistCounts['ArtistY']).toBe(1);
+  });
+
+  it('updates albumCounts incrementally', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', album: 'AlbumA', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', album: 'AlbumA', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.albumCounts['AlbumA::Art'].count).toBe(2);
+    expect(aggregates.albumCounts['AlbumA::Art'].artist).toBe('Art');
+  });
+
+  it('updates songCounts incrementally and keeps latest song metadata', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'Old Title', artist: 'Art', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's1', title: 'New Title', artist: 'Art', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.songCounts['s1'].count).toBe(2);
+    expect(aggregates.songCounts['s1'].song.title).toBe('New Title');
+  });
+
+  it('updates genreCounts incrementally', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', genre: 'Rock', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', genre: 'Rock', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '3', song: { id: 's3', title: 'C', artist: 'Art', genre: 'Jazz', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.genreCounts['Rock']).toBe(2);
+    expect(aggregates.genreCounts['Jazz']).toBe(1);
+  });
+
+  it('updates hourBuckets incrementally', () => {
+    const time = new Date(2025, 0, 15, 14, 30).getTime();
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', time, song: { id: 's1', title: 'A', artist: 'Art', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.hourBuckets[14]).toBe(1);
+    expect(aggregates.hourBuckets.reduce((a, b) => a + b, 0)).toBe(1);
+  });
+
+  it('updates dayCounts incrementally', () => {
+    const time1 = new Date(2025, 0, 15, 10).getTime();
+    const time2 = new Date(2025, 0, 15, 14).getTime();
+    const time3 = new Date(2025, 0, 16, 10).getTime();
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', time: time1, song: { id: 's1', title: 'A', artist: 'Art', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', time: time2, song: { id: 's2', title: 'B', artist: 'Art', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '3', time: time3, song: { id: 's3', title: 'C', artist: 'Art', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.dayCounts['2025-01-15']).toBe(2);
+    expect(aggregates.dayCounts['2025-01-16']).toBe(1);
+  });
+
+  it('handles missing artist by using Unknown', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A' } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.artistCounts['Unknown']).toBe(1);
+  });
+
+  it('does not update aggregates on rejected scrobble', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '' }));
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(Object.keys(aggregates.artistCounts)).toHaveLength(0);
+    expect(Object.keys(aggregates.songCounts)).toHaveLength(0);
+  });
+
+  it('incremental aggregates match full rebuild', () => {
+    for (let i = 0; i < 10; i++) {
+      completedScrobbleStore.getState().addCompleted(
+        validScrobble({
+          id: `s-${i}`,
+          song: { id: `song-${i % 3}`, title: `T${i}`, artist: `A${i % 2}`, album: `Alb${i % 4}`, genre: i % 2 === 0 ? 'Rock' : 'Jazz', duration: 100 } as any,
+          time: new Date(2025, 0, 10 + (i % 5), i % 24).getTime(),
+        }),
+      );
+    }
+    const incrementalAgg = completedScrobbleStore.getState().aggregates;
+
+    completedScrobbleStore.setState({ aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) } });
+    completedScrobbleStore.getState().rebuildAggregates();
+    const rebuiltAgg = completedScrobbleStore.getState().aggregates;
+
+    expect(incrementalAgg.artistCounts).toEqual(rebuiltAgg.artistCounts);
+    expect(incrementalAgg.albumCounts).toEqual(rebuiltAgg.albumCounts);
+    expect(incrementalAgg.genreCounts).toEqual(rebuiltAgg.genreCounts);
+    expect(incrementalAgg.hourBuckets).toEqual(rebuiltAgg.hourBuckets);
+    expect(incrementalAgg.dayCounts).toEqual(rebuiltAgg.dayCounts);
+    // songCounts: compare counts (song metadata may differ since rebuild uses last occurrence)
+    for (const key of Object.keys(rebuiltAgg.songCounts)) {
+      expect(incrementalAgg.songCounts[key].count).toBe(rebuiltAgg.songCounts[key].count);
+    }
+  });
+});
+
 describe('rebuildStats', () => {
   it('recomputes stats from scrobbles', () => {
     completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'A', duration: 100 } as any }));
@@ -153,6 +267,44 @@ describe('rebuildStats', () => {
   });
 });
 
+describe('rebuildAggregates', () => {
+  it('rebuilds all aggregate fields from scrobbles', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({
+      id: '1',
+      song: { id: 's1', title: 'A', artist: 'Art', album: 'Alb', genre: 'Rock', duration: 100 } as any,
+      time: new Date(2025, 0, 15, 10).getTime(),
+    }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({
+      id: '2',
+      song: { id: 's2', title: 'B', artist: 'Art', album: 'Alb', genre: 'Jazz', duration: 200 } as any,
+      time: new Date(2025, 0, 15, 14).getTime(),
+    }));
+
+    completedScrobbleStore.setState({ aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) } });
+    completedScrobbleStore.getState().rebuildAggregates();
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.artistCounts['Art']).toBe(2);
+    expect(aggregates.albumCounts['Alb::Art'].count).toBe(2);
+    expect(aggregates.songCounts['s1'].count).toBe(1);
+    expect(aggregates.songCounts['s2'].count).toBe(1);
+    expect(aggregates.genreCounts['Rock']).toBe(1);
+    expect(aggregates.genreCounts['Jazz']).toBe(1);
+    expect(aggregates.hourBuckets[10]).toBe(1);
+    expect(aggregates.hourBuckets[14]).toBe(1);
+    expect(aggregates.dayCounts['2025-01-15']).toBe(2);
+  });
+
+  it('is idempotent', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', duration: 100 } as any }));
+    const aggAfterAdd = { ...completedScrobbleStore.getState().aggregates };
+    completedScrobbleStore.getState().rebuildAggregates();
+    const aggAfterRebuild = completedScrobbleStore.getState().aggregates;
+    expect(aggAfterRebuild.artistCounts).toEqual(aggAfterAdd.artistCounts);
+    expect(aggAfterRebuild.dayCounts).toEqual(aggAfterAdd.dayCounts);
+  });
+});
+
 describe('onRehydrateStorage', () => {
   it('deduplicates scrobbles with same id and rebuilds stats', () => {
     const duped: CompletedScrobble[] = [
@@ -163,6 +315,7 @@ describe('onRehydrateStorage', () => {
     completedScrobbleStore.setState({
       completedScrobbles: duped,
       stats: { totalPlays: 3, totalListeningSeconds: 400, uniqueArtists: { A: true, B: true } },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
     });
     // Trigger rehydrate callback
     completedScrobbleStore.persist.rehydrate();
@@ -182,6 +335,7 @@ describe('onRehydrateStorage', () => {
     completedScrobbleStore.setState({
       completedScrobbles: dirty,
       stats: { totalPlays: 4, totalListeningSeconds: 0, uniqueArtists: {} },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
     });
     completedScrobbleStore.persist.rehydrate();
     expect(completedScrobbleStore.getState().completedScrobbles).toHaveLength(1);
@@ -194,6 +348,7 @@ describe('onRehydrateStorage', () => {
         validScrobble({ id: 'a', song: { id: 's1', title: 'X', artist: 'A', duration: 100 } as any }),
       ],
       stats: { ...EMPTY_STATS },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
     });
     completedScrobbleStore.persist.rehydrate();
     expect(completedScrobbleStore.getState().stats.totalPlays).toBe(1);
@@ -205,10 +360,28 @@ describe('onRehydrateStorage', () => {
     completedScrobbleStore.setState({
       completedScrobbles: [scrobble],
       stats: { totalPlays: 1, totalListeningSeconds: 100, uniqueArtists: { A: true } },
+      aggregates: { artistCounts: { A: 1 }, albumCounts: {}, songCounts: { s1: { song: scrobble.song, count: 1 } }, genreCounts: {}, hourBuckets: new Array(24).fill(0), dayCounts: { '2025-01-15': 1 } },
     });
     completedScrobbleStore.persist.rehydrate();
     const statsAfter = completedScrobbleStore.getState().stats;
     expect(statsAfter.totalPlays).toBe(1);
     expect(statsAfter.totalListeningSeconds).toBe(100);
+  });
+
+  it('rebuilds aggregates when dayCounts is missing (upgrade path)', () => {
+    const scrobble = validScrobble({
+      id: 'a',
+      song: { id: 's1', title: 'X', artist: 'A', duration: 100 } as any,
+      time: new Date(2025, 0, 15, 10).getTime(),
+    });
+    completedScrobbleStore.setState({
+      completedScrobbles: [scrobble],
+      stats: { totalPlays: 1, totalListeningSeconds: 100, uniqueArtists: { A: true } },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
+    });
+    completedScrobbleStore.persist.rehydrate();
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.dayCounts['2025-01-15']).toBe(1);
+    expect(aggregates.artistCounts['A']).toBe(1);
   });
 });

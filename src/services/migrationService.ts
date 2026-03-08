@@ -12,6 +12,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
+import { completedScrobbleStore } from '../store/completedScrobbleStore';
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -125,6 +127,20 @@ const MIGRATION_TASKS: MigrationTask[] = [
     },
   },
 
+  {
+    id: 3,
+    name: 'Build analytics aggregates',
+    run: async (log) => {
+      const state = completedScrobbleStore.getState();
+      if (state.completedScrobbles.length === 0) {
+        log('No scrobbles — skipping aggregate rebuild.');
+        return;
+      }
+      state.rebuildAggregates();
+      log(`Rebuilt aggregates for ${state.completedScrobbles.length} scrobbles.`);
+    },
+  },
+
   // -------------------------------------------------------------------
   // TEMPLATE – How to add a new migration task:
   //
@@ -137,7 +153,7 @@ const MIGRATION_TASKS: MigrationTask[] = [
   // Example:
   //
   // {
-  //   id: 3,
+  //   id: 4,
   //   name: 'Reset playback settings',
   //   run: async () => {
   //     // your migration logic here

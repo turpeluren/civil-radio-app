@@ -493,7 +493,7 @@ export function SettingsStorageScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </Pressable>
           <Pressable
-            onPress={() => router.push('/playback-history')}
+            onPress={() => router.push('/my-listening')}
             style={({ pressed }) => [
               styles.browseCacheButton,
               { borderTopColor: colors.border },

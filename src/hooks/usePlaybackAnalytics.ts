@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { type Child } from '../services/subsonicService';
+import { type AnalyticsAggregates } from '../store/completedScrobbleStore';
 
 export type TimePeriod = '7d' | '30d' | '90d' | 'all';
 
@@ -65,7 +66,7 @@ const PERIOD_DAYS: Record<TimePeriod, number | null> = {
 
 const HEATMAP_WEEKS = 16;
 
-function dateKey(ts: number): string {
+export function dateKey(ts: number): string {
   const d = new Date(ts);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -78,15 +79,20 @@ function offsetDateKey(dk: string, offset: number): string {
   return dateKey(new Date(y, m - 1, d + offset).getTime());
 }
 
-export function computeStreaks(scrobbles: Pick<ScrobbleRecord, 'time'>[]): {
+export function computeStreaks(input: Pick<ScrobbleRecord, 'time'>[] | string[]): {
   longest: number;
   current: number;
 } {
-  if (scrobbles.length === 0) return { longest: 0, current: 0 };
+  if (input.length === 0) return { longest: 0, current: 0 };
 
-  const daySet = new Set<string>();
-  for (const s of scrobbles) {
-    daySet.add(dateKey(s.time));
+  let daySet: Set<string>;
+  if (typeof input[0] === 'string') {
+    daySet = new Set(input as string[]);
+  } else {
+    daySet = new Set<string>();
+    for (const s of input as Pick<ScrobbleRecord, 'time'>[]) {
+      daySet.add(dateKey(s.time));
+    }
   }
 
   const sortedDays = Array.from(daySet).sort();
@@ -120,13 +126,163 @@ export function computeStreaks(scrobbles: Pick<ScrobbleRecord, 'time'>[]): {
   return { longest, current };
 }
 
+function buildGenreBreakdown(genreCounts: Map<string, number> | Record<string, number>): GenreSlice[] {
+  const entries = genreCounts instanceof Map
+    ? Array.from(genreCounts.entries())
+    : Object.entries(genreCounts);
+
+  const sortedGenres = entries
+    .map(([genre, count]) => ({ genre, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const totalWithGenre = sortedGenres.reduce((sum, g) => sum + g.count, 0);
+
+  if (sortedGenres.length <= 6) {
+    return sortedGenres.map((g) => ({
+      ...g,
+      percentage: totalWithGenre > 0 ? (g.count / totalWithGenre) * 100 : 0,
+    }));
+  }
+
+  const top = sortedGenres.slice(0, 5);
+  const otherCount = sortedGenres.slice(5).reduce((sum, g) => sum + g.count, 0);
+  return [
+    ...top.map((g) => ({
+      ...g,
+      percentage: totalWithGenre > 0 ? (g.count / totalWithGenre) * 100 : 0,
+    })),
+    {
+      genre: 'Other',
+      count: otherCount,
+      percentage: totalWithGenre > 0 ? (otherCount / totalWithGenre) * 100 : 0,
+    },
+  ];
+}
+
+function computePeakHour(hourBuckets: number[]): number {
+  let peakHour = 0;
+  let peakCount = 0;
+  for (let h = 0; h < 24; h++) {
+    if (hourBuckets[h] > peakCount) {
+      peakCount = hourBuckets[h];
+      peakHour = h;
+    }
+  }
+  return peakHour;
+}
+
 export function usePlaybackAnalytics(
   scrobbles: ScrobbleRecord[],
   period: TimePeriod,
-  pendingScrobbles?: Pick<ScrobbleRecord, 'time'>[]
+  pendingScrobbles?: Pick<ScrobbleRecord, 'time'>[],
+  aggregates?: AnalyticsAggregates,
 ): PlaybackAnalytics {
-  return useMemo(() => {
+  // Period-independent: heatmap + streaks (always use all data)
+  const periodIndependent = useMemo(() => {
+    // Heatmap
+    const heatmapDays = HEATMAP_WEEKS * 7;
+    const heatmapData: DailyActivity[] = [];
+    const today = new Date();
+    const todayDay = today.getDay();
+    const gridEnd = new Date(today);
+    gridEnd.setDate(gridEnd.getDate() + (6 - todayDay));
+    gridEnd.setHours(0, 0, 0, 0);
+    const gridStart = new Date(gridEnd);
+    gridStart.setDate(gridStart.getDate() - heatmapDays + 1);
+
+    if (aggregates?.dayCounts && Object.keys(aggregates.dayCounts).length > 0) {
+      // Use pre-computed day counts — O(112) iterations
+      for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) {
+        const dk = dateKey(d.getTime());
+        heatmapData.push({ date: dk, count: aggregates.dayCounts[dk] ?? 0 });
+      }
+    } else {
+      // Fallback: iterate all scrobbles
+      const allDayCounts = new Map<string, number>();
+      for (const s of scrobbles) {
+        const dk = dateKey(s.time);
+        allDayCounts.set(dk, (allDayCounts.get(dk) ?? 0) + 1);
+      }
+      for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) {
+        const dk = dateKey(d.getTime());
+        heatmapData.push({ date: dk, count: allDayCounts.get(dk) ?? 0 });
+      }
+    }
+
+    // Streaks
+    const allPending = pendingScrobbles ?? [];
+    let streaks: { longest: number; current: number };
+    if (aggregates?.dayCounts && Object.keys(aggregates.dayCounts).length > 0) {
+      const dayKeys = new Set(Object.keys(aggregates.dayCounts));
+      for (const s of allPending) dayKeys.add(dateKey(s.time));
+      streaks = computeStreaks(Array.from(dayKeys));
+    } else {
+      streaks = computeStreaks([...scrobbles, ...allPending]);
+    }
+
+    return { heatmapData, ...streaks };
+  }, [aggregates, scrobbles, pendingScrobbles]);
+
+  // Period-dependent: stats, tops, charts
+  const periodDependent = useMemo(() => {
     const periodDays = PERIOD_DAYS[period];
+
+    // "all" period with aggregates: use pre-computed data
+    if (!periodDays && aggregates?.dayCounts && Object.keys(aggregates.dayCounts).length > 0) {
+      let totalListeningSeconds = 0;
+      for (const entry of Object.values(aggregates.songCounts)) {
+        totalListeningSeconds += (entry.song.duration ?? 0) * entry.count;
+      }
+
+      const topSongs = Object.values(aggregates.songCounts)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      const topArtists = Object.entries(aggregates.artistCounts)
+        .map(([artist, count]) => ({ artist, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      const topAlbums = Object.entries(aggregates.albumCounts)
+        .map(([key, val]) => ({
+          album: key.split('::')[0],
+          artist: val.artist,
+          coverArt: val.coverArt,
+          count: val.count,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      const genreBreakdown = buildGenreBreakdown(aggregates.genreCounts);
+
+      const totalPlays = Object.values(aggregates.dayCounts).reduce((sum, c) => sum + c, 0);
+      const uniqueDays = Object.keys(aggregates.dayCounts).length;
+
+      const dailyActivity: DailyActivity[] = [];
+      const activityDays = 90;
+      const now = Date.now();
+      for (let i = activityDays - 1; i >= 0; i--) {
+        const dk = dateKey(now - i * 86_400_000);
+        dailyActivity.push({ date: dk, count: aggregates.dayCounts[dk] ?? 0 });
+      }
+
+      return {
+        totalPlays,
+        totalListeningSeconds,
+        uniqueArtists: Object.keys(aggregates.artistCounts).length,
+        uniqueAlbums: Object.keys(aggregates.albumCounts).length,
+        dailyActivity,
+        hourlyDistribution: aggregates.hourBuckets,
+        topSongs,
+        topArtists,
+        topAlbums,
+        genreBreakdown,
+        peakHour: computePeakHour(aggregates.hourBuckets),
+        averagePlaysPerDay: uniqueDays > 0 ? Math.round((totalPlays / uniqueDays) * 10) / 10 : 0,
+      };
+    }
+
+    // Filter-based path: period-specific or no aggregates
     const cutoff = periodDays
       ? Date.now() - periodDays * 86_400_000
       : 0;
@@ -184,18 +340,15 @@ export function usePlaybackAnalytics(
       dayCounts.set(dk, (dayCounts.get(dk) ?? 0) + 1);
     }
 
-    // Top songs
     const topSongs = Array.from(songCounts.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // Top artists
     const topArtists = Array.from(artistCounts.entries())
       .map(([artist, count]) => ({ artist, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // Top albums
     const topAlbums = Array.from(albumCounts.entries())
       .map(([key, val]) => ({
         album: key.split('::')[0],
@@ -206,35 +359,8 @@ export function usePlaybackAnalytics(
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Genre breakdown (top 6 + Other)
-    const sortedGenres = Array.from(genreCounts.entries())
-      .map(([genre, count]) => ({ genre, count }))
-      .sort((a, b) => b.count - a.count);
+    const genreBreakdown = buildGenreBreakdown(genreCounts);
 
-    const totalWithGenre = sortedGenres.reduce((sum, g) => sum + g.count, 0);
-    let genreBreakdown: GenreSlice[];
-    if (sortedGenres.length <= 6) {
-      genreBreakdown = sortedGenres.map((g) => ({
-        ...g,
-        percentage: totalWithGenre > 0 ? (g.count / totalWithGenre) * 100 : 0,
-      }));
-    } else {
-      const top = sortedGenres.slice(0, 5);
-      const otherCount = sortedGenres.slice(5).reduce((sum, g) => sum + g.count, 0);
-      genreBreakdown = [
-        ...top.map((g) => ({
-          ...g,
-          percentage: totalWithGenre > 0 ? (g.count / totalWithGenre) * 100 : 0,
-        })),
-        {
-          genre: 'Other',
-          count: otherCount,
-          percentage: totalWithGenre > 0 ? (otherCount / totalWithGenre) * 100 : 0,
-        },
-      ];
-    }
-
-    // Daily activity for the selected period
     const activityDays = periodDays ?? 90;
     const dailyActivity: DailyActivity[] = [];
     const now = Date.now();
@@ -243,43 +369,6 @@ export function usePlaybackAnalytics(
       dailyActivity.push({ date: dk, count: dayCounts.get(dk) ?? 0 });
     }
 
-    // Heatmap data (always last 16 weeks regardless of period filter)
-    const heatmapDays = HEATMAP_WEEKS * 7;
-    const allDayCounts = new Map<string, number>();
-    for (const s of scrobbles) {
-      const dk = dateKey(s.time);
-      allDayCounts.set(dk, (allDayCounts.get(dk) ?? 0) + 1);
-    }
-    const heatmapData: DailyActivity[] = [];
-    // Start from the most recent Sunday to align the grid
-    const today = new Date();
-    const todayDay = today.getDay();
-    const gridEnd = new Date(today);
-    gridEnd.setDate(gridEnd.getDate() + (6 - todayDay));
-    gridEnd.setHours(0, 0, 0, 0);
-    const gridStart = new Date(gridEnd);
-    gridStart.setDate(gridStart.getDate() - heatmapDays + 1);
-
-    for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) {
-      const dk = dateKey(d.getTime());
-      heatmapData.push({ date: dk, count: allDayCounts.get(dk) ?? 0 });
-    }
-
-    // Peak hour
-    let peakHour = 0;
-    let peakCount = 0;
-    for (let h = 0; h < 24; h++) {
-      if (hourBuckets[h] > peakCount) {
-        peakCount = hourBuckets[h];
-        peakHour = h;
-      }
-    }
-
-    // Streaks are a lifetime metric – always use all scrobbles (including pending)
-    const allPending = pendingScrobbles ?? [];
-    const { longest, current } = computeStreaks([...scrobbles, ...allPending]);
-
-    // Average plays per day
     const uniqueDays = dayCounts.size;
     const averagePlaysPerDay =
       uniqueDays > 0 ? Math.round((totalPlays / uniqueDays) * 10) / 10 : 0;
@@ -289,17 +378,21 @@ export function usePlaybackAnalytics(
       totalListeningSeconds,
       uniqueArtists: artistCounts.size,
       uniqueAlbums: albumCounts.size,
-      longestStreak: longest,
-      currentStreak: current,
       dailyActivity,
       hourlyDistribution: hourBuckets,
       topSongs,
       topArtists,
       topAlbums,
       genreBreakdown,
-      heatmapData,
-      peakHour,
+      peakHour: computePeakHour(hourBuckets),
       averagePlaysPerDay,
     };
-  }, [scrobbles, period, pendingScrobbles]);
+  }, [scrobbles, period, aggregates]);
+
+  return useMemo(() => ({
+    ...periodDependent,
+    heatmapData: periodIndependent.heatmapData,
+    longestStreak: periodIndependent.longest,
+    currentStreak: periodIndependent.current,
+  }), [periodDependent, periodIndependent]);
 }

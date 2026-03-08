@@ -56,16 +56,17 @@ function timeAgo(ts: number): string {
   return `${weeks}w ago`;
 }
 
-export function PlaybackHistoryScreen() {
+export function MyListeningScreen() {
   const { colors } = useTheme();
   const transitionComplete = useTransitionComplete();
   const [period, setPeriod] = useState<TimePeriod>('30d');
 
   const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
+  const aggregates = completedScrobbleStore((s) => s.aggregates);
   const dateFormat = layoutPreferencesStore((s) => s.dateFormat);
 
-  const analytics = usePlaybackAnalytics(completedScrobbles, period, pendingScrobbles);
+  const analytics = usePlaybackAnalytics(completedScrobbles, period, pendingScrobbles, aggregates);
 
   const handlePeriodChange = useCallback((p: TimePeriod) => {
     setPeriod(p);
@@ -86,7 +87,7 @@ export function PlaybackHistoryScreen() {
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <EmptyState
           icon="musical-notes-outline"
-          title="No playback history yet"
+          title="No listening history yet"
           subtitle="Listen to some music and check back soon to see your personal stats, top tracks, and listening trends."
         >
           <Text style={[styles.emptyDisclaimer, { color: colors.textSecondary }]}>

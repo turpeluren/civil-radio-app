@@ -23,7 +23,7 @@ import { AnimatedNumber } from '../components/AnimatedNumber';
 import { DownloadedIcon } from '../components/DownloadedIcon';
 import { EmptyState } from '../components/EmptyState';
 import { PlaylistCard } from '../components/PlaylistCard';
-import { computeStreaks } from '../hooks/usePlaybackAnalytics';
+import { computeStreaks, dateKey } from '../hooks/usePlaybackAnalytics';
 import { useTheme } from '../hooks/useTheme';
 import type { AlbumID3, Playlist } from '../services/subsonicService';
 import { albumLibraryStore } from '../store/albumLibraryStore';
@@ -296,12 +296,14 @@ export function HomeScreen() {
   const uniqueArtistCount = completedScrobbleStore(
     (s) => Object.keys(s.stats.uniqueArtists).length
   );
-  const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
+  const dayCounts = completedScrobbleStore((s) => s.aggregates.dayCounts);
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
   const listeningStats = useMemo(() => {
-    const { current: streak } = computeStreaks([...completedScrobbles, ...pendingScrobbles]);
+    const dayKeys = new Set(Object.keys(dayCounts));
+    for (const s of pendingScrobbles) dayKeys.add(dateKey(s.time));
+    const { current: streak } = computeStreaks(Array.from(dayKeys));
     return { total: totalPlays, totalSeconds, artists: uniqueArtistCount, streak };
-  }, [totalPlays, totalSeconds, uniqueArtistCount, completedScrobbles, pendingScrobbles]);
+  }, [totalPlays, totalSeconds, uniqueArtistCount, dayCounts, pendingScrobbles]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -389,7 +391,7 @@ export function HomeScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Pressable
-                onPress={() => router.push('/playback-history')}
+                onPress={() => router.push('/my-listening')}
                 style={({ pressed }) => [
                   { flex: 1 },
                   pressed && styles.iconButtonPressed,
@@ -403,7 +405,7 @@ export function HomeScreen() {
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => router.push('/playback-history')}
+                onPress={() => router.push('/my-listening')}
                 style={({ pressed }) => [
                   styles.iconButton,
                   pressed && styles.iconButtonPressed,
@@ -414,7 +416,7 @@ export function HomeScreen() {
               </Pressable>
             </View>
             <Pressable
-              onPress={() => router.push('/playback-history')}
+              onPress={() => router.push('/my-listening')}
               style={({ pressed }) => [
                 styles.listeningCard,
                 { backgroundColor: colors.card },

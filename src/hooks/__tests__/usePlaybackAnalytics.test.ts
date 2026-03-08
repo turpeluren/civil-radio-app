@@ -2,10 +2,13 @@ import { renderHook } from '@testing-library/react-native';
 
 import {
   computeStreaks,
+  dateKey,
   usePlaybackAnalytics,
   type ScrobbleRecord,
   type TimePeriod,
 } from '../usePlaybackAnalytics';
+
+import { type AnalyticsAggregates } from '../../store/completedScrobbleStore';
 
 function ts(year: number, month: number, day: number): number {
   return Date.UTC(year, month - 1, day, 12, 0, 0);
@@ -170,6 +173,30 @@ describe('computeStreaks', () => {
         { time: localTs(2025, 1, 15, 0, 1) },
       ]),
     ).toEqual({ longest: 2, current: 2 });
+  });
+
+  // Day-keys overload tests
+  it('accepts string[] day keys', () => {
+    expect(
+      computeStreaks(['2025-01-13', '2025-01-14', '2025-01-15']),
+    ).toEqual({ longest: 3, current: 3 });
+  });
+
+  it('accepts string[] with gap', () => {
+    expect(
+      computeStreaks(['2025-01-10', '2025-01-12', '2025-01-15']),
+    ).toEqual({ longest: 1, current: 1 });
+  });
+
+  it('day-keys overload returns zeros for empty array', () => {
+    expect(computeStreaks([] as string[])).toEqual({ longest: 0, current: 0 });
+  });
+});
+
+describe('dateKey', () => {
+  it('formats timestamp as YYYY-MM-DD', () => {
+    const t = new Date(2025, 0, 5, 10, 30).getTime();
+    expect(dateKey(t)).toBe('2025-01-05');
   });
 });
 
@@ -408,9 +435,6 @@ describe('usePlaybackAnalytics', () => {
     const { result } = renderHook(() =>
       usePlaybackAnalytics(withGenresArray, 'all'),
     );
-    // genres[0] is { name: 'Rock' } which is an object, not a string;
-    // the source uses s.song.genres?.[0] which returns the object, not a string genre.
-    // This documents the actual behavior.
     expect(result.current.genreBreakdown).toHaveLength(1);
   });
 
@@ -421,5 +445,107 @@ describe('usePlaybackAnalytics', () => {
     expect(result.current.hourlyDistribution).toHaveLength(24);
     const total = result.current.hourlyDistribution.reduce((a, b) => a + b, 0);
     expect(total).toBe(3);
+  });
+});
+
+describe('usePlaybackAnalytics with aggregates', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2025-01-15T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const scrobbles: ScrobbleRecord[] = [
+    { id: '1', song: mockSong('s1', 'Artist A', 'Album X', 200), time: ts(2025, 1, 14) },
+    { id: '2', song: mockSong('s1', 'Artist A', 'Album X', 200), time: ts(2025, 1, 14) },
+    { id: '3', song: mockSong('s2', 'Artist B', 'Album Y', 240), time: ts(2025, 1, 13) },
+  ];
+
+  function buildAggregatesFromScrobbles(records: ScrobbleRecord[]): AnalyticsAggregates {
+    const artistCounts: Record<string, number> = {};
+    const albumCounts: Record<string, { artist: string; coverArt?: string; count: number }> = {};
+    const songCounts: Record<string, { song: ScrobbleRecord['song']; count: number }> = {};
+    const genreCounts: Record<string, number> = {};
+    const hourBuckets = new Array<number>(24).fill(0);
+    const dayCounts: Record<string, number> = {};
+
+    for (const s of records) {
+      const artist = s.song.artist ?? 'Unknown';
+      artistCounts[artist] = (artistCounts[artist] ?? 0) + 1;
+
+      const albumKey = `${s.song.album ?? 'Unknown'}::${artist}`;
+      const existing = albumCounts[albumKey];
+      if (existing) existing.count++;
+      else albumCounts[albumKey] = { artist, count: 1 };
+
+      const existingSong = songCounts[s.song.id];
+      if (existingSong) { existingSong.count++; existingSong.song = s.song; }
+      else songCounts[s.song.id] = { song: s.song, count: 1 };
+
+      hourBuckets[new Date(s.time).getHours()]++;
+
+      const dk = dateKey(s.time);
+      dayCounts[dk] = (dayCounts[dk] ?? 0) + 1;
+    }
+
+    return { artistCounts, albumCounts, songCounts, genreCounts, hourBuckets, dayCounts } as AnalyticsAggregates;
+  }
+
+  it('uses aggregates for "all" period and produces same results', () => {
+    const aggregates = buildAggregatesFromScrobbles(scrobbles);
+
+    const { result: withAgg } = renderHook(() =>
+      usePlaybackAnalytics(scrobbles, 'all', undefined, aggregates),
+    );
+    const { result: withoutAgg } = renderHook(() =>
+      usePlaybackAnalytics(scrobbles, 'all'),
+    );
+
+    expect(withAgg.current.totalPlays).toBe(withoutAgg.current.totalPlays);
+    expect(withAgg.current.uniqueArtists).toBe(withoutAgg.current.uniqueArtists);
+    expect(withAgg.current.uniqueAlbums).toBe(withoutAgg.current.uniqueAlbums);
+    expect(withAgg.current.topSongs.map(s => s.song.id)).toEqual(withoutAgg.current.topSongs.map(s => s.song.id));
+    expect(withAgg.current.topArtists).toEqual(withoutAgg.current.topArtists);
+    expect(withAgg.current.longestStreak).toBe(withoutAgg.current.longestStreak);
+    expect(withAgg.current.currentStreak).toBe(withoutAgg.current.currentStreak);
+  });
+
+  it('still filters by period when aggregates are provided', () => {
+    const oldScrobble: ScrobbleRecord = {
+      id: 'old',
+      song: mockSong('old', 'Old', 'Old', 100),
+      time: ts(2024, 12, 1),
+    };
+    const allScrobbles = [...scrobbles, oldScrobble];
+    const aggregates = buildAggregatesFromScrobbles(allScrobbles);
+
+    const { result } = renderHook(() =>
+      usePlaybackAnalytics(allScrobbles, '7d', undefined, aggregates),
+    );
+    // Period-filtered: only recent 3 scrobbles
+    expect(result.current.totalPlays).toBe(3);
+  });
+
+  it('uses aggregates dayCounts for heatmap', () => {
+    const aggregates = buildAggregatesFromScrobbles(scrobbles);
+
+    const { result } = renderHook(() =>
+      usePlaybackAnalytics(scrobbles, '7d', undefined, aggregates),
+    );
+    // Heatmap should have entries for 16 weeks
+    expect(result.current.heatmapData.length).toBe(16 * 7);
+  });
+
+  it('uses aggregates dayCounts for streaks', () => {
+    const aggregates = buildAggregatesFromScrobbles(scrobbles);
+    const pending = [{ time: ts(2025, 1, 15) }];
+
+    const { result } = renderHook(() =>
+      usePlaybackAnalytics(scrobbles, 'all', pending, aggregates),
+    );
+    expect(result.current.currentStreak).toBe(3);
   });
 });

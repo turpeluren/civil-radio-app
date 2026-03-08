@@ -261,7 +261,7 @@ export default function RootLayout() {
           options={{ title: 'Scrobbles', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
-          name="playback-history"
+          name="my-listening"
           options={{ title: 'My Listening', headerBackTitle: 'Back' }}
         />
         <Stack.Screen

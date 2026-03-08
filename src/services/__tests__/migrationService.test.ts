@@ -4,6 +4,8 @@ let mockDirExists = false;
 const mockDirDelete = jest.fn();
 const mockFileDelete = jest.fn();
 
+jest.mock('../../store/sqliteStorage', () => require('../../store/__mocks__/sqliteStorage'));
+
 jest.mock('expo-file-system', () => {
   class MockFile {
     uri: string;
