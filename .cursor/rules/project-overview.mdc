@@ -106,6 +106,12 @@ The scripts auto-detect `JAVA_HOME` (Android Studio bundled JBR) and `ANDROID_HO
 
 **Do not run native builds from within the agent.** Native builds require network access and environment setup that the Cursor sandbox does not provide. When a plan includes a build verification step, note it as a manual step for the user to run in their own terminal.
 
+## Testing
+
+**Before starting any work**, run both a TypeScript compilation check (`npx tsc --noEmit`) and the full test suite (`npx jest --no-coverage`). Ensure there are no errors or warnings. If there are failures, resolve them before making any changes.
+
+**After completing work**, run both checks again. There must be no TypeScript errors, and any new warnings introduced by your changes should be seriously considered and resolved. All tests must still pass. Always check if tests need to be updated, added, or removed to keep the test suite aligned with the changes made.
+
 ## AI Instruction Files — Keep in Sync
 
 Three files contain AI agent instructions and must always stay identical in content:
@@ -119,3 +125,46 @@ Three files contain AI agent instructions and must always stay identical in cont
 ## Planning
 
 When creating or presenting a plan, **always** end with a **bulleted list of todos** — each a single actionable step using clear, imperative phrasing. Keep the list proportional to the work.
+
+---
+
+# UX & UI Quality
+
+## Excellence by Default
+
+Every change must consider the user experience beyond the basic functional requirement. Prioritize how the interface looks, feels, and responds — not just whether it works.
+
+## Smooth, Consistent Animations
+
+Animations and transitions should be smooth, beautiful, and stylistically consistent across the entire application. Use consistent easing curves and durations so the app feels cohesive. Avoid jarring cuts, instant state swaps, or mismatched motion styles between screens.
+
+## Prefer Reanimated
+
+All animations should use `react-native-reanimated` by default. Reanimated runs animations on the UI thread via worklets, avoiding JS thread bottlenecks and enabling smooth 60fps motion even under load.
+
+Key APIs to use:
+
+- `useSharedValue` for mutable animated values
+- `useAnimatedStyle` for styles driven by shared values
+- `withTiming`, `withSpring`, `withDelay`, `withSequence`, `withRepeat` for animation composition
+- `interpolate` (inside `useAnimatedStyle`) for value mapping
+- `cancelAnimation` to stop running animations
+- `runOnJS` to call JS-thread functions from animation callbacks
+- `Animated.View`, `Animated.Image` etc. imported from `react-native-reanimated`
+
+Do **not** import `Animated` or `Easing` from `react-native`, except in the case noted below.
+
+### Exception: Slow Linear Translations
+
+For **slow, constant-velocity linear animations** such as marquee or ticker scrolling, use React Native's built-in `Animated` API with `useNativeDriver: true` instead of Reanimated. The native driver delegates interpolation directly to the platform's display-synced animation loop (CADisplayLink on iOS, Choreographer on Android), which produces perfectly uniform frame-to-frame deltas. Reanimated's worklet-thread timing introduces micro-jitter at low speeds that is perceptible to users.
+
+Canonical example: `MarqueeText` (`src/components/MarqueeText.tsx`) uses `Animated.timing` + `Animated.loop` from `react-native` for this reason.
+
+## Let Animations Breathe
+
+Give animations and transitions enough time to run and complete so users can perceive what is happening. Do not skip or shortcut visual feedback in favor of speed. The user should always understand the result of their action through motion and visual cues.
+
+Existing patterns that embody this principle:
+
+- **`useTransitionComplete()`** – defer heavy rendering until a navigation transition finishes, preventing janky animations.
+- **`minDelay()`** – ensure loading spinners and refresh indicators remain visible long enough for the user to perceive them.

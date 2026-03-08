@@ -101,6 +101,12 @@ The scripts auto-detect `JAVA_HOME` (Android Studio bundled JBR) and `ANDROID_HO
 
 **Do not run native builds from within the agent.** Native builds require network access and environment setup that the Cursor sandbox does not provide. When a plan includes a build verification step, note it as a manual step for the user to run in their own terminal.
 
+## Testing
+
+**Before starting any work**, run both a TypeScript compilation check (`npx tsc --noEmit`) and the full test suite (`npx jest --no-coverage`). Ensure there are no errors or warnings. If there are failures, resolve them before making any changes.
+
+**After completing work**, run both checks again. There must be no TypeScript errors, and any new warnings introduced by your changes should be seriously considered and resolved. All tests must still pass. Always check if tests need to be updated, added, or removed to keep the test suite aligned with the changes made.
+
 ## AI Instruction Files — Keep in Sync
 
 Three files contain AI agent instructions and must always stay identical in content:
