@@ -34,6 +34,7 @@ jest.mock('react-native-track-player', () => ({
     PlaybackBufferEmpty: 'playback-buffer-empty',
     PlaybackBufferFull: 'playback-buffer-full',
     PlaybackSeekCompleted: 'playback-seek-completed',
+    PlaybackProgressUpdated: 'playback-progress-updated',
   },
   IOSCategory: { Playback: 'playback' },
   RepeatMode: { Off: 0, Track: 1, Queue: 2 },
@@ -194,7 +195,7 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
-  // Reset module-level state (stops polling, clears queue, resets flags).
+  // Reset module-level state (clears queue, resets flags).
   await clearQueue();
 
   jest.clearAllMocks();
@@ -493,7 +494,7 @@ describe('shuffleQueue', () => {
 /* ------------------------------------------------------------------ */
 
 describe('PlaybackState event handler', () => {
-  it('sets playing state and starts progress polling', () => {
+  it('sets playing state', () => {
     eventHandlers[Event.PlaybackState]({ state: State.Playing });
     expect(mockSetPlaybackState).toHaveBeenCalledWith('playing');
   });
@@ -523,17 +524,17 @@ describe('PlaybackState event handler', () => {
     expect(mockSetRetrying).toHaveBeenCalledWith(false);
   });
 
-  it('maps Paused state and stops polling', () => {
+  it('maps Paused state', () => {
     eventHandlers[Event.PlaybackState]({ state: State.Paused });
     expect(mockSetPlaybackState).toHaveBeenCalledWith('paused');
   });
 
-  it('maps Buffering state and keeps polling', () => {
+  it('maps Buffering state', () => {
     eventHandlers[Event.PlaybackState]({ state: State.Buffering });
     expect(mockSetPlaybackState).toHaveBeenCalledWith('buffering');
   });
 
-  it('maps Loading state and keeps polling', () => {
+  it('maps Loading state', () => {
     eventHandlers[Event.PlaybackState]({ state: State.Loading });
     expect(mockSetPlaybackState).toHaveBeenCalledWith('loading');
   });
@@ -1072,36 +1073,32 @@ describe('removeFromQueue index shift', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  startProgressPolling callback body                                 */
+/*  PlaybackProgressUpdated event handler                              */
 /* ------------------------------------------------------------------ */
 
-describe('startProgressPolling callback', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('polls progress at 250ms intervals and updates store', async () => {
+describe('PlaybackProgressUpdated event handler', () => {
+  it('updates store progress from native event', async () => {
     await initPlayer();
     const handlers = eventHandlers;
 
-    mockTP.getProgress.mockResolvedValue({ position: 42, duration: 200, buffered: 80 });
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 42, duration: 200, buffered: 80, track: 0,
+    });
 
-    // Trigger playing state to start polling
-    handlers[Event.PlaybackState]({ state: State.Playing });
+    expect(mockSetProgress).toHaveBeenCalledWith(42, 200, 80);
+  });
 
-    // Advance timer to trigger the interval callback
-    jest.advanceTimersByTime(250);
+  it('passes position through without offset when no stream recovery active', async () => {
+    await initPlayer();
+    const handlers = eventHandlers;
 
-    // Allow the async callback to resolve
-    await Promise.resolve();
-    await Promise.resolve();
+    // positionOffset is 0 by default (reset in beforeEach via clearQueue)
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 42, duration: 200, buffered: 80, track: 0,
+    });
 
-    expect(mockTP.getProgress).toHaveBeenCalled();
-    expect(mockSetProgress).toHaveBeenCalledWith(42, 200, expect.any(Number));
+    // position should be passed through unchanged (offset is 0)
+    expect(mockSetProgress).toHaveBeenCalledWith(42, 200, 80);
   });
 
   it('uses metadata duration for fully-buffered tracks', async () => {
@@ -1130,34 +1127,65 @@ describe('startProgressPolling callback', () => {
     const { playerStore } = require('../../store/playerStore');
     (playerStore.getState as jest.Mock).mockReturnValue(mockState);
 
-    mockTP.getProgress.mockResolvedValue({ position: 50, duration: 200, buffered: 100 });
-
-    // Start polling
-    handlers[Event.PlaybackState]({ state: State.Playing });
-
-    jest.advanceTimersByTime(250);
-    await Promise.resolve();
-    await Promise.resolve();
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 50, duration: 200, buffered: 100, track: 0,
+    });
 
     // The buffered value should be max of metaDuration(300), duration(200), buffered(100), position(50)
     expect(mockSetProgress).toHaveBeenCalledWith(50, 200, 300);
   });
 
-  it('handles getProgress errors gracefully during polling', async () => {
+  it('tracks high-water mark across multiple events', async () => {
     await initPlayer();
     const handlers = eventHandlers;
 
-    mockTP.getProgress.mockRejectedValue(new Error('player not ready'));
+    // First event: buffered = 100
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 10, duration: 200, buffered: 100, track: 0,
+    });
+    expect(mockSetProgress).toHaveBeenCalledWith(10, 200, 100);
 
-    // Start polling
-    handlers[Event.PlaybackState]({ state: State.Playing });
+    jest.clearAllMocks();
 
-    // Should not throw
-    jest.advanceTimersByTime(250);
-    await Promise.resolve();
-    await Promise.resolve();
+    // Second event: buffered = 80 (lower), but high-water mark should keep 100
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 20, duration: 200, buffered: 80, track: 0,
+    });
+    expect(mockSetProgress).toHaveBeenCalledWith(20, 200, 100);
 
-    // No crash — the error is swallowed
+    jest.clearAllMocks();
+
+    // Third event: buffered = 150 (higher), high-water mark should update to 150
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 30, duration: 200, buffered: 150, track: 0,
+    });
+    expect(mockSetProgress).toHaveBeenCalledWith(30, 200, 150);
+  });
+
+  it('resets high-water mark on track change', async () => {
+    await initPlayer();
+    const handlers = eventHandlers;
+
+    const queue = [makeChild('t1'), makeChild('t2')];
+    await playTrack(queue[0], queue);
+
+    // Build up a high-water mark
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 10, duration: 200, buffered: 150, track: 0,
+    });
+
+    jest.clearAllMocks();
+
+    // Track change resets maxBufferedSeen
+    handlers[Event.PlaybackActiveTrackChanged]({
+      track: { id: 't2' }, index: 1, lastTrack: { id: 't1' }, lastIndex: 0,
+    });
+
+    // New track's first progress event — should not carry over old high-water mark
+    handlers[Event.PlaybackProgressUpdated]({
+      position: 5, duration: 180, buffered: 30, track: 1,
+    });
+    expect(mockSetProgress).toHaveBeenCalledWith(5, 180, 30);
   });
 });
 
@@ -1289,7 +1317,7 @@ describe('syncStoreFromNative', () => {
     expect(mockTP.getPlaybackState).not.toHaveBeenCalled();
   });
 
-  it('stops polling for non-playing states', async () => {
+  it('syncs progress for non-playing states', async () => {
     await initPlayer();
 
     const queue = [makeChild('t1')];

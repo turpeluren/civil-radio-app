@@ -106,8 +106,6 @@ function childToTrack(child: Child): Track {
 let isPlayerReady = false;
 /** The Child[] backing the current RNTP queue, indexed by position. */
 let currentChildQueue: Child[] = [];
-/** Interval handle for progress polling (null when not polling). */
-let progressInterval: ReturnType<typeof setInterval> | null = null;
 /**
  * Highest buffered position (in seconds) observed for the current track.
  * The native player sometimes reports a stale or lower `buffered` value
@@ -160,43 +158,6 @@ let isShuffling = false;
  */
 let isSettingQueue = false;
 
-/* ------------------------------------------------------------------ */
-/*  Progress polling                                                   */
-/* ------------------------------------------------------------------ */
-
-/** Start polling RNTP for playback position every 250ms. */
-function startProgressPolling() {
-  if (progressInterval) return;
-  progressInterval = setInterval(async () => {
-    try {
-      const { position, duration, buffered } = await TrackPlayer.getProgress();
-
-      // Compute effective buffered value using high-water mark.
-      if (isFullyBuffered) {
-        const metaDuration =
-          playerStore.getState().currentTrack?.duration ?? 0;
-        maxBufferedSeen = Math.max(
-          maxBufferedSeen, metaDuration, duration, buffered, position
-        );
-      } else {
-        maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
-      }
-
-      const adjustedPosition = position + positionOffset;
-      playerStore.getState().setProgress(adjustedPosition, duration, maxBufferedSeen);
-    } catch {
-      /* player not ready */
-    }
-  }, 250);
-}
-
-/** Stop the progress polling interval. */
-function stopProgressPolling() {
-  if (progressInterval) {
-    clearInterval(progressInterval);
-    progressInterval = null;
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /*  Transcoded stream recovery                                         */
@@ -289,7 +250,8 @@ export async function initPlayer(): Promise<void> {
       Capability.Stop,
       Capability.SeekTo,
     ],
-    // compactCapabilities removed in RNTP v5
+    // Native progress events at 250ms interval, replacing JS-side polling.
+    progressUpdateEventInterval: 0.25,
   });
 
   // Apply persisted playback settings to the native player.
@@ -307,12 +269,6 @@ export async function initPlayer(): Promise<void> {
       // Clear any previous error and retrying state when playback resumes.
       if (store.error) store.setError(null);
       if (store.retrying) store.setRetrying(false);
-      startProgressPolling();
-    } else if (state === State.Buffering || state === State.Loading) {
-      // Keep polling during buffering so the UI can show buffer progress.
-      startProgressPolling();
-    } else {
-      stopProgressPolling();
     }
   });
 
@@ -394,6 +350,24 @@ export async function initPlayer(): Promise<void> {
     if (e.isFull) {
       isFullyBuffered = true;
     }
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (e) => {
+    const { position, duration, buffered } = e;
+
+    // Compute effective buffered value using high-water mark.
+    if (isFullyBuffered) {
+      const metaDuration =
+        playerStore.getState().currentTrack?.duration ?? 0;
+      maxBufferedSeen = Math.max(
+        maxBufferedSeen, metaDuration, duration, buffered, position
+      );
+    } else {
+      maxBufferedSeen = Math.max(maxBufferedSeen, buffered, position);
+    }
+
+    const adjustedPosition = position + positionOffset;
+    playerStore.getState().setProgress(adjustedPosition, duration, maxBufferedSeen);
   });
 
   TrackPlayer.addEventListener(Event.PlaybackSeekCompleted, (e) => {
@@ -537,16 +511,6 @@ async function syncStoreFromNative(): Promise<void> {
     }
     const adjustedPosition = position + positionOffset;
     playerStore.getState().setProgress(adjustedPosition, duration, maxBufferedSeen);
-
-    if (
-      state.state === State.Playing ||
-      state.state === State.Buffering ||
-      state.state === State.Loading
-    ) {
-      startProgressPolling();
-    } else {
-      stopProgressPolling();
-    }
   } catch {
     // Player may not be ready yet; ignore.
   }
@@ -698,7 +662,6 @@ export async function retryPlayback(): Promise<void> {
  */
 export async function clearQueue(): Promise<void> {
   resetScrobbleCoordination();
-  stopProgressPolling();
   isUserSkipping = true;
   positionOffset = 0;
   maxBufferedSeen = 0;

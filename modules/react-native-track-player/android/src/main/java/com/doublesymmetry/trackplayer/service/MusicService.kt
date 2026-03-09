@@ -324,7 +324,8 @@ class MusicService : HeadlessJsMediaService() {
     @MainThread
     private fun progressUpdateEventFlow(interval: Double) = flow {
         while (true) {
-            if (player.isPlaying) {
+            if (player.isPlaying || player.playerState == AudioPlayerState.BUFFERING
+                || player.playerState == AudioPlayerState.LOADING) {
                 val bundle = progressUpdateEvent()
                 emit(bundle)
             }
