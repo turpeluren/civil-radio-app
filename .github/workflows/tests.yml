@@ -31,4 +31,4 @@ jobs:
 
       - name: Coverage badge
         if: github.ref == 'refs/heads/master'
-        uses: we-cli/coverage-badge-action@v1.2.1
+        uses: we-cli/coverage-badge-action@v1.0.1
