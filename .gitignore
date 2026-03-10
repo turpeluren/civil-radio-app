@@ -54,3 +54,4 @@ modules/*/ios/build/
 # generated native folders
 /ios
 /android
+FEATURES.md
