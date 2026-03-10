@@ -38,6 +38,8 @@
 
 **Ratings & Favorites** — 5-star ratings for songs, albums, artists (server support dependant), star albums, artists, and songs, dedicated favorites view with filtering, download favorites and keep them in sync with new changes.
 
+**Scrobbling** — Automatic scrobble submission to your server with offline support. Scrobbles are queued locally when offline and submitted automatically when you reconnect.
+
 **Listening Analytics** — Listening history, activity heatmaps, top artists, albums, and songs by play count, most active hours, listening streaks
 
 **Search** — Quick search access on any main screen, Full search for more results from your entire library, automatically switches to seaching your downloaded content when in offline mode.
