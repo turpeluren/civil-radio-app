@@ -39,7 +39,7 @@ last.fm scrobbling
 
 Airplay support (just open the volume controls in the player to access airplay directly or use the control center by swiping up from the bottom of the screen)
 
-if you run into any bugs please let me know, i use this app every day myself and am always trying to make it better! ghenry22.apps@gmail.com
+if you run into any bugs please let me know, i use this app every day myself and am always trying to make it better!
 
 Requirements:
 

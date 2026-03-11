@@ -96,7 +96,14 @@ bundle exec fastlane android metadata
 
 ### Automatic push via CI
 
-The GitHub Actions workflow (`.github/workflows/store-metadata.yml`) automatically pushes metadata to both stores when files under `fastlane/metadata/` change on the `master` branch.
+Separate GitHub Actions workflows push metadata to each store independently:
+
+- `.github/workflows/store-metadata-ios.yml` — triggers on changes to `fastlane/metadata/ios/**` or `fastlane/screenshots/**`
+- `.github/workflows/store-metadata-android.yml` — triggers on changes to `fastlane/metadata/android/**`
+
+Both support `workflow_dispatch` for manual runs.
+
+**iOS behavior:** If no editable App Store version exists, the workflow creates one using the version from `app.json` and pushes all metadata to it. If an editable version already exists, it updates it in place. The version is left in "Prepare for Submission" — it is not submitted for review automatically.
 
 ## Directory Structure
 
@@ -116,10 +123,11 @@ fastlane/
         images/
           featureGraphic.png        # 1024x500 feature graphic
           icon.png                  # 512x512 hi-res icon
-          phoneScreenshots/         # Phone screenshots
-          sevenInchScreenshots/     # 7" tablet screenshots
-          tenInchScreenshots/       # 10" tablet screenshots
+          phoneScreenshots/         # Phone screenshots (1080x1920)
+          sevenInchScreenshots/     # 7" tablet screenshots (1200x1920)
+          tenInchScreenshots/       # 10" tablet screenshots (1920x2560)
     ios/
+      copyright.txt                 # Copyright line (non-localized)
       en-US/
         name.txt                    # App name (30 chars max)
         subtitle.txt                # Subtitle (30 chars max)
@@ -130,7 +138,49 @@ fastlane/
         privacy_url.txt             # Privacy policy URL
         support_url.txt             # Support URL
         marketing_url.txt           # Marketing URL
+  screenshots/
+    en-US/
+      iPhone 6.9" Display/          # 1320x2868 — REQUIRED (primary iPhone size)
+      iPhone 6.7" Display/          # 1290x2796 — optional
+      iPhone 6.1" Display/          # 1179x2556 — optional
+      iPad Pro 13" Display/         # 2064x2752 — REQUIRED (primary iPad size)
+      iPad Pro 11" Display/         # 1668x2388 — optional
 ```
+
+## iOS Screenshots
+
+Apple requires screenshots for two sizes. All smaller sizes auto-scale from these:
+
+| Size | Dimensions | Required? | Auto-scales to |
+|------|-----------|-----------|----------------|
+| **iPhone 6.9"** | 1320 x 2868 | **Yes** | 6.7", 6.5", 6.3", 6.1", 5.5", 4.7" |
+| **iPad Pro 13"** | 2064 x 2752 | **Yes** (if app runs on iPad) | 12.9", 11", 10.5", 9.7" |
+| iPhone 6.7" | 1290 x 2796 | No | Same chain as 6.9" minus 6.9" |
+| iPhone 6.1" | 1179 x 2556 | No | Smaller iPhones |
+| iPad Pro 11" | 1668 x 2388 | No | Smaller iPads |
+
+Provide 2-10 screenshots per size. Placeholder images are included in each folder — replace them with real screenshots before pushing to the store.
+
+Fastlane identifies the target device by image resolution, not folder name. The folder names are for organization only.
+
+## Android Screenshots
+
+| Folder | Recommended Dimensions | Required? |
+|--------|----------------------|-----------|
+| `phoneScreenshots/` | 1080 x 1920 | Yes (min 2, max 8) |
+| `sevenInchScreenshots/` | 1200 x 1920 | No (unlocks "Designed for tablets" badge) |
+| `tenInchScreenshots/` | 1920 x 2560 | No (unlocks badge) |
+
+Google Play dimension rules for all screenshot types:
+- **Minimum:** 320px on the shortest side
+- **Maximum:** 3840px on the longest side
+- **Aspect ratio:** Cannot exceed 2:1
+- **Format:** JPEG or 24-bit PNG (no alpha/transparency)
+- **Max file size:** 8 MB per image
+
+Additional image assets in `metadata/android/en-US/images/`:
+- `icon.png` — 512 x 512 hi-res icon
+- `featureGraphic.png` — 1024 x 500 feature graphic (displayed at top of store listing)
 
 ## Updating release notes
 
