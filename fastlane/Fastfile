@@ -1,26 +1,59 @@
 default_platform(:ios)
 
 def asc_api_key
-  app_store_connect_api_key(
+  params = {
     key_id: ENV["APP_STORE_CONNECT_API_KEY_KEY_ID"],
-    issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"],
-    key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
-  )
+    issuer_id: ENV["APP_STORE_CONNECT_API_KEY_ISSUER_ID"]
+  }
+  # CI passes key content directly; local dev uses a file path
+  if ENV["APP_STORE_CONNECT_API_KEY_KEY"]
+    params[:key_content] = ENV["APP_STORE_CONNECT_API_KEY_KEY"]
+  else
+    params[:key_filepath] = ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
+  end
+  app_store_connect_api_key(params)
 end
 
 platform :ios do
   desc "Push App Store metadata and screenshots"
   lane :metadata do
-    deliver(
-      api_key: asc_api_key,
-      app_identifier: "com.ghenry22.substream2",
-      skip_binary_upload: true,
-      skip_app_version_update: true,
-      force: true,
-      precheck_include_in_app_purchases: false,
-      metadata_path: "./fastlane/metadata/ios",
-      screenshots_path: "./fastlane/screenshots"
-    )
+    # Copy metadata to a temp dir without name.txt and subtitle.txt
+    # (those are app-info level and can only be updated during a version submission)
+    require 'fileutils'
+    project_root = File.expand_path("..")
+    push_path = File.join(project_root, "fastlane", ".metadata_push")
+    source_path = File.join(project_root, "fastlane", "metadata", "ios")
+    FileUtils.rm_rf(push_path)
+    FileUtils.cp_r(source_path, push_path)
+    # Remove app-info level fields (only editable during version submission)
+    %w[name.txt subtitle.txt privacy_url.txt].each do |file|
+      Dir.glob("#{push_path}/**/#{file}").each { |f| File.delete(f) }
+    end
+
+    begin
+      deliver(
+        api_key: asc_api_key,
+        app_identifier: "com.ghenry22.substream2",
+        skip_binary_upload: true,
+        skip_app_version_update: true,
+        use_live_version: true,
+        edit_live: true,
+        force: true,
+        version_check_wait_retry_limit: 1,
+        precheck_include_in_app_purchases: false,
+        metadata_path: push_path,
+        screenshots_path: File.join(project_root, "fastlane", "screenshots")
+      )
+    rescue => e
+      if e.message.include?("cannot be edited at this time")
+        UI.important("⚠️  Some metadata fields could not be updated (version likely in review). " \
+                     "Re-run after the pending version goes live.")
+      else
+        raise
+      end
+    end
+  ensure
+    FileUtils.rm_rf(push_path) if defined?(push_path) && push_path
   end
 
   desc "Pull current App Store metadata into local files"
@@ -57,6 +90,7 @@ platform :android do
       skip_upload_apk: true,
       skip_upload_images: false,
       skip_upload_screenshots: false,
+      skip_upload_changelogs: true,
       metadata_path: "./fastlane/metadata/android",
       track: "beta"
     )

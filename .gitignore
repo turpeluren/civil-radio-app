@@ -64,6 +64,7 @@ Gemfile.lock
 # fastlane
 fastlane/.env
 fastlane/.api_key.json
+fastlane/.metadata_push
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
