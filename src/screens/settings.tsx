@@ -10,7 +10,7 @@ const APP_VERSION = Constants.expoConfig?.version ?? '?';
 const BUILD_NUMBER =
   Platform.OS === 'ios'
     ? Constants.expoConfig?.ios?.buildNumber
-    : String(Constants.expoConfig?.android?.versionCode ?? '');
+    : String((Constants.expoConfig?.android?.versionCode ?? 0) % 1000);
 
 
 const SETTINGS_LINKS: {
