@@ -1,5 +1,21 @@
 # Changelog
 
+## [8.0.23] - 2026-03-13
+
+- android: alerts were not themed
+- appearance: update some tab logos music notes for library (cause we're not listening to books) and substreamer logo for home
+- appearance: default to dark theme
+- expo-ssl-trust: owns network security, it should also ensure that usescleartext is always set
+- RNTP: resolve build deprecation warning on android
+- build: add a package.json script to build the modules
+- android: fix lock screen media controls on OnePlus/Huawei OEM devices. Remove SDK version gate in onStartCommand() and add    event deduplication so media key intents are always handled, fixing broken lock screen controls on OEMs that don't route    through onMediaButtonEvent(). All credit to: https://github.com/doublesymmetry/react-native-track-player/pull/2559
+- RNTP: iOS, on first play if user locks devices without backgrounding app play controls (playpause/skip) are sometimes not available until the next track.  All credit to: https://github.com/doublesymmetry/react-native-track-player/pull/2583
+- appstore: metadata handling
+- split app store metadata workflows
+- app stores: test publishing an update to App Store
+- app stores: allow for manual test of CI
+- App Store Metadata Automation
+- build: push android builds to closed beta, not internal track
 ## [8.0.22] - 2026-03-10
 
 - web and readme
