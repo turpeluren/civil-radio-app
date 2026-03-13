@@ -5,9 +5,12 @@ const path = require("path");
 /**
  * Expo config plugin for expo-ssl-trust.
  *
- * Android: Generates a network_security_config.xml that trusts user-installed
- * certificates in addition to system CAs. This provides a fallback for any
- * networking layers that bypass our custom OkHttpClientFactory.
+ * Android:
+ *   1. Generates network_security_config.xml with cleartext permitted and
+ *      user-installed CA trust (for self-signed certs).
+ *   2. Sets android:networkSecurityConfig and android:usesCleartextTraffic
+ *      on the <application> element via a managed mod so it composes safely
+ *      with other plugins regardless of execution order.
  *
  * iOS: No config changes needed — the custom URLProtocol handles trust.
  */
@@ -50,7 +53,9 @@ function withSslTrust(config) {
     },
   ]);
 
-  // Step 2: Reference network_security_config.xml in AndroidManifest.xml
+  // Step 2: Set networkSecurityConfig and usesCleartextTraffic on <application>.
+  // Both are set here in a single managed mod so cleartext configuration is
+  // owned by one plugin and not split across expo-build-properties.
   config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults;
     const application = manifest.manifest.application?.[0];
@@ -58,6 +63,7 @@ function withSslTrust(config) {
     if (application) {
       application.$["android:networkSecurityConfig"] =
         "@xml/network_security_config";
+      application.$["android:usesCleartextTraffic"] = "true";
     }
 
     return config;
