@@ -1,5 +1,10 @@
 # Changelog
 
+## [8.0.27] - 2026-03-14
+
+- add a shortcut to rebase
+- RNTP: remote controls on first play on iOS troubleshooting
+- ci: update coverage badge [skip ci]
 ## [8.0.26] - 2026-03-14
 
 - tests: add tests for new functions and module
