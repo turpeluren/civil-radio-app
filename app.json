@@ -35,7 +35,8 @@
         "backgroundColor": "#1D9BF0"
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
       "predictiveBackGestureEnabled": false,
       "versionCode": 80000109,

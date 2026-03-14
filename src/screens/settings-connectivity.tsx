@@ -14,6 +14,11 @@ import {
   openAppSettings,
   requestLocationPermission,
 } from '../services/autoOfflineService';
+import {
+  checkBatteryOptimization,
+  requestBatteryOptimizationExemption,
+} from '../services/batteryOptimizationService';
+import { batteryOptimizationStore } from '../store/batteryOptimizationStore';
 import { removeTrustForHost } from '../services/sslTrustService';
 import { sslCertStore, type TrustedCertEntry } from '../store/sslCertStore';
 
@@ -39,6 +44,19 @@ export function SettingsConnectivityScreen() {
   const [ssidEditTarget, setSsidEditTarget] = useState<string | null>(null);
   const [ssidSetupValue, setSsidSetupValue] = useState('');
   const [ssidReadFailed, setSsidReadFailed] = useState(false);
+
+  // --- Battery Optimization (Android only) ---
+  const batteryOptRestricted = batteryOptimizationStore((s) => s.restricted);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      checkBatteryOptimization();
+    }
+  }, []);
+
+  const handleRequestBatteryExemption = useCallback(async () => {
+    await requestBatteryOptimizationExemption();
+  }, []);
 
   useEffect(() => {
     if (autoMode === 'home-wifi') {
@@ -481,6 +499,39 @@ export function SettingsConnectivityScreen() {
           )}
         </View>
       </View>
+
+      {Platform.OS === 'android' && batteryOptRestricted !== null && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>Background playback</Text>
+          <View style={[styles.card, dynamicStyles.card]}>
+            <Pressable
+              onPress={batteryOptRestricted ? handleRequestBatteryExemption : undefined}
+              disabled={!batteryOptRestricted}
+              style={({ pressed }) => [
+                styles.toggleRow,
+                styles.toggleRowLast,
+                pressed && batteryOptRestricted && styles.pressed,
+              ]}
+            >
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.label, { color: colors.textPrimary }]}>
+                  Battery Optimization
+                </Text>
+                <Text style={[styles.toggleHint, { color: colors.textSecondary }]}>
+                  {batteryOptRestricted
+                    ? 'Some Android devices may stop background music streaming to save battery. Tap to request an exemption.'
+                    : 'Background playback should not be interrupted by battery optimization.'}
+                </Text>
+              </View>
+              {batteryOptRestricted ? (
+                <Ionicons name="warning-outline" size={22} color={colors.red} />
+              ) : (
+                <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+              )}
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Android SSID prompt modal */}
       <Modal

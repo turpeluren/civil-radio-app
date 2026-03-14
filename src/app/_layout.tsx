@@ -1,7 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { LogBox } from 'react-native';
+import { BackHandler, LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Both expo-router (RouterFontUtils.swift) and react-native-screens
@@ -46,6 +46,7 @@ import { initSslTrustStore } from '../services/sslTrustService';
 import { runAutoBackupIfNeeded } from '../services/backupService';
 import { startAutoOffline, stopAutoOffline } from '../services/autoOfflineService';
 import { excludeFromBackup } from 'expo-backup-exclusions';
+import { moveToBack } from 'expo-move-to-back';
 import { albumLibraryStore } from '../store/albumLibraryStore';
 import { albumListsStore } from '../store/albumListsStore';
 import { artistLibraryStore } from '../store/artistLibraryStore';
@@ -75,6 +76,15 @@ initMusicCache();
 // Initialise the SSL trust store so the custom TrustManager / URLSession
 // delegate is installed before any network requests are made.
 initSslTrustStore();
+
+// Suppress ExpoKeepAwake errors that fire when the activity becomes
+// temporarily unavailable during backgrounding (moveTaskToBack).
+// These are non-fatal — keep-awake state is restored when the activity resumes.
+const originalHandler = (globalThis as any).ErrorUtils?.getGlobalHandler?.();
+(globalThis as any).ErrorUtils?.setGlobalHandler?.((error: any, isFatal: boolean) => {
+  if (!isFatal && error?.message?.includes?.('ExpoKeepAwake')) return;
+  originalHandler?.(error, isFatal);
+});
 
 export default function RootLayout() {
   const [splashVisible, setSplashVisible] = useState(true);
@@ -199,6 +209,23 @@ export default function RootLayout() {
       stopMonitoring();
     };
   }, [rehydrated, isLoggedIn]);
+
+  // --- Android: background the app instead of killing it at the root ---
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const handler = () => {
+      // Only intercept on the home tab — other tabs navigate back to home first
+      if (segments[0] === '(tabs)' && (segments as string[])[1] === 'index') {
+        moveToBack();
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handler);
+    return () => subscription.remove();
+  }, [segments]);
 
   // --- Auth-based navigation ---
   // Use router.replace inside useEffect instead of <Redirect> so the

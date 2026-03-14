@@ -12,10 +12,12 @@ export function useDownloadKeepAwake() {
 
   useEffect(() => {
     if (hasActiveDownloads) {
-      activateKeepAwakeAsync(TAG);
+      activateKeepAwakeAsync(TAG).catch(() => { /* activity may be unavailable */ });
     } else {
-      deactivateKeepAwake(TAG);
+      deactivateKeepAwake(TAG).catch(() => { /* activity may be unavailable */ });
     }
-    return () => { deactivateKeepAwake(TAG); };
+    return () => {
+      deactivateKeepAwake(TAG).catch(() => { /* activity may be unavailable during backgrounding */ });
+    };
   }, [hasActiveDownloads]);
 }
