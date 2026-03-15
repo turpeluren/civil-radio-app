@@ -228,6 +228,32 @@ describe('BottomSheet', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('dismisses on backdrop press when closeable', () => {
+    const onClose = jest.fn();
+    const { getByTestId } = render(
+      <BottomSheet visible={true} onClose={onClose}>
+        <Text>Content</Text>
+      </BottomSheet>,
+    );
+    act(() => {
+      fireEvent.press(getByTestId('bottom-sheet-backdrop'));
+    });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not dismiss on backdrop press when closeable is false', () => {
+    const onClose = jest.fn();
+    const { getByTestId } = render(
+      <BottomSheet visible={true} onClose={onClose} closeable={false}>
+        <Text>Content</Text>
+      </BottomSheet>,
+    );
+    act(() => {
+      fireEvent.press(getByTestId('bottom-sheet-backdrop'));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('handles layout event to capture sheet height', () => {
     const { getByText } = render(
       <BottomSheet visible={true} onClose={jest.fn()}>
@@ -235,8 +261,6 @@ describe('BottomSheet', () => {
       </BottomSheet>,
     );
 
-    // The sheet View has onLayout — trigger it
-    // We don't have direct access to the View, but the component should handle it without error
     expect(getByText('Content')).toBeTruthy();
   });
 

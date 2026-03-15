@@ -187,7 +187,7 @@ export function BottomSheet({
       <GestureHandlerRootView style={styles.gestureRoot}>
         {/* Animated backdrop */}
         <Animated.View style={[styles.backdropFill, backdropAnimatedStyle]}>
-          <Pressable style={styles.backdropPressable} onPress={handleBackdropPress} />
+          <Pressable testID="bottom-sheet-backdrop" style={styles.backdropPressable} onPress={handleBackdropPress} />
         </Animated.View>
 
         {/* Sheet */}
