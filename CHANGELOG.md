@@ -1,5 +1,19 @@
 # Changelog
 
+## [8.0.28] - 2026-03-16
+
+- data: convenient clear all for image and music cache in the list view
+- home: empty list place holders for horizontal scrollers (ie recent, frequent etc)
+- detail screens: quick visibility and access to favorite an album or artist
+- ssl: indicate expired certs in the list
+- self signed SSL handling: update the SSL handling with more functionality. Easier review and addition/replacement of certs in settings, clear visibility of current cert, ability to add a REAL certificate if you should need to (maybe it works externally with your domain but not internally with your IP). SSL Error checks added to connectivity monitor and auto prompt to update the certs (covers cert renewal case). Login was not using the certificate service, updated to always use service not duplicate logic.
+- auto offline: netInfo events don't fire when app suspended in background or closed.  netInfo fetch delivers cached status, always use refresh, always check on status on return to foreground and on app cold start
+- tests: coverage for the sheet changes
+- sheets: reduce some duplicated code, pull the bottomsheet out to a reusable component, add swipe to dismiss, fix some android gesture handling in modals with RNGH
+- settings: hide diagnostic tools by default
+- ci: update coverage badge [skip ci]
+- playback: Play more by artists (online & offline support)
+- eas: auto-publish beta releases to Play Store
 ## [8.0.27] - 2026-03-14
 
 - add a shortcut to rebase
