@@ -7,6 +7,8 @@ const MOCK_CERT: CertificateInfo = {
   issuer: 'CN=Test CA',
   validFrom: '2025-01-01T00:00:00Z',
   validTo: '2027-01-01T00:00:00Z',
+  serialNumber: '01',
+  isSelfSigned: false,
 };
 
 beforeEach(() => {
