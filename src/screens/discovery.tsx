@@ -20,6 +20,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { SectionTitle } from '../components/SectionTitle';
 import {
   DECADES,
@@ -593,37 +594,39 @@ export function DiscoveryScreen() {
 
   if (!transitionComplete) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.loadingContainer}>
         <ActivityIndicator color={colors.primary} size="large" />
-      </View>
+      </GradientBackground>
     );
   }
 
   return (
-    <ScrollView
-      style={[styles.screen, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* For You section */}
-      {mixes.length > 0 && (
-        <View style={styles.section}>
-          <SectionTitle title="For You" color={colors.textSecondary} />
-          <View style={styles.mixList}>
-            {mixes.map((mix, index) => (
-              <MixCard key={mix.id} mix={mix} index={index} colors={colors} />
-            ))}
+    <GradientBackground>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* For You section */}
+        {mixes.length > 0 && (
+          <View style={styles.section}>
+            <SectionTitle title="For You" color={colors.textSecondary} />
+            <View style={styles.mixList}>
+              {mixes.map((mix, index) => (
+                <MixCard key={mix.id} mix={mix} index={index} colors={colors} />
+              ))}
+            </View>
           </View>
+        )}
+
+        {/* Build a Mix section */}
+        <View style={styles.section}>
+          <CustomMixBuilder colors={colors} availableGenres={builderGenres} />
         </View>
-      )}
 
-      {/* Build a Mix section */}
-      <View style={styles.section}>
-        <CustomMixBuilder colors={colors} availableGenres={builderGenres} />
-      </View>
-
-      <View style={styles.footer} />
-    </ScrollView>
+        <View style={styles.footer} />
+      </ScrollView>
+    </GradientBackground>
   );
 }
 

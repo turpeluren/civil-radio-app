@@ -7,6 +7,7 @@ import { Keyboard, View } from 'react-native';
 import WaveformLogo from '../../components/WaveformLogo';
 import { ConnectivityBanner } from '../../components/ConnectivityBanner';
 import { DownloadBanner } from '../../components/DownloadBanner';
+import { GradientBackground } from '../../components/GradientBackground';
 import { StorageFullBanner } from '../../components/StorageFullBanner';
 import { MiniPlayer } from '../../components/MiniPlayer';
 import { SearchableHeader } from '../../components/SearchableHeader';
@@ -28,7 +29,7 @@ export default function TabLayout() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <GradientBackground>
       <Tabs
         tabBar={renderTabBar}
         screenListeners={{
@@ -46,6 +47,8 @@ export default function TabLayout() {
             backgroundColor: colors.background,
             borderTopColor: 'transparent',
           },
+          headerTransparent: true,
+          sceneStyle: { backgroundColor: 'transparent' },
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
         }}
@@ -97,6 +100,6 @@ export default function TabLayout() {
         />
       </Tabs>
       <SearchResultsOverlay />
-    </View>
+    </GradientBackground>
   );
 }

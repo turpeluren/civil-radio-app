@@ -21,14 +21,13 @@ export const SongCard = memo(function SongCard({
   onPress,
 }: {
   song: Child;
-  width: number;
+  width?: number;
   onPress?: () => void;
 }) {
   const { colors } = useTheme();
   const starred = useIsStarred('song', song.id);
   const downloaded = useDownloadStatus('song', song.id) === 'complete';
   const rating = useRating(song.id, song.userRating);
-  const imageSize = width - 16; // 8px padding on each side
 
   const onLongPress = useCallback(() => {
     moreOptionsStore.getState().show({ type: 'song', item: song });
@@ -36,12 +35,12 @@ export const SongCard = memo(function SongCard({
 
   return (
     <LongPressable onPress={onPress} onLongPress={onLongPress}>
-      <View style={[styles.card, { backgroundColor: colors.card, width }]}>
-        <View style={{ width: imageSize, height: imageSize }}>
+      <View style={[styles.card, { backgroundColor: colors.card }, width != null && { width }]}>
+        <View style={styles.imageContainer}>
           <CachedImage
             coverArtId={song.coverArt}
             size={COVER_SIZE}
-            style={[styles.cover, { width: imageSize, height: imageSize }]}
+            style={styles.cover}
             resizeMode="cover"
           />
           {(downloaded || starred) && (
@@ -78,7 +77,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
   },
+  imageContainer: {
+    aspectRatio: 1,
+  },
   cover: {
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },

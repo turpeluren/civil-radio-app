@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabHeaderProps } from '@react-navigation/bottom-tabs';
+import { BlurView } from 'expo-blur';
 import { useCallback, useEffect, useRef } from 'react';
 import {
   Keyboard,
@@ -18,7 +19,7 @@ import { searchStore } from '../store/searchStore';
 const DEBOUNCE_MS = 300;
 
 export function SearchableHeader({ route }: BottomTabHeaderProps) {
-  const { colors } = useTheme();
+  const { theme, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,10 +79,12 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
   }, []);
 
   return (
-    <View
+    <BlurView
+      tint={theme === 'dark' ? 'dark' : 'light'}
+      intensity={80}
       style={[
         styles.container,
-        { backgroundColor: colors.background, paddingTop: insets.top },
+        { paddingTop: insets.top },
       ]}
       onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
     >
@@ -116,7 +119,7 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
         </View>
       </View>
       <FilterBar routeName={route.name} />
-    </View>
+    </BlurView>
   );
 }
 

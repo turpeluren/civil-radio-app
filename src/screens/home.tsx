@@ -40,6 +40,7 @@ import { filterBarStore } from '../store/filterBarStore';
 import { musicCacheStore } from '../store/musicCacheStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
+import { searchStore } from '../store/searchStore';
 
 const CARD_WIDTH = 150;
 const CARD_GAP = 12;
@@ -319,6 +320,7 @@ export function HomeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const isFocused = useIsFocused();
+  const headerHeight = searchStore((s) => s.headerHeight);
 
   const recentlyAdded = albumListsStore((s) => s.recentlyAdded);
   const recentlyPlayed = albumListsStore((s) => s.recentlyPlayed);
@@ -405,7 +407,7 @@ export function HomeScreen() {
   }, [downloadedOnly, downloadedAlbums, downloadedPlaylists, filteredSections]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       {offlineEmpty ? (
         <EmptyState
           icon="cloud-offline-outline"
@@ -420,7 +422,7 @@ export function HomeScreen() {
       ) : (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: headerHeight + 16 }]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.section}>
@@ -557,7 +559,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingVertical: 16,
+    paddingBottom: 16,
     paddingHorizontal: 16,
   },
   section: {

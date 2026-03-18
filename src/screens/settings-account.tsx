@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { clearImageCache } from '../services/imageCacheService';
 import { clearMusicCache } from '../services/musicCacheService';
@@ -34,7 +35,6 @@ export function SettingsAccountScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         card: { backgroundColor: colors.card },
         logoutButton: { borderColor: colors.red },
@@ -44,8 +44,9 @@ export function SettingsAccountScreen() {
   );
 
   return (
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={[styles.content, styles.contentGrow, { paddingBottom: Math.max(insets.bottom, 32) }]}
       showsVerticalScrollIndicator={false}
     >
@@ -93,6 +94,7 @@ export function SettingsAccountScreen() {
         </Pressable>
       </View>
     </ScrollView>
+    </GradientBackground>
   );
 }
 

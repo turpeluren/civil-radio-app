@@ -3,6 +3,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTheme } from '../hooks/useTheme';
 import { artistDetailStore } from '../store/artistDetailStore';
@@ -108,24 +109,24 @@ export function MbidOverrideBrowserScreen() {
 
   if (data.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.container}>
         <EmptyState
           icon="finger-print-outline"
           title="No MBID Overrides"
           subtitle="Overrides you set from an artist's menu will appear here."
         />
-      </View>
+      </GradientBackground>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       <FlashList
         data={data}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
       />
-    </View>
+    </GradientBackground>
   );
 }
 

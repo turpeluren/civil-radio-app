@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import { useTheme } from '../hooks/useTheme';
@@ -318,7 +319,7 @@ export function ImageCacheBrowserScreen() {
 
   return (
     <>
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       {listHeader}
       <FlashList
         ref={listRef}
@@ -333,7 +334,7 @@ export function ImageCacheBrowserScreen() {
         }
         ListEmptyComponent={listEmpty}
       />
-    </View>
+    </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>
   );

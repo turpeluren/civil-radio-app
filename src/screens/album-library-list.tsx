@@ -13,10 +13,12 @@ export function AlbumLibraryListScreen({
   layout = 'list',
   downloadedOnly = false,
   favoritesOnly = false,
+  contentInsetTop = 0,
 }: {
   layout?: AlbumLayout;
   downloadedOnly?: boolean;
   favoritesOnly?: boolean;
+  contentInsetTop?: number;
 }) {
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
@@ -60,7 +62,7 @@ export function AlbumLibraryListScreen({
   }, [offlineMode, fetchAllAlbums]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <AlbumListView
         albums={filteredAlbums}
         layout={layout}
@@ -70,6 +72,7 @@ export function AlbumLibraryListScreen({
         refreshing={refreshing}
         showAlphabetScroller
         scrollToTopTrigger={`${downloadedOnly}:${favoritesOnly}`}
+        contentInsetTop={contentInsetTop}
       />
     </View>
   );

@@ -13,6 +13,7 @@ import {
 
 import { listDirectoryAsync } from 'expo-async-fs';
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { isViewableFile } from './file-viewer';
 
@@ -185,7 +186,7 @@ export function FileExplorerScreen() {
 
   if (!path) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.container}>
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           {ROOTS.map((root, index) => (
             <Pressable
@@ -225,12 +226,12 @@ export function FileExplorerScreen() {
             </Pressable>
           ))}
         </View>
-      </View>
+      </GradientBackground>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       <Pressable
         onPress={handleBack}
         style={({ pressed }) => [
@@ -263,7 +264,7 @@ export function FileExplorerScreen() {
           contentContainerStyle={styles.listContent}
         />
       )}
-    </View>
+    </GradientBackground>
   );
 }
 

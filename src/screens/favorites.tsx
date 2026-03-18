@@ -1,10 +1,11 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AlbumListView } from '../components/AlbumListView';
 import { EmptyState } from '../components/EmptyState';
 import { ArtistListView } from '../components/ArtistListView';
+import { SegmentControl } from '../components/SegmentControl';
 import { SongListView } from '../components/SongListView';
 import { useTheme } from '../hooks/useTheme';
 import {
@@ -22,60 +23,15 @@ import {
 } from '../store/layoutPreferencesStore';
 import { favoritesStore } from '../store/favoritesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { searchStore } from '../store/searchStore';
 
-/* ------------------------------------------------------------------ */
-/*  Segment types                                                     */
-/* ------------------------------------------------------------------ */
+type FavoritesSegment = 'songs' | 'albums' | 'artists';
 
-type Segment = 'songs' | 'albums' | 'artists';
-
-const SEGMENTS: { key: Segment; label: string }[] = [
+const SEGMENTS = [
   { key: 'songs', label: 'Songs' },
   { key: 'albums', label: 'Albums' },
   { key: 'artists', label: 'Artists' },
-];
-
-/* ------------------------------------------------------------------ */
-/*  SegmentControl                                                    */
-/* ------------------------------------------------------------------ */
-
-function SegmentControl({
-  selected,
-  onSelect,
-}: {
-  selected: Segment;
-  onSelect: (segment: Segment) => void;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={[styles.segmentContainer, { backgroundColor: colors.inputBg }]}>
-      {SEGMENTS.map(({ key, label }) => {
-        const isActive = selected === key;
-        return (
-          <Pressable
-            key={key}
-            onPress={() => onSelect(key)}
-            style={[
-              styles.segmentButton,
-              isActive && [styles.segmentButtonActive, { backgroundColor: colors.card }],
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentLabel,
-                { color: isActive ? colors.textPrimary : colors.textSecondary },
-                isActive && styles.segmentLabelActive,
-              ]}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  FavoritesScreen                                                   */
@@ -84,7 +40,8 @@ function SegmentControl({
 export function FavoritesScreen() {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
-  const [activeSegment, setActiveSegment] = useState<Segment>('songs');
+  const headerHeight = searchStore((s) => s.headerHeight);
+  const [activeSegment, setActiveSegment] = useState<FavoritesSegment>('songs');
 
   /* ---- Store: favorites data ---- */
   const songs = favoritesStore((s) => s.songs);
@@ -138,7 +95,7 @@ export function FavoritesScreen() {
   useEffect(() => {
     if (!isFocused) return;
 
-    const layoutMap: Record<Segment, { layout: ItemLayout; toggle: () => void }> = {
+    const layoutMap: Record<FavoritesSegment, { layout: ItemLayout; toggle: () => void }> = {
       songs: { layout: favSongLayout, toggle: toggleSongLayout },
       albums: { layout: favAlbumLayout, toggle: toggleAlbumLayout },
       artists: { layout: favArtistLayout, toggle: toggleArtistLayout },
@@ -215,9 +172,11 @@ export function FavoritesScreen() {
     setRefreshing(false);
   }, [offlineMode, fetchStarred]);
 
+  const segmentHeight = 52;
+  const contentInsetTop = headerHeight + segmentHeight;
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <SegmentControl selected={activeSegment} onSelect={setActiveSegment} />
+    <View style={styles.container}>
       <View style={styles.content}>
         {activeSegment === 'songs' && (
           <SongListView
@@ -231,6 +190,7 @@ export function FavoritesScreen() {
             emptySubtitle="Star songs you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
             scrollToTopTrigger={`${downloadedOnly}`}
+            contentInsetTop={contentInsetTop}
           />
         )}
         {activeSegment === 'albums' && (
@@ -245,15 +205,18 @@ export function FavoritesScreen() {
             emptySubtitle="Star albums you love and they will appear here, or check your filters"
             emptyIcon="heart-outline"
             scrollToTopTrigger={`${downloadedOnly}`}
+            contentInsetTop={contentInsetTop}
           />
         )}
         {activeSegment === 'artists' && (
           offlineMode ? (
-            <EmptyState
-              icon="cloud-offline-outline"
-              title="Not available offline"
-              subtitle="Artists are not available in offline mode"
-            />
+            <View style={[styles.emptyContainer, { paddingTop: contentInsetTop }]}>
+              <EmptyState
+                icon="cloud-offline-outline"
+                title="Not available offline"
+                subtitle="Artists are not available in offline mode"
+              />
+            </View>
           ) : (
             <ArtistListView
               artists={filteredArtists}
@@ -266,9 +229,13 @@ export function FavoritesScreen() {
               emptySubtitle="Star artists you love and they will appear here, or check your filters"
               emptyIcon="heart-outline"
               scrollToTopTrigger={`${downloadedOnly}`}
+              contentInsetTop={contentInsetTop}
             />
           )
         )}
+      </View>
+      <View style={[styles.segmentOverlay, { top: headerHeight }]}>
+        <SegmentControl segments={SEGMENTS} selected={activeSegment} onSelect={setActiveSegment} />
       </View>
     </View>
   );
@@ -282,35 +249,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  segmentContainer: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
-    borderRadius: 10,
-    padding: 3,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  segmentButtonActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  segmentLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  segmentLabelActive: {
-    fontWeight: '600',
-  },
   content: {
     flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  segmentOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1,
   },
 });

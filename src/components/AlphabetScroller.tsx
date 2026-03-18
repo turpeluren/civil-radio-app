@@ -16,11 +16,14 @@ interface AlphabetScrollerProps {
   activeLetters: Set<string>;
   /** Called when the user taps or drags to a letter */
   onLetterChange: (letter: string) => void;
+  /** Extra top offset so the scroller sits below a transparent header */
+  topInset?: number;
 }
 
 export const AlphabetScroller = memo(function AlphabetScroller({
   activeLetters,
   onLetterChange,
+  topInset = 0,
 }: AlphabetScrollerProps) {
   const { colors } = useTheme();
   // These refs track the *inner* letter strip, not the full-height outer container
@@ -90,7 +93,7 @@ export const AlphabetScroller = memo(function AlphabetScroller({
   if (visibleLetters.length === 0) return null;
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={[styles.container, topInset > 0 && { top: topInset }]} {...panResponder.panHandlers}>
       <View
         ref={stripRef}
         onLayout={handleStripLayout}

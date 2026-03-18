@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { CertificatePromptModal } from '../components/CertificatePromptModal';
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
@@ -328,7 +329,6 @@ export function SettingsConnectivityScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         card: { backgroundColor: colors.card },
         placeholder: { color: colors.textSecondary },
@@ -338,8 +338,9 @@ export function SettingsConnectivityScreen() {
 
   return (
     <>
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -726,6 +727,7 @@ export function SettingsConnectivityScreen() {
         </View>
       </View>
     </ScrollView>
+    </GradientBackground>
 
     {/* Certificate URL input modal */}
     <Modal

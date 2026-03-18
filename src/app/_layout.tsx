@@ -1,7 +1,8 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
-import { BackHandler, LogBox, Platform } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackHandler, LogBox, Platform, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Both expo-router (RouterFontUtils.swift) and react-native-screens
@@ -268,6 +269,20 @@ export default function RootLayout() {
     setSplashVisible(false);
   }, []);
 
+  const blurHeaderOptions = useMemo(() => ({
+    headerTransparent: true as const,
+    headerStyle: { backgroundColor: 'transparent' },
+    headerShadowVisible: false,
+    contentStyle: { backgroundColor: 'transparent' },
+    headerBackground: () => (
+      <BlurView
+        tint={theme === 'dark' ? 'dark' : 'light'}
+        intensity={80}
+        style={StyleSheet.absoluteFill}
+      />
+    ),
+  }), [theme]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
@@ -283,7 +298,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="album-list"
-          options={{ title: 'Albums', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Albums', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="album/[id]"
@@ -317,43 +332,43 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="image-cache-browser"
-          options={{ title: 'Image Cache', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Image Cache', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="metadata-cache-browser"
-          options={{ title: 'Metadata Cache', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Metadata Cache', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="music-cache-browser"
-          options={{ title: 'Downloaded Music', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Downloaded Music', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="download-queue"
-          options={{ title: 'Downloads', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Downloads', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="settings-server"
-          options={{ title: 'Server Management', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Server Management', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="settings-appearance"
-          options={{ title: 'Appearance & Layout', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Appearance & Layout', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="settings-connectivity"
-          options={{ title: 'Connectivity', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Connectivity', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="settings-storage"
-          options={{ title: 'Storage & Data', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Storage & Data', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="settings-shares"
-          options={{ title: 'Shares', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Shares', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="settings-account"
-          options={{ title: 'Account', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Account', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="player"
@@ -369,39 +384,39 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="mbid-override-browser"
-          options={{ title: 'MBID Overrides', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'MBID Overrides', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="scrobble-browser"
-          options={{ title: 'Scrobbles', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Scrobbles', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="scrobble-exclusion-browser"
-          options={{ title: 'Scrobble Exclusions', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Scrobble Exclusions', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="my-listening"
-          options={{ title: 'My Listening', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'My Listening', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="discovery"
-          options={{ title: 'Discovery', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Discovery', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="settings-audio-quality"
-          options={{ title: 'Audio Quality', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'Audio Quality', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="file-explorer"
-          options={{ title: 'File Explorer', headerBackTitle: 'Settings' }}
+          options={{ ...blurHeaderOptions, title: 'File Explorer', headerBackTitle: 'Settings' }}
         />
         <Stack.Screen
           name="file-viewer"
-          options={{ title: '', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: '', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="migration-log"
-          options={{ title: 'Migration Log', headerBackTitle: 'Back' }}
+          options={{ ...blurHeaderOptions, title: 'Migration Log', headerBackTitle: 'Back' }}
         />
       </Stack>
 

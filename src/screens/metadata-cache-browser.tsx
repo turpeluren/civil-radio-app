@@ -12,6 +12,7 @@ import {
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { ThemedAlert } from '../components/ThemedAlert';
 import { useTheme } from '../hooks/useTheme';
@@ -342,7 +343,7 @@ export function MetadataCacheBrowserScreen() {
 
   return (
     <>
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       {listHeader}
       <FlashList
         ref={listRef}
@@ -355,7 +356,7 @@ export function MetadataCacheBrowserScreen() {
         contentContainerStyle={filteredEntries.length === 0 ? styles.emptyContainer : undefined}
         ListEmptyComponent={listEmpty}
       />
-    </View>
+    </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>
   );

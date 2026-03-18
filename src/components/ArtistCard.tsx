@@ -19,13 +19,12 @@ export const ArtistCard = memo(function ArtistCard({
   width,
 }: {
   artist: ArtistID3WithRating;
-  width: number;
+  width?: number;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const starred = useIsStarred('artist', artist.id);
   const rating = useRating(artist.id, artist.userRating);
-  const imageSize = width - 16; // 8px padding on each side
 
   const onPress = useCallback(() => {
     router.push(`/artist/${artist.id}`);
@@ -37,12 +36,12 @@ export const ArtistCard = memo(function ArtistCard({
 
   return (
     <LongPressable onPress={onPress} onLongPress={onLongPress}>
-      <View style={[styles.card, { backgroundColor: colors.card, width }]}>
-        <View style={{ width: imageSize, height: imageSize }}>
+      <View style={[styles.card, { backgroundColor: colors.card }, width != null && { width }]}>
+        <View style={styles.imageContainer}>
           <CachedImage
             coverArtId={artist.coverArt}
             size={COVER_SIZE}
-            style={[styles.cover, { width: imageSize, height: imageSize }]}
+            style={styles.cover}
             resizeMode="cover"
           />
           {starred && (
@@ -80,7 +79,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
   },
+  imageContainer: {
+    aspectRatio: 1,
+  },
   cover: {
+    width: '100%',
+    height: '100%',
     borderRadius: 999,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },

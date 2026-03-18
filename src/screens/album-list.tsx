@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AlbumListView } from '../components/AlbumListView';
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { minDelay } from '../utils/stringHelpers';
@@ -94,7 +95,7 @@ export function AlbumListScreen() {
   }, [fetchAlbums]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       <AlbumListView
         albums={albums}
         loading={loading}
@@ -102,7 +103,7 @@ export function AlbumListScreen() {
         onRefresh={offlineMode ? undefined : handleRefresh}
         refreshing={refreshing}
       />
-    </View>
+    </GradientBackground>
   );
 }
 

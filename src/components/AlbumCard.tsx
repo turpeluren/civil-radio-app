@@ -21,14 +21,13 @@ export const AlbumCard = memo(function AlbumCard({
   width,
 }: {
   album: AlbumID3;
-  width: number;
+  width?: number;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const starred = useIsStarred('album', album.id);
   const downloaded = useDownloadStatus('album', album.id) === 'complete';
   const rating = useRating(album.id, album.userRating);
-  const imageSize = width - 16; // 8px padding on each side
 
   const onPress = useCallback(() => {
     router.push(`/album/${album.id}`);
@@ -40,12 +39,12 @@ export const AlbumCard = memo(function AlbumCard({
 
   return (
     <LongPressable onPress={onPress} onLongPress={onLongPress}>
-      <View style={[styles.card, { backgroundColor: colors.card, width }]}>
-        <View style={{ width: imageSize, height: imageSize }}>
+      <View style={[styles.card, { backgroundColor: colors.card }, width != null && { width }]}>
+        <View style={styles.imageContainer}>
           <CachedImage
             coverArtId={album.coverArt}
             size={COVER_SIZE}
-            style={[styles.cover, { width: imageSize, height: imageSize }]}
+            style={styles.cover}
             resizeMode="cover"
           />
           {(downloaded || starred) && (
@@ -82,7 +81,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
   },
+  imageContainer: {
+    aspectRatio: 1,
+  },
   cover: {
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { InfoRow } from '../components/InfoRow';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
@@ -65,7 +66,6 @@ export function SettingsServerScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         card: { backgroundColor: colors.card },
         placeholder: { color: colors.textSecondary },
@@ -75,8 +75,9 @@ export function SettingsServerScreen() {
 
   return (
     <>
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -224,6 +225,7 @@ export function SettingsServerScreen() {
         </View>
       </View>
     </ScrollView>
+    </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>
   );

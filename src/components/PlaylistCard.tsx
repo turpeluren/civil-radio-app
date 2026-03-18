@@ -18,12 +18,11 @@ export const PlaylistCard = memo(function PlaylistCard({
   width,
 }: {
   playlist: Playlist;
-  width: number;
+  width?: number;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const downloaded = useDownloadStatus('playlist', playlist.id) === 'complete';
-  const imageSize = width - 16; // 8px padding on each side
 
   const onPress = useCallback(() => {
     router.push(`/playlist/${playlist.id}`);
@@ -35,12 +34,12 @@ export const PlaylistCard = memo(function PlaylistCard({
 
   return (
     <LongPressable onPress={onPress} onLongPress={onLongPress}>
-      <View style={[styles.card, { backgroundColor: colors.card, width }]}>
-        <View style={{ width: imageSize, height: imageSize }}>
+      <View style={[styles.card, { backgroundColor: colors.card }, width != null && { width }]}>
+        <View style={styles.imageContainer}>
           <CachedImage
             coverArtId={playlist.coverArt}
             size={COVER_SIZE}
-            style={[styles.cover, { width: imageSize, height: imageSize }]}
+            style={styles.cover}
             resizeMode="cover"
           />
           {downloaded && (
@@ -73,7 +72,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
   },
+  imageContainer: {
+    aspectRatio: 1,
+  },
   cover: {
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },

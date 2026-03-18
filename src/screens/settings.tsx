@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import { useTheme } from '../hooks/useTheme';
 import { devOptionsStore } from '../store/devOptionsStore';
+import { searchStore } from '../store/searchStore';
 import { processingOverlayStore } from '../store/processingOverlayStore';
 import { selectionAsync, notificationAsync } from '../utils/haptics';
 
@@ -42,6 +43,7 @@ const TAP_COUNT_TO_ACTIVATE = 5;
 export function SettingsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const headerHeight = searchStore((s) => s.headerHeight);
   const devEnabled = devOptionsStore((s) => s.enabled);
 
   const tapTimestamps = useRef<number[]>([]);
@@ -84,49 +86,36 @@ export function SettingsScreen() {
     [devEnabled]
   );
 
-  const dynamicStyles = useMemo(
-    () =>
-      StyleSheet.create({
-        container: { backgroundColor: colors.background },
-      }),
-    [colors]
-  );
-
   return (
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
-      contentContainerStyle={styles.content}
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: headerHeight + 16 }]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.navCard, { backgroundColor: colors.card }]}>
-        {visibleLinks.map((link, index) => (
-          <Pressable
-            key={link.route}
-            onPress={() => router.push(link.route as never)}
-            style={({ pressed }) => [
-              styles.navRow,
-              index < visibleLinks.length - 1 && {
-                borderBottomWidth: StyleSheet.hairlineWidth,
-                borderBottomColor: colors.border,
-              },
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.navRowLeft}>
-              <Ionicons name={link.icon} size={20} color={colors.primary} style={styles.navRowIcon} />
-              <View style={styles.navRowText}>
-                <Text style={[styles.navRowLabel, { color: colors.textPrimary }]}>
-                  {link.label}
-                </Text>
-                <Text style={[styles.navRowSubtitle, { color: colors.textSecondary }]}>
-                  {link.subtitle}
-                </Text>
-              </View>
+      {visibleLinks.map((link) => (
+        <Pressable
+          key={link.route}
+          onPress={() => router.push(link.route as never)}
+          style={({ pressed }) => [
+            styles.navRow,
+            { backgroundColor: colors.card },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.navRowLeft}>
+            <Ionicons name={link.icon} size={20} color={colors.primary} style={styles.navRowIcon} />
+            <View style={styles.navRowText}>
+              <Text style={[styles.navRowLabel, { color: colors.textPrimary }]}>
+                {link.label}
+              </Text>
+              <Text style={[styles.navRowSubtitle, { color: colors.textSecondary }]}>
+                {link.subtitle}
+              </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-          </Pressable>
-        ))}
-      </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        </Pressable>
+      ))}
       <Pressable onPress={handleVersionTap}>
         <Text style={[styles.versionText, { color: colors.textSecondary }]}>
           {countdownText ?? `Version ${APP_VERSION} (${BUILD_NUMBER})`}
@@ -143,10 +132,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 32,
-  },
-  navCard: {
-    borderRadius: 12,
-    overflow: 'hidden',
+    gap: 10,
   },
   navRow: {
     flexDirection: 'row',
@@ -154,6 +140,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
+    borderRadius: 12,
   },
   navRowLeft: {
     flexDirection: 'row',

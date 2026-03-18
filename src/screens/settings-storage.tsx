@@ -6,6 +6,7 @@ import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, 
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { StorageUsageBar } from '../components/StorageUsageBar';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
@@ -346,7 +347,6 @@ export function SettingsStorageScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         card: { backgroundColor: colors.card },
       }),
@@ -355,8 +355,9 @@ export function SettingsStorageScreen() {
 
   return (
     <>
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -786,6 +787,7 @@ export function SettingsStorageScreen() {
       </View>
 
     </ScrollView>
+    </GradientBackground>
 
     <Modal
       visible={concurrentSheetVisible}

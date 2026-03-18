@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import type { ThemePreference } from '../store/themeStore';
 import { DEFAULT_PRIMARY_COLOR } from '../store/themeStore';
@@ -124,7 +125,6 @@ export function SettingsAppearanceScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         themeRow: { backgroundColor: colors.card, borderColor: colors.border },
         themeRowText: { color: colors.textPrimary },
@@ -135,8 +135,9 @@ export function SettingsAppearanceScreen() {
   );
 
   return (
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -484,6 +485,7 @@ export function SettingsAppearanceScreen() {
       </View>
 
     </ScrollView>
+    </GradientBackground>
   );
 }
 

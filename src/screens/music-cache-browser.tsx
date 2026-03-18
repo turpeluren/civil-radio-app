@@ -13,6 +13,7 @@ import {
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import {
   SwipeableRow,
@@ -371,7 +372,7 @@ export function MusicCacheBrowserScreen() {
 
   return (
     <>
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       {listHeader}
       <FlashList
         data={transitionComplete ? entries : []}
@@ -384,7 +385,7 @@ export function MusicCacheBrowserScreen() {
         }
         onScrollBeginDrag={closeOpenRow}
       />
-    </View>
+    </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>
   );

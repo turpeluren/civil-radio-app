@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
@@ -74,7 +75,6 @@ export function SettingsAudioQualityScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
       }),
     [colors]
@@ -82,8 +82,9 @@ export function SettingsAudioQualityScreen() {
 
   return (
     <>
+    <GradientBackground>
     <ScrollView
-      style={[styles.container, dynamicStyles.container]}
+      style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -329,6 +330,7 @@ export function SettingsAudioQualityScreen() {
         </Pressable>
       )}
     </ScrollView>
+    </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>
   );

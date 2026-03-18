@@ -11,9 +11,11 @@ import { minDelay } from '../utils/stringHelpers';
 export function PlaylistListScreen({
   layout = 'list',
   downloadedOnly = false,
+  contentInsetTop = 0,
 }: {
   layout?: PlaylistLayout;
   downloadedOnly?: boolean;
+  contentInsetTop?: number;
 }) {
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
@@ -47,7 +49,7 @@ export function PlaylistListScreen({
   }, [offlineMode, fetchAllPlaylists]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <PlaylistListView
         playlists={filteredPlaylists}
         layout={layout}
@@ -57,6 +59,7 @@ export function PlaylistListScreen({
         refreshing={refreshing}
         showAlphabetScroller
         scrollToTopTrigger={`${downloadedOnly}`}
+        contentInsetTop={contentInsetTop}
       />
     </View>
   );

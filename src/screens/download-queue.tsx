@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { HeaderHeightContext } from '@react-navigation/elements';
 import { useNavigation } from 'expo-router';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -21,8 +22,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { CachedImage } from '../components/CachedImage';
-import { ThemedAlert } from '../components/ThemedAlert';
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
+import { ThemedAlert } from '../components/ThemedAlert';
 import { closeOpenRow, SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
@@ -155,8 +157,9 @@ const QueueRow = memo(function QueueRow({
   return (
     <ScaleDecorator activeScale={1.03}>
       <ShadowDecorator>
-        <SwipeableRow rightActions={rightActions} enableFullSwipeRight>
-          <View style={[styles.row, { borderBottomColor: colors.border }]}>
+        <View style={styles.rowWrapper}>
+        <SwipeableRow rightActions={rightActions} enableFullSwipeRight borderRadius={12}>
+          <View style={styles.row}>
             <View style={styles.thumbWrap}>
               <CachedImage
                 coverArtId={item.coverArtId}
@@ -228,6 +231,7 @@ const QueueRow = memo(function QueueRow({
             )}
           </View>
         </SwipeableRow>
+        </View>
       </ShadowDecorator>
     </ScaleDecorator>
   );
@@ -241,6 +245,7 @@ export function DownloadQueueScreen() {
   const { colors } = useTheme();
   const { alert, alertProps } = useThemedAlert();
   const navigation = useNavigation();
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const downloadQueue = musicCacheStore((s) => s.downloadQueue);
 
   /* ---- Sorted display list: downloading → queued → error ---- */
@@ -401,13 +406,14 @@ export function DownloadQueueScreen() {
   const contentStyle = useMemo(
     () => ({
       flexGrow: 1 as const,
-      backgroundColor: colors.background,
+      paddingTop: headerHeight,
+      paddingBottom: 32,
     }),
-    [colors.background],
+    [headerHeight],
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container} scrollable>
       <DraggableFlatList
         data={sortedQueue}
         renderItem={renderItem}
@@ -420,7 +426,7 @@ export function DownloadQueueScreen() {
         contentContainerStyle={contentStyle}
       />
       <ThemedAlert {...alertProps} />
-    </View>
+    </GradientBackground>
   );
 }
 
@@ -438,7 +444,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     marginHorizontal: 16,
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 10,
   },
   statsRow: {
     flexDirection: 'row',
@@ -474,12 +480,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  rowWrapper: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   thumbWrap: {
     width: 56,

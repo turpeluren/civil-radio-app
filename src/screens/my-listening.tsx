@@ -6,6 +6,7 @@ import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { GenreChart } from '../components/GenreChart';
+import { GradientBackground } from '../components/GradientBackground';
 import { MiniBarChart } from '../components/MiniBarChart';
 import { SectionTitle } from '../components/SectionTitle';
 import { StatCard } from '../components/StatCard';
@@ -74,9 +75,9 @@ export function MyListeningScreen() {
 
   if (!transitionComplete) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.loadingContainer}>
         <ActivityIndicator color={colors.primary} size="large" />
-      </View>
+      </GradientBackground>
     );
   }
 
@@ -84,7 +85,7 @@ export function MyListeningScreen() {
 
   if (isEmpty) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.loadingContainer}>
         <EmptyState
           icon="musical-notes-outline"
           title="No listening history yet"
@@ -95,7 +96,7 @@ export function MyListeningScreen() {
             other devices.
           </Text>
         </EmptyState>
-      </View>
+      </GradientBackground>
     );
   }
 
@@ -117,8 +118,9 @@ export function MyListeningScreen() {
     .slice(0, 20);
 
   return (
+    <GradientBackground>
     <ScrollView
-      style={[styles.screen, { backgroundColor: colors.background }]}
+      style={styles.screen}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
@@ -363,6 +365,7 @@ export function MyListeningScreen() {
 
       <View style={styles.footer} />
     </ScrollView>
+    </GradientBackground>
   );
 }
 

@@ -2,14 +2,16 @@ import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 
 import { useTheme } from '../hooks/useTheme';
 import { EmptyState } from './EmptyState';
+import { InsetRefreshSpacer } from './InsetRefreshSpacer';
 import { playTrack } from '../services/playerService';
 import type { Child } from '../services/subsonicService';
 import { SongCard } from './SongCard';
@@ -47,6 +49,8 @@ export interface SongListViewProps {
   emptyIcon?: string;
   /** When this value changes, the list scrolls to the top */
   scrollToTopTrigger?: string;
+  /** Extra top padding so content starts below a floating header but scrolls behind it */
+  contentInsetTop?: number;
 }
 
 export function SongListView({
@@ -60,18 +64,19 @@ export function SongListView({
   emptySubtitle = 'Try adjusting your filters, or pull to refresh',
   emptyIcon,
   scrollToTopTrigger,
+  contentInsetTop = 0,
 }: SongListViewProps) {
   const { colors } = useTheme();
+  const scrollY = useSharedValue(0);
+
+  const handleScroll = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      scrollY.value = e.nativeEvent.contentOffset.y;
+    },
+    [scrollY],
+  );
 
   const listKey = scrollToTopTrigger ? `${layout}:${scrollToTopTrigger}` : layout;
-
-  const screenWidth = Dimensions.get('window').width;
-  const cardWidth = useMemo(
-    () =>
-      (screenWidth - LIST_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) /
-      GRID_COLUMNS,
-    [screenWidth]
-  );
 
   const renderListItem = useCallback(
     ({ item }: { item: Child }) => (
@@ -89,13 +94,14 @@ export function SongListView({
             flex: 1,
             paddingLeft: isLeftColumn ? 0 : GRID_GAP / 2,
             paddingRight: isLeftColumn ? GRID_GAP / 2 : 0,
+            marginBottom: GRID_GAP,
           }}
         >
-          <SongCard song={item} width={cardWidth} onPress={() => playTrack(item, songs)} />
+          <SongCard song={item} onPress={() => playTrack(item, songs)} />
         </View>
       );
     },
-    [cardWidth, songs]
+    [songs]
   );
 
   const keyExtractor = useCallback((item: Child) => item.id, []);
@@ -113,7 +119,7 @@ export function SongListView({
 
   if (loading && songs.length === 0) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -121,7 +127,7 @@ export function SongListView({
 
   if (error && songs.length === 0) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <View style={styles.centered}>
         <Text style={[styles.errorText, { color: colors.textSecondary }]}>
           {error}
         </Text>
@@ -143,8 +149,28 @@ export function SongListView({
         styles.listContent,
         songs.length === 0 && styles.emptyListContent,
       ]}
-      onRefresh={onRefresh}
-      refreshing={refreshing}
+      onScroll={contentInsetTop > 0 ? handleScroll : undefined}
+      scrollEventThrottle={contentInsetTop > 0 ? 16 : undefined}
+      ListHeaderComponent={
+        contentInsetTop > 0 ? (
+          <InsetRefreshSpacer
+            height={contentInsetTop}
+            refreshing={refreshing}
+            scrollY={scrollY}
+            color={colors.primary}
+          />
+        ) : undefined
+      }
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={contentInsetTop > 0 ? 'transparent' : colors.primary}
+            colors={contentInsetTop > 0 ? ['transparent'] : [colors.primary]}
+          />
+        ) : undefined
+      }
       ListEmptyComponent={EmptyComponent}
     />
   );

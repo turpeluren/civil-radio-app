@@ -23,6 +23,7 @@ import Animated, {
 
 import { EditShareSheet } from '../components/EditShareSheet';
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
@@ -177,7 +178,6 @@ export function SettingsSharesScreen() {
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
-        container: { backgroundColor: colors.background },
         sectionTitle: { color: colors.label },
         card: { backgroundColor: colors.card },
         input: {
@@ -198,8 +198,9 @@ export function SettingsSharesScreen() {
 
   return (
     <>
+      <GradientBackground>
       <ScrollView
-        style={[styles.container, dynamicStyles.container]}
+        style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -399,6 +400,7 @@ export function SettingsSharesScreen() {
           )}
         </View>
       </ScrollView>
+      </GradientBackground>
 
       <EditShareSheet />
       <ThemedAlert {...alertProps} />

@@ -1,8 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState as EmptyStateComponent } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
+import { SegmentControl } from '../components/SegmentControl';
 import { useTheme } from '../hooks/useTheme';
 import { completedScrobbleStore, type CompletedScrobble } from '../store/completedScrobbleStore';
 import { pendingScrobbleStore, type PendingScrobble } from '../store/pendingScrobbleStore';
@@ -13,12 +15,12 @@ import { pendingScrobbleStore, type PendingScrobble } from '../store/pendingScro
 
 type Scrobble = PendingScrobble | CompletedScrobble;
 
-type Segment = 'completed' | 'pending';
+type ScrobbleSegment = 'completed' | 'pending';
 
-const SEGMENTS: { key: Segment; label: string }[] = [
+const SEGMENTS = [
   { key: 'completed', label: 'Completed' },
   { key: 'pending', label: 'Pending' },
-];
+] as const;
 
 const ROW_HEIGHT = 56;
 
@@ -38,48 +40,6 @@ function timeAgo(ts: number): string {
   if (days < 7) return `${days}d ago`;
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-
-/* ------------------------------------------------------------------ */
-/*  SegmentControl                                                     */
-/* ------------------------------------------------------------------ */
-
-function SegmentControl({
-  selected,
-  onSelect,
-}: {
-  selected: Segment;
-  onSelect: (segment: Segment) => void;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={[styles.segmentContainer, { backgroundColor: colors.inputBg }]}>
-      {SEGMENTS.map(({ key, label }) => {
-        const isActive = selected === key;
-        return (
-          <Pressable
-            key={key}
-            onPress={() => onSelect(key)}
-            style={[
-              styles.segmentButton,
-              isActive && [styles.segmentButtonActive, { backgroundColor: colors.card }],
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentLabel,
-                { color: isActive ? colors.textPrimary : colors.textSecondary },
-                isActive && styles.segmentLabelActive,
-              ]}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -116,7 +76,7 @@ const ScrobbleRow = memo(function ScrobbleRow({
 /*  Empty State                                                        */
 /* ------------------------------------------------------------------ */
 
-function ScrobbleEmptyState({ segment }: { segment: Segment }) {
+function ScrobbleEmptyState({ segment }: { segment: ScrobbleSegment }) {
   const icon = segment === 'completed' ? 'checkmark-done-outline' : 'time-outline';
   const message =
     segment === 'completed' ? 'No completed scrobbles yet' : 'No pending scrobbles';
@@ -134,7 +94,7 @@ function ScrobbleEmptyState({ segment }: { segment: Segment }) {
 
 export function ScrobbleBrowserScreen() {
   const { colors } = useTheme();
-  const [activeSegment, setActiveSegment] = useState<Segment>('completed');
+  const [activeSegment, setActiveSegment] = useState<ScrobbleSegment>('completed');
 
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
   const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
@@ -168,8 +128,8 @@ export function ScrobbleBrowserScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <SegmentControl selected={activeSegment} onSelect={setActiveSegment} />
+    <GradientBackground style={styles.container}>
+      <SegmentControl segments={SEGMENTS} selected={activeSegment} onSelect={setActiveSegment} />
       <View style={styles.content}>
         {activeSegment === 'completed' && (
           <FlashList
@@ -190,7 +150,7 @@ export function ScrobbleBrowserScreen() {
           />
         )}
       </View>
-    </View>
+    </GradientBackground>
   );
 }
 
@@ -201,34 +161,6 @@ export function ScrobbleBrowserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
-    borderRadius: 10,
-    padding: 3,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  segmentButtonActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  segmentLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  segmentLabelActive: {
-    fontWeight: '600',
   },
   content: {
     flex: 1,

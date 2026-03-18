@@ -47,6 +47,7 @@ interface ResultSection {
 export function SearchScreen() {
   const { colors } = useTheme();
   const isFocused = useIsFocused();
+  const headerHeight = searchStore((s) => s.headerHeight);
 
   const query = searchStore((s) => s.query);
   const results = searchStore((s) => s.results);
@@ -188,20 +189,20 @@ export function SearchScreen() {
       : `No results for "${query}"`;
 
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { paddingTop: headerHeight }]}>
         <EmptyState icon="search-outline" title={title} subtitle={subtitle} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <SectionList
         sections={sections}
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         keyExtractor={keyExtractor}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingTop: headerHeight + 16 }]}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
         onRefresh={handleRefresh}

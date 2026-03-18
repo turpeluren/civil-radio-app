@@ -14,10 +14,12 @@ export function ArtistListScreen({
   layout = 'list',
   downloadedOnly = false,
   favoritesOnly = false,
+  contentInsetTop = 0,
 }: {
   layout?: ArtistLayout;
   downloadedOnly?: boolean;
   favoritesOnly?: boolean;
+  contentInsetTop?: number;
 }) {
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
@@ -72,7 +74,7 @@ export function ArtistListScreen({
   }, [offlineMode, fetchAllArtists]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <ArtistListView
         artists={filteredArtists}
         layout={layout}
@@ -82,6 +84,7 @@ export function ArtistListScreen({
         refreshing={refreshing}
         showAlphabetScroller
         scrollToTopTrigger={`${downloadedOnly}:${favoritesOnly}`}
+        contentInsetTop={contentInsetTop}
       />
     </View>
   );

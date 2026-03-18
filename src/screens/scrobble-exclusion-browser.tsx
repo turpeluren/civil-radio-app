@@ -3,6 +3,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '../components/EmptyState';
+import { GradientBackground } from '../components/GradientBackground';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTheme } from '../hooks/useTheme';
 import {
@@ -97,24 +98,24 @@ export function ScrobbleExclusionBrowserScreen() {
 
   if (data.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.container}>
         <EmptyState
           icon="eye-off-outline"
           title="No Scrobble Exclusions"
           subtitle="Exclusions you set from an album, artist, or playlist menu will appear here."
         />
-      </View>
+      </GradientBackground>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <GradientBackground style={styles.container}>
       <FlashList
         data={data}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
       />
-    </View>
+    </GradientBackground>
   );
 }
 

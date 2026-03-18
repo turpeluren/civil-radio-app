@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 
 const VIEWABLE_EXTENSIONS = new Set([
@@ -82,7 +83,7 @@ export function FileViewerScreen({ uri, name }: { uri: string; name: string }) {
             ) : null,
         }}
       />
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <GradientBackground style={styles.container}>
         {error ? (
           <View style={styles.center}>
             <Ionicons
@@ -117,7 +118,7 @@ export function FileViewerScreen({ uri, name }: { uri: string; name: string }) {
             </Text>
           </ScrollView>
         )}
-      </View>
+      </GradientBackground>
     </>
   );
 }
