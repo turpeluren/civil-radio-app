@@ -1,6 +1,6 @@
 jest.mock('../sqliteStorage', () => require('../__mocks__/sqliteStorage'));
 
-import { authStore, clearPersistedData } from '../authStore';
+import { authStore } from '../authStore';
 
 beforeEach(() => {
   authStore.setState({
@@ -41,12 +41,3 @@ describe('authStore', () => {
   });
 });
 
-describe('clearPersistedData', () => {
-  it('clears session and removes persisted data', async () => {
-    authStore.getState().setSession('https://music.example.com', 'user', 'pass', '1.16');
-    await clearPersistedData();
-    const state = authStore.getState();
-    expect(state.isLoggedIn).toBe(false);
-    expect(state.serverUrl).toBeNull();
-  });
-});

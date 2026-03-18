@@ -5,16 +5,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../hooks/useTheme';
+import { clearImageCache } from '../services/imageCacheService';
+import { clearMusicCache } from '../services/musicCacheService';
 import { stopPolling } from '../services/scanService';
 import { clearApiCache } from '../services/subsonicService';
 import { authStore } from '../store/authStore';
-import { scanStatusStore } from '../store/scanStatusStore';
-import { serverInfoStore } from '../store/serverInfoStore';
-import { sqliteStorage } from '../store/sqliteStorage';
-
-const AUTH_PERSIST_KEY = 'substreamer-auth';
-const SERVER_INFO_PERSIST_KEY = 'substreamer-server-info';
-const SCAN_STATUS_PERSIST_KEY = 'substreamer-scan-status';
+import { resetAllStores } from '../store/resetAllStores';
 
 export function SettingsAccountScreen() {
   const router = useRouter();
@@ -24,15 +20,12 @@ export function SettingsAccountScreen() {
   const password = authStore((s) => s.password);
   const [passwordVisible, setPasswordVisible] = useState(false);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     stopPolling();
-    authStore.getState().clearSession();
-    serverInfoStore.getState().clearServerInfo();
-    scanStatusStore.getState().clearScanStatus();
     clearApiCache();
-    sqliteStorage.removeItem(AUTH_PERSIST_KEY);
-    sqliteStorage.removeItem(SERVER_INFO_PERSIST_KEY);
-    sqliteStorage.removeItem(SCAN_STATUS_PERSIST_KEY);
+    resetAllStores();
+    clearImageCache();
+    clearMusicCache();
     router.replace('/login');
   };
 

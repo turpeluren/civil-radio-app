@@ -30,3 +30,8 @@ export const sqliteStorage: StateStorage = {
     db.runSync('DELETE FROM storage WHERE key = ?;', [key]);
   },
 };
+
+/** Delete every row from the storage table — used by logout. */
+export function clearAllStorage(): void {
+  db.runSync('DELETE FROM storage;');
+}
