@@ -1,5 +1,15 @@
 # Changelog
 
+## [8.0.30] - 2026-03-18
+
+- ci: update coverage badge [skip ci]
+- account: ensure logout clears storage, retains backups though
+- backup: add scrobble exclusion list to backups
+- debug: file explorer file view and copy lists: restore transparent background
+- ci: update coverage badge [skip ci]
+- tests: fix ts error
+- tests: ssl store
+- tests: stop cheating by ignoring those where a test file does not exist yet
 ## [8.0.29] - 2026-03-17
 
 - detail pages: request error place holder
