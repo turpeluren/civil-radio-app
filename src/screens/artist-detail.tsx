@@ -394,15 +394,11 @@ export function ArtistDetailScreen() {
       {Platform.OS === 'ios' && artist && (
         <Stack.Toolbar placement="right">
           {!offlineMode && (
-            <Stack.Toolbar.View>
-              <Pressable onPress={handleToggleStar} hitSlop={8}>
-                <Ionicons
-                  name={starred ? 'heart' : 'heart-outline'}
-                  size={22}
-                  color={starred ? colors.red : colors.textPrimary}
-                />
-              </Pressable>
-            </Stack.Toolbar.View>
+            <Stack.Toolbar.Button
+              icon={starred ? 'heart.fill' : 'heart'}
+              onPress={handleToggleStar}
+              tintColor={starred ? colors.red : undefined}
+            />
           )}
           <Stack.Toolbar.Button
             icon="ellipsis"
