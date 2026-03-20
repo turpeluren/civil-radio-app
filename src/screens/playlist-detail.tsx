@@ -547,6 +547,8 @@ const styles = StyleSheet.create({
   },
   hero: {
     width: '100%',
+    maxWidth: 448,
+    alignSelf: 'center',
     paddingTop: HERO_PADDING / 2,
     paddingHorizontal: HERO_PADDING,
     paddingBottom: HERO_PADDING,

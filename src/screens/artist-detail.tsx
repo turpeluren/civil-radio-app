@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -57,6 +58,8 @@ const HORIZONTAL_GAP = 10;
 export function ArtistDetailScreen() {
   const { colors } = useTheme();
   const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const { width: screenWidth } = useWindowDimensions();
+  const heroImageSize = Math.min(Math.max(HERO_IMAGE_SIZE, screenWidth * 0.35), 280);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -239,7 +242,7 @@ export function ArtistDetailScreen() {
             coverArtId={artist.coverArt}
             size={HERO_COVER_SIZE}
             fallbackUri={artistInfo?.largeImageUrl ?? undefined}
-            style={styles.heroImage}
+            style={[styles.heroImage, { width: heroImageSize, height: heroImageSize, borderRadius: heroImageSize / 2 }]}
             resizeMode="cover"
           />
           <Text style={[styles.artistName, { color: colors.textPrimary }]}>
@@ -345,6 +348,7 @@ export function ArtistDetailScreen() {
   }, [
     artist,
     artistInfo,
+    heroImageSize,
     ready,
     biography,
     bioExpanded,

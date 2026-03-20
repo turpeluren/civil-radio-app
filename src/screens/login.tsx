@@ -256,6 +256,9 @@ const styles = StyleSheet.create({
   },
   inner: {
     paddingHorizontal: 24,
+    maxWidth: 400,
+    width: '100%',
+    alignSelf: 'center',
   },
   logoContainer: {
     alignItems: 'center',

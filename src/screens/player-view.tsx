@@ -609,6 +609,8 @@ const styles = StyleSheet.create({
   },
   hero: {
     width: '100%',
+    maxWidth: 464,
+    alignSelf: 'center',
     paddingHorizontal: HERO_PADDING,
     paddingTop: 8,
     paddingBottom: 24,
@@ -633,6 +635,9 @@ const styles = StyleSheet.create({
   },
   trackInfo: {
     paddingHorizontal: HERO_PADDING,
+    maxWidth: 464,
+    width: '100%',
+    alignSelf: 'center',
     marginBottom: 16,
   },
   trackInfoRow: {
@@ -657,6 +662,9 @@ const styles = StyleSheet.create({
   },
   progressSection: {
     paddingHorizontal: HERO_PADDING,
+    maxWidth: 464,
+    width: '100%',
+    alignSelf: 'center',
     marginBottom: 8,
   },
   controls: {
@@ -665,6 +673,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: HERO_PADDING,
+    maxWidth: 464,
+    width: '100%',
+    alignSelf: 'center',
     marginBottom: 32,
   },
   controlSideLeft: {
