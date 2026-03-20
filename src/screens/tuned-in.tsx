@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -36,7 +35,7 @@ import {
 } from '../services/tunedInService';
 import { getOfflineSongsByGenre } from '../services/searchService';
 import { playTrack } from '../services/playerService';
-import { type Child } from '../services/subsonicService';
+import { getAlbum, type Child } from '../services/subsonicService';
 import { albumListsStore } from '../store/albumListsStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { connectivityStore } from '../store/connectivityStore';
@@ -381,10 +380,22 @@ const JumpBackInItem = memo(function JumpBackInItem({
   album: { id: string; name?: string; coverArt?: string };
   colors: ThemeColors;
 }) {
-  const router = useRouter();
-  const handlePress = useCallback(() => {
-    router.push(`/album/${album.id}`);
-  }, [album.id, router]);
+  const [loading, setLoading] = useState(false);
+
+  const handlePress = useCallback(async () => {
+    if (loading) return;
+    selectionAsync();
+    setLoading(true);
+    try {
+      const detail = await getAlbum(album.id);
+      const songs = detail?.song;
+      if (songs && songs.length > 0) {
+        await playTrack(songs[0], songs);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [album.id, loading]);
 
   return (
     <Pressable onPress={handlePress} style={styles.jumpItem}>
@@ -394,6 +405,11 @@ const JumpBackInItem = memo(function JumpBackInItem({
         style={styles.jumpImage}
         resizeMode="cover"
       />
+      {loading && (
+        <View style={styles.jumpLoadingOverlay}>
+          <ActivityIndicator size="small" color="#fff" />
+        </View>
+      )}
       <Text
         style={[styles.jumpTitle, { color: colors.textPrimary }]}
         numberOfLines={1}
@@ -1162,6 +1178,16 @@ const styles = StyleSheet.create({
     width: JUMP_BACK_IN_IMAGE,
     height: JUMP_BACK_IN_IMAGE,
     borderRadius: 10,
+  },
+  jumpLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    top: 0,
+    width: JUMP_BACK_IN_IMAGE,
+    height: JUMP_BACK_IN_IMAGE,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   jumpTitle: {
     fontSize: 11,
