@@ -80,6 +80,7 @@ export function FavoritesScreen() {
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
   const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const starredSongsDownloaded = STARRED_SONGS_ITEM_ID in cachedItems;
 
   /* ---- Configure filter bar ---- */
   const handleDownloadStarred = useCallback(() => {
@@ -108,9 +109,8 @@ export function FavoritesScreen() {
     store.setHideDownloaded(activeSegment === 'artists');
     store.setHideFavorites(false);
 
-    const starredDownloaded = STARRED_SONGS_ITEM_ID in musicCacheStore.getState().cachedItems;
     const showDownloadButton =
-      activeSegment === 'songs' && songs.length > 0 && (!offlineMode || starredDownloaded);
+      activeSegment === 'songs' && songs.length > 0 && (!offlineMode || starredSongsDownloaded);
     store.setDownloadButtonConfig(
       showDownloadButton
         ? {
@@ -139,8 +139,9 @@ export function FavoritesScreen() {
 
   const filteredSongs = useMemo(() => {
     if (!downloadedOnly) return songs;
+    if (!starredSongsDownloaded) return [];
     return songs.filter((s) => getLocalTrackUri(s.id) !== null);
-  }, [songs, downloadedOnly, cachedItems]);
+  }, [songs, downloadedOnly, starredSongsDownloaded, cachedItems]);
 
   const filteredAlbums = useMemo(() => {
     if (!downloadedOnly) return albums;
@@ -184,9 +185,15 @@ export function FavoritesScreen() {
             error={error}
             onRefresh={handleRefresh}
             refreshing={refreshing}
-            emptyMessage="No favorite songs yet"
-            emptySubtitle="Star songs you love and they will appear here, or check your filters"
-            emptyIcon="heart-outline"
+            emptyMessage={starredSongsDownloaded === false && offlineMode
+              ? 'Not available offline'
+              : 'No favorite songs yet'}
+            emptySubtitle={starredSongsDownloaded === false && offlineMode
+              ? 'Download your favorite songs to access them in offline mode'
+              : 'Star songs you love and they will appear here, or check your filters'}
+            emptyIcon={starredSongsDownloaded === false && offlineMode
+              ? 'cloud-offline-outline'
+              : 'heart-outline'}
             scrollToTopTrigger={`${downloadedOnly}`}
             contentInsetTop={contentInsetTop}
           />
