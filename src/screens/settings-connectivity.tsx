@@ -9,6 +9,7 @@ import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
+import NetInfo from '@react-native-community/netinfo';
 import { autoOfflineStore, type AutoOfflineMode } from '../store/autoOfflineStore';
 import { authStore } from '../store/authStore';
 import { offlineModeStore } from '../store/offlineModeStore';
@@ -56,6 +57,7 @@ export function SettingsConnectivityScreen() {
   const [ssidEditTarget, setSsidEditTarget] = useState<string | null>(null);
   const [ssidSetupValue, setSsidSetupValue] = useState('');
   const [ssidReadFailed, setSsidReadFailed] = useState(false);
+  const [notOnWifi, setNotOnWifi] = useState(false);
 
   // --- Add Certificate flow ---
   const [certUrlPromptVisible, setCertUrlPromptVisible] = useState(false);
@@ -81,6 +83,14 @@ export function SettingsConnectivityScreen() {
   useEffect(() => {
     if (autoMode === 'home-wifi') {
       checkLocationPermission().then(async (granted) => {
+        const state = await NetInfo.refresh();
+        if (state.type !== 'wifi') {
+          setCurrentSSID(null);
+          setSsidReadFailed(false);
+          setNotOnWifi(true);
+          return;
+        }
+        setNotOnWifi(false);
         const ssid = await getCurrentSSIDWithRetry();
         setCurrentSSID(ssid);
         setSsidReadFailed(granted && ssid == null);
@@ -133,6 +143,14 @@ export function SettingsConnectivityScreen() {
     autoOfflineStore.getState().setMode(mode);
     if (mode === 'home-wifi') {
       checkLocationPermission().then(async (granted) => {
+        const state = await NetInfo.refresh();
+        if (state.type !== 'wifi') {
+          setCurrentSSID(null);
+          setSsidReadFailed(false);
+          setNotOnWifi(true);
+          return;
+        }
+        setNotOnWifi(false);
         const ssid = await getCurrentSSIDWithRetry();
         setCurrentSSID(ssid);
         setSsidReadFailed(granted && ssid == null);
@@ -143,6 +161,14 @@ export function SettingsConnectivityScreen() {
   const handleGrantPermission = useCallback(async () => {
     const granted = await requestLocationPermission();
     if (granted) {
+      const state = await NetInfo.refresh();
+      if (state.type !== 'wifi') {
+        setCurrentSSID(null);
+        setSsidReadFailed(false);
+        setNotOnWifi(true);
+        return;
+      }
+      setNotOnWifi(false);
       const ssid = await getCurrentSSIDWithRetry();
       setCurrentSSID(ssid);
       setSsidReadFailed(ssid == null);
@@ -152,6 +178,14 @@ export function SettingsConnectivityScreen() {
   }, []);
 
   const handleRetrySSID = useCallback(async () => {
+    const state = await NetInfo.refresh();
+    if (state.type !== 'wifi') {
+      setCurrentSSID(null);
+      setSsidReadFailed(false);
+      setNotOnWifi(true);
+      return;
+    }
+    setNotOnWifi(false);
     const ssid = await getCurrentSSIDWithRetry();
     setCurrentSSID(ssid);
     setSsidReadFailed(ssid == null);
@@ -480,6 +514,17 @@ export function SettingsConnectivityScreen() {
                         {homeSSIDs.length > 0 ? 'Grant Permission' : 'Try Again'}
                       </Text>
                     </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {autoMode === 'home-wifi' && locationGranted && !ssidReadFailed && notOnWifi && (
+                <View style={styles.permissionWarning}>
+                  <Ionicons name="wifi-outline" size={20} color={colors.textSecondary} />
+                  <View style={styles.permissionWarningText}>
+                    <Text style={[styles.toggleHint, { color: colors.textSecondary }]}>
+                      Connect to WiFi to detect your network name.{homeSSIDs.length === 0 ? ' You can also add a network manually below.' : ''}
+                    </Text>
                   </View>
                 </View>
               )}
