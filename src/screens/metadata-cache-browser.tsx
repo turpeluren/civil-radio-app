@@ -4,7 +4,6 @@ import { HeaderHeightContext } from '@react-navigation/elements';
 import { memo, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -110,15 +109,19 @@ const MetadataRow = memo(function MetadataRow({
   onRefresh: (entry: MetadataEntry) => void;
   onDelete: (entry: MetadataEntry) => void;
 }) {
-  const busy = status === 'refreshing';
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
   const handleDelete = useCallback(() => {
     onDelete(entry);
   }, [entry, onDelete]);
 
+  const handleRefreshAction = useCallback(() => {
+    onRefresh(entry);
+  }, [entry, onRefresh]);
+
   const rightActions: SwipeAction[] = useMemo(
     () => [
+      ...(!offlineMode ? [{ icon: 'refresh-outline' as const, color: colors.primary, label: 'Refresh', onPress: handleRefreshAction }] : []),
       {
         icon: 'trash-outline' as const,
         color: colors.red,
@@ -126,7 +129,7 @@ const MetadataRow = memo(function MetadataRow({
         onPress: handleDelete,
       },
     ],
-    [colors.red, handleDelete],
+    [offlineMode, colors.primary, colors.red, handleRefreshAction, handleDelete],
   );
 
   return (
@@ -172,20 +175,8 @@ const MetadataRow = memo(function MetadataRow({
               </Text>
             )}
           </View>
-          {!offlineMode && (
-            <View style={styles.actions}>
-              {busy ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Pressable
-                  onPress={() => onRefresh(entry)}
-                  hitSlop={8}
-                  style={({ pressed }) => pressed && styles.pressed}
-                >
-                  <Ionicons name="refresh-outline" size={20} color={colors.primary} />
-                </Pressable>
-              )}
-            </View>
+          {status === 'refreshing' && (
+            <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           )}
         </View>
       </SwipeableRow>
@@ -433,18 +424,12 @@ const styles = StyleSheet.create({
   dateLabel: {
     fontSize: 11,
   },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+  spinner: {
     marginLeft: 12,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '500',
     marginTop: 2,
-  },
-  pressed: {
-    opacity: 0.6,
   },
 });

@@ -47,15 +47,19 @@ const CacheRow = memo(function CacheRow({
   onDelete: (coverArtId: string) => void;
 }) {
   const thumbUri = entry.files[0]?.uri;
-  const busy = status === 'refreshing';
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
   const handleDelete = useCallback(() => {
     onDelete(entry.coverArtId);
   }, [entry.coverArtId, onDelete]);
 
+  const handleRefreshAction = useCallback(() => {
+    onRefresh(entry.coverArtId);
+  }, [entry.coverArtId, onRefresh]);
+
   const rightActions: SwipeAction[] = useMemo(
     () => [
+      ...(!offlineMode ? [{ icon: 'refresh-outline' as const, color: colors.primary, label: 'Refresh', onPress: handleRefreshAction }] : []),
       {
         icon: 'trash-outline' as const,
         color: colors.red,
@@ -63,7 +67,7 @@ const CacheRow = memo(function CacheRow({
         onPress: handleDelete,
       },
     ],
-    [colors.red, handleDelete],
+    [offlineMode, colors.primary, colors.red, handleRefreshAction, handleDelete],
   );
 
   return (
@@ -110,20 +114,8 @@ const CacheRow = memo(function CacheRow({
               </Text>
             )}
           </View>
-          {!offlineMode && (
-            <View style={styles.actions}>
-              {busy ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Pressable
-                  onPress={() => onRefresh(entry.coverArtId)}
-                  hitSlop={8}
-                  style={({ pressed }) => pressed && styles.pressed}
-                >
-                  <Ionicons name="refresh-outline" size={20} color={colors.primary} />
-                </Pressable>
-              )}
-            </View>
+          {status === 'refreshing' && (
+            <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           )}
         </View>
       </SwipeableRow>
@@ -414,10 +406,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 11,
   },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+  spinner: {
     marginLeft: 12,
   },
   statusText: {

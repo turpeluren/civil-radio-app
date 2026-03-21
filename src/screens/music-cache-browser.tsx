@@ -137,13 +137,20 @@ const CacheRow = memo(function CacheRow({
     onDelete(item.itemId);
   }, [item.itemId, onDelete]);
 
+  const handleRedownload = useCallback(() => {
+    onRedownload(item.itemId);
+  }, [item.itemId, onRedownload]);
+
   const handleToggle = useCallback(() => {
     onToggle(item.itemId);
   }, [item.itemId, onToggle]);
 
   const rightActions: SwipeAction[] = useMemo(
-    () => [{ icon: 'trash-outline', color: colors.red, label: 'Delete', onPress: handleDelete, removesRow: true }],
-    [colors.red, handleDelete],
+    () => [
+      ...(!offlineMode ? [{ icon: 'refresh-outline' as const, color: colors.primary, label: 'Refresh', onPress: handleRedownload }] : []),
+      { icon: 'trash-outline' as const, color: colors.red, label: 'Delete', onPress: handleDelete, removesRow: true },
+    ],
+    [offlineMode, colors.primary, colors.red, handleRedownload, handleDelete],
   );
 
   return (
@@ -170,15 +177,6 @@ const CacheRow = memo(function CacheRow({
                 {item.type === 'album' ? 'Album' : 'Playlist'} · {trackLabel} · {formatBytes(item.totalBytes)}
               </Text>
             </View>
-            {!offlineMode && (
-              <Pressable
-                onPress={() => onRedownload(item.itemId)}
-                hitSlop={8}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Ionicons name="refresh" size={20} color={colors.primary} />
-              </Pressable>
-            )}
             <Ionicons
               name={expanded ? 'chevron-up' : 'chevron-down'}
               size={16}
