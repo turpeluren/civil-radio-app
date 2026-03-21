@@ -1,7 +1,10 @@
+jest.mock('../../store/sqliteStorage', () => require('../../store/__mocks__/sqliteStorage'));
+
 import React from 'react';
 import { act, render } from '@testing-library/react-native';
 
 import { connectivityStore } from '../../store/connectivityStore';
+import { offlineModeStore } from '../../store/offlineModeStore';
 
 jest.mock('../../hooks/useTheme', () => ({
   useTheme: () => ({
@@ -47,6 +50,7 @@ beforeEach(() => {
     isInternetReachable: true,
     isServerReachable: true,
   });
+  offlineModeStore.setState({ offlineMode: false });
 });
 
 describe('ConnectivityBanner', () => {
@@ -93,5 +97,19 @@ describe('ConnectivityBanner', () => {
     connectivityStore.setState({ bannerState: 'ssl-error' });
     const { getByText } = render(<ConnectivityBanner />);
     expect(getByText('Certificate changed')).toBeTruthy();
+  });
+
+  it('suppresses banner when offline mode is enabled', () => {
+    offlineModeStore.setState({ offlineMode: true });
+    connectivityStore.setState({
+      bannerState: 'unreachable',
+      isInternetReachable: false,
+    });
+    const { toJSON } = render(<ConnectivityBanner />);
+    const root = toJSON();
+    // Wrapper height should be 0 — banner is suppressed in offline mode
+    expect(root!.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ height: 0 })]),
+    );
   });
 });

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBar } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { useCallback } from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, View } from 'react-native';
 
 import WaveformLogo from '../../components/WaveformLogo';
 import { ConnectivityBanner } from '../../components/ConnectivityBanner';
@@ -13,6 +13,7 @@ import { MiniPlayer } from '../../components/MiniPlayer';
 import { SearchableHeader } from '../../components/SearchableHeader';
 import { SearchResultsOverlay } from '../../components/SearchResultsOverlay';
 import { useTheme } from '../../hooks/useTheme';
+import { searchStore } from '../../store/searchStore';
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -37,11 +38,11 @@ export default function TabLayout() {
         }}
         screenOptions={{
           header: (props) => (
-            <>
+            <View onLayout={(e) => searchStore.getState().setHeaderHeight(e.nativeEvent.layout.height)}>
               <SearchableHeader {...props} />
               <ConnectivityBanner />
               <StorageFullBanner />
-            </>
+            </View>
           ),
           tabBarStyle: {
             backgroundColor: colors.background,

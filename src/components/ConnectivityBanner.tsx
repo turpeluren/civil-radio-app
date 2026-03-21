@@ -12,6 +12,7 @@ import Animated, {
 import { useTheme } from '../hooks/useTheme';
 import { handleSslCertPrompt } from '../services/connectivityService';
 import { connectivityStore, type BannerState } from '../store/connectivityStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 
 const BANNER_HEIGHT = 36;
 const INNER_HEIGHT = 28;
@@ -50,8 +51,10 @@ function getConfig(
 
 export const ConnectivityBanner = memo(function ConnectivityBanner() {
   const { colors } = useTheme();
-  const bannerState = connectivityStore((s) => s.bannerState);
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
+  const rawBannerState = connectivityStore((s) => s.bannerState);
   const isInternetReachable = connectivityStore((s) => s.isInternetReachable);
+  const bannerState: BannerState = offlineMode ? 'hidden' : rawBannerState;
   const prev = useRef<BannerState>(bannerState);
 
   const height = useSharedValue(bannerState !== 'hidden' ? BANNER_HEIGHT : 0);

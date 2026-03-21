@@ -31,8 +31,6 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
   const performSearch = searchStore((s) => s.performSearch);
   const showOverlay = searchStore((s) => s.showOverlay);
   const hideOverlay = searchStore((s) => s.hideOverlay);
-  const setHeaderHeight = searchStore((s) => s.setHeaderHeight);
-
   // On the search tab, results are shown inline -- no overlay needed
   const isSearchTab = route.name === 'search';
 
@@ -86,7 +84,6 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
         styles.container,
         { paddingTop: insets.top },
       ]}
-      onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
     >
       <View style={styles.row}>
         <View
