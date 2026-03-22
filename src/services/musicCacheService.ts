@@ -86,6 +86,16 @@ let processingId = 0;
 let appStateSubscription: { remove: () => void } | null = null;
 
 /**
+ * Set to true after populateTrackMapsAsync() finishes scanning the
+ * music-cache directory.  Module-scope subscriptions (e.g. the
+ * favoritesStore listener) must NOT run syncStarredSongsDownload()
+ * before this flag is set — trackUriMap and trackToItems would be
+ * empty, causing incorrect reference-counting and potential file
+ * deletion or premature re-enqueue of the starred-songs download.
+ */
+let trackMapsReady = false;
+
+/**
  * In-memory map from trackId -> local file URI for O(1) lookups.
  * Populated on init by scanning the music-cache directory and updated
  * as downloads complete.
@@ -138,6 +148,14 @@ export function initMusicCache(): void {
  */
 export async function deferredMusicCacheInit(): Promise<void> {
   await populateTrackMapsAsync();
+
+  // Force all musicCacheStore subscribers (e.g. useDownloadStatus) to
+  // re-evaluate now that trackUriMap is populated.  Song download status
+  // depends on the in-memory map, which isn't part of Zustand state, so
+  // without this touch the hooks would stay stale until the next real
+  // state change (recalculate, which runs after another async fs scan).
+  musicCacheStore.setState({});
+
   await recoverStalledDownloadsAsync();
 }
 
@@ -247,6 +265,12 @@ async function populateTrackMapsAsync(): Promise<void> {
       /* best-effort */
     }
   }
+
+  trackMapsReady = true;
+
+  // Run any starred-songs sync that was deferred because the
+  // favoritesStore subscription fired before maps were populated.
+  syncStarredSongsDownload();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1035,8 +1059,14 @@ function syncStarredSongsDownload(): void {
 }
 
 // Auto-sync starred songs whenever the favorites song list changes.
+// Guard: skip if track maps haven't been populated yet — running the
+// sync with empty trackUriMap/trackToItems causes incorrect reference
+// counting (files deleted despite belonging to other cached items) and
+// premature removal of __starred__ from cachedItems.  The deferred
+// sync runs at the end of populateTrackMapsAsync() instead.
 favoritesStore.subscribe((state, prev) => {
   if (state.songs === prev.songs) return;
+  if (!trackMapsReady) return;
   syncStarredSongsDownload();
 });
 
