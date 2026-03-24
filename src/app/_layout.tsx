@@ -1,9 +1,10 @@
 import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Appearance, BackHandler, LogBox, Platform, StyleSheet } from 'react-native';
+import { Appearance, BackHandler, Dimensions, LogBox, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Both expo-router (RouterFontUtils.swift) and react-native-screens
@@ -26,6 +27,8 @@ LogBox.ignoreLogs([
 ]);
 
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
+import { DARK_MIX, GRADIENT_LOCATIONS, GRADIENT_MIX_CURVE, LIGHT_MIX } from '../components/GradientBackground';
+import { mixHexColors } from '../utils/colors';
 import AnimatedSplashScreen from '../components/AnimatedSplashScreen';
 import { CertificatePromptModal } from '../components/CertificatePromptModal';
 import { CreateShareSheet } from '../components/CreateShareSheet';
@@ -317,19 +320,37 @@ export default function RootLayout() {
     };
   }, [theme, colors]);
 
+  const androidGradientColors = useMemo(() => {
+    if (Platform.OS === 'ios') return undefined;
+    const peak = theme === 'dark' ? DARK_MIX : LIGHT_MIX;
+    return GRADIENT_MIX_CURVE.map((m) =>
+      mixHexColors(colors.background, colors.primary, peak * m)
+    ) as [string, string, ...string[]];
+  }, [theme, colors.primary, colors.background]);
+
   const blurHeaderOptions = useMemo(() => ({
     headerTransparent: true as const,
     headerStyle: { backgroundColor: 'transparent' },
     headerShadowVisible: false,
     contentStyle: { backgroundColor: 'transparent' },
-    headerBackground: () => (
-      <BlurView
-        tint={theme === 'dark' ? 'dark' : 'light'}
-        intensity={80}
-        style={StyleSheet.absoluteFill}
-      />
-    ),
-  }), [theme]);
+    headerBackground: () =>
+      Platform.OS === 'ios' ? (
+        <BlurView
+          tint={theme === 'dark' ? 'dark' : 'light'}
+          intensity={80}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+          <LinearGradient
+            colors={androidGradientColors!}
+            locations={GRADIENT_LOCATIONS}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, height: Dimensions.get('window').height }}
+            pointerEvents="none"
+          />
+        </View>
+      ),
+  }), [theme, androidGradientColors]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>

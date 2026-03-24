@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabHeaderProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
-import { useCallback, useEffect, useRef } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
+  Dimensions,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -12,9 +15,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterBar } from './FilterBar';
+import { DARK_MIX, GRADIENT_LOCATIONS, GRADIENT_MIX_CURVE, LIGHT_MIX } from './GradientBackground';
 import { useTheme } from '../hooks/useTheme';
+import { mixHexColors } from '../utils/colors';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { searchStore } from '../store/searchStore';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const DEBOUNCE_MS = 300;
 
@@ -76,15 +83,8 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
     };
   }, []);
 
-  return (
-    <BlurView
-      tint={theme === 'dark' ? 'dark' : 'light'}
-      intensity={80}
-      style={[
-        styles.container,
-        { paddingTop: insets.top },
-      ]}
-    >
+  const headerContent = (
+    <>
       <View style={styles.row}>
         <View
           style={[styles.inputContainer, { backgroundColor: colors.inputBg }]}
@@ -116,13 +116,58 @@ export function SearchableHeader({ route }: BottomTabHeaderProps) {
         </View>
       </View>
       <FilterBar routeName={route.name} />
-    </BlurView>
+    </>
+  );
+
+  // Match the GradientBackground gradient so the header blends seamlessly on Android
+  const gradientColors = useMemo(() => {
+    if (Platform.OS === 'ios') return undefined;
+    const peak = theme === 'dark' ? DARK_MIX : LIGHT_MIX;
+    return GRADIENT_MIX_CURVE.map((m) =>
+      mixHexColors(colors.background, colors.primary, peak * m)
+    ) as [string, string, ...string[]];
+  }, [theme, colors.primary, colors.background]);
+
+  const containerStyle = [styles.container, { paddingTop: insets.top }];
+
+  if (Platform.OS === 'ios') {
+    return (
+      <BlurView
+        tint={theme === 'dark' ? 'dark' : 'light'}
+        intensity={80}
+        style={containerStyle}
+      >
+        {headerContent}
+      </BlurView>
+    );
+  }
+
+  return (
+    <View style={[...containerStyle, styles.androidContainer]}>
+      <LinearGradient
+        colors={gradientColors!}
+        locations={GRADIENT_LOCATIONS}
+        style={styles.androidGradient}
+        pointerEvents="none"
+      />
+      {headerContent}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 8,
+  },
+  androidContainer: {
+    overflow: 'hidden',
+  },
+  androidGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN_HEIGHT,
   },
   row: {
     flexDirection: 'row',

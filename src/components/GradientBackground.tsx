@@ -6,12 +6,12 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { mixHexColors } from '../utils/colors';
 
-const DARK_MIX = 0.15;
-const LIGHT_MIX = 0.10;
+export const DARK_MIX = 0.15;
+export const LIGHT_MIX = 0.10;
 
 /** Eased multi-stop fade using opaque blended colors for a smooth transition. */
-const LOCATIONS = [0, 0.12, 0.28, 0.45, 0.6] as const;
-const MIX_CURVE = [1.0, 0.7, 0.35, 0.12, 0] as const;
+export const GRADIENT_LOCATIONS = [0, 0.12, 0.28, 0.45, 0.6] as const;
+export const GRADIENT_MIX_CURVE = [1.0, 0.7, 0.35, 0.12, 0] as const;
 
 export const GradientBackground = memo(function GradientBackground({
   children,
@@ -28,7 +28,7 @@ export const GradientBackground = memo(function GradientBackground({
 
   const gradientColors = useMemo(() => {
     const peak = theme === 'dark' ? DARK_MIX : LIGHT_MIX;
-    return MIX_CURVE.map((m) =>
+    return GRADIENT_MIX_CURVE.map((m: number) =>
       mixHexColors(colors.background, colors.primary, peak * m)
     ) as [string, string, ...string[]];
   }, [theme, colors.primary, colors.background]);
@@ -37,7 +37,7 @@ export const GradientBackground = memo(function GradientBackground({
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: scrollable ? 0 : headerHeight }, style]}>
       <LinearGradient
         colors={gradientColors}
-        locations={LOCATIONS}
+        locations={GRADIENT_LOCATIONS}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
