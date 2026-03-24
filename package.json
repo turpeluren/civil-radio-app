@@ -1,6 +1,6 @@
 {
   "name": "substreamer",
-  "version": "8.0.37",
+  "version": "8.0.38",
   "license": "GPL-3.0-or-later",
   "main": "./index.js",
   "scripts": {

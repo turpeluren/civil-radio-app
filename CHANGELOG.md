@@ -1,5 +1,15 @@
 # Changelog
 
+## [8.0.38] - 2026-03-24
+
+- banners: adopt pill style for banners
+- connectivity banner: transparent background
+- backup: rebuild tuned in aggregates after backup restoration
+- android: fix pull to refresh display
+- android: fix header style
+- ci: update coverage badge [skip ci]
+- storage: fix bug with cancelled or incomplete downloads not being removed from storage use. ensure storage use is recalculated when needed (especially post logout)
+- ci: update coverage badge [skip ci]
 ## [8.0.37] - 2026-03-23
 
 - ci: update coverage badge [skip ci]
