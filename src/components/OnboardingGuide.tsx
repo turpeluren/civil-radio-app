@@ -80,6 +80,7 @@ const Dots = memo(function Dots({
 /* ------------------------------------------------------------------ */
 
 const CARD_HORIZONTAL_MARGIN = 32;
+const CARD_MAX_WIDTH = 480;
 
 export const OnboardingGuide = memo(function OnboardingGuide() {
   const visible = onboardingStore((s) => s.visible);
@@ -88,7 +89,8 @@ export const OnboardingGuide = memo(function OnboardingGuide() {
   const listRef = useRef<FlatList<Slide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const slideWidth = screenWidth - CARD_HORIZONTAL_MARGIN * 2;
+  const cardWidth = Math.min(screenWidth - CARD_HORIZONTAL_MARGIN * 2, CARD_MAX_WIDTH);
+  const slideWidth = cardWidth;
 
   const handleDismiss = useCallback(() => {
     onboardingStore.getState().dismiss();
@@ -148,7 +150,7 @@ export const OnboardingGuide = memo(function OnboardingGuide() {
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop}>
-        <View style={[styles.card, { backgroundColor: colors.card, marginHorizontal: CARD_HORIZONTAL_MARGIN }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, width: cardWidth }]}>
           {/* Skip button */}
           <Pressable
             onPress={handleDismiss}
