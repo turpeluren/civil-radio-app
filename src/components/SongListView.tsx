@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
+import { useGridColumns, getGridItemPadding, GRID_GAP, LIST_PADDING } from '../hooks/useGridColumns';
 import { useTheme } from '../hooks/useTheme';
 import { EmptyState } from './EmptyState';
 import { InsetRefreshSpacer } from './InsetRefreshSpacer';
@@ -20,10 +21,6 @@ import { SongRow } from './SongRow';
 import { closeOpenRow } from './SwipeableRow';
 
 export type SongLayout = 'list' | 'grid';
-
-const GRID_COLUMNS = 2;
-const GRID_GAP = 10;
-const LIST_PADDING = 16;
 
 /* ------------------------------------------------------------------ */
 /*  SongListView                                                      */
@@ -68,6 +65,7 @@ export function SongListView({
   contentInsetTop = 0,
 }: SongListViewProps) {
   const { colors } = useTheme();
+  const gridColumns = useGridColumns();
   const scrollY = useSharedValue(0);
 
   const handleScroll = useCallback(
@@ -88,13 +86,13 @@ export function SongListView({
 
   const renderGridItem = useCallback(
     ({ item, index }: { item: Child; index: number }) => {
-      const isLeftColumn = index % GRID_COLUMNS === 0;
+      const { paddingLeft, paddingRight } = getGridItemPadding(index, gridColumns, GRID_GAP);
       return (
         <View
           style={{
             flex: 1,
-            paddingLeft: isLeftColumn ? 0 : GRID_GAP / 2,
-            paddingRight: isLeftColumn ? GRID_GAP / 2 : 0,
+            paddingLeft,
+            paddingRight,
             marginBottom: GRID_GAP,
           }}
         >
@@ -102,7 +100,7 @@ export function SongListView({
         </View>
       );
     },
-    [songs]
+    [songs, gridColumns]
   );
 
   const keyExtractor = useCallback((item: Child) => item.id, []);
@@ -145,7 +143,7 @@ export function SongListView({
       renderItem={isGrid ? renderGridItem : renderListItem}
       keyExtractor={keyExtractor}
       onScrollBeginDrag={closeOpenRow}
-      numColumns={isGrid ? GRID_COLUMNS : 1}
+      numColumns={isGrid ? gridColumns : 1}
       contentContainerStyle={[
         styles.listContent,
         songs.length === 0 && styles.emptyListContent,

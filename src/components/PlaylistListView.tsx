@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
+import { useGridColumns, getGridItemPadding, GRID_GAP, LIST_PADDING } from '../hooks/useGridColumns';
 import { useTheme } from '../hooks/useTheme';
 import type { Playlist } from '../services/subsonicService';
 import { getFirstLetter } from '../utils/stringHelpers';
@@ -21,10 +22,6 @@ import { closeOpenRow } from './SwipeableRow';
 import { AlphabetScroller } from './AlphabetScroller';
 
 export type PlaylistLayout = 'list' | 'grid';
-
-const GRID_COLUMNS = 2;
-const GRID_GAP = 10;
-const LIST_PADDING = 16;
 
 /* ------------------------------------------------------------------ */
 /*  PlaylistListView                                                  */
@@ -72,6 +69,7 @@ export function PlaylistListView({
   contentInsetTop = 0,
 }: PlaylistListViewProps) {
   const { colors } = useTheme();
+  const gridColumns = useGridColumns();
   const listRef = useRef<FlashListRef<Playlist>>(null);
   const scrollY = useSharedValue(0);
 
@@ -91,13 +89,13 @@ export function PlaylistListView({
 
   const renderGridItem = useCallback(
     ({ item, index }: { item: Playlist; index: number }) => {
-      const isLeftColumn = index % GRID_COLUMNS === 0;
+      const { paddingLeft, paddingRight } = getGridItemPadding(index, gridColumns, GRID_GAP);
       return (
         <View
           style={{
             flex: 1,
-            paddingLeft: isLeftColumn ? 0 : GRID_GAP / 2,
-            paddingRight: isLeftColumn ? GRID_GAP / 2 : 0,
+            paddingLeft,
+            paddingRight,
             marginBottom: GRID_GAP,
           }}
         >
@@ -105,7 +103,7 @@ export function PlaylistListView({
         </View>
       );
     },
-    []
+    [gridColumns]
   );
 
   const keyExtractor = useCallback((item: Playlist) => item.id, []);
@@ -172,7 +170,7 @@ export function PlaylistListView({
         renderItem={isGrid ? renderGridItem : renderListItem}
         keyExtractor={keyExtractor}
         onScrollBeginDrag={closeOpenRow}
-        numColumns={isGrid ? GRID_COLUMNS : 1}
+        numColumns={isGrid ? gridColumns : 1}
         contentContainerStyle={[
           styles.listContent,
           scrollerVisible && styles.listContentWithScroller,
