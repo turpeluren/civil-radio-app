@@ -11,6 +11,8 @@ type ServerCapability =
 const KNOWN_SERVERS: Record<string, ReadonlySet<ServerCapability>> = {
 	navidrome: new Set(['shares', 'scan', 'fullScan', 'albumArtistRating', 'internetRadioCrud']),
 	gonic: new Set(['albumArtistRating']),
+	'nextcloud music': new Set(['albumArtistRating']),
+	ampache: new Set(['albumArtistRating']),
 };
 
 // Classic Subsonic servers — full capability set at each API level.

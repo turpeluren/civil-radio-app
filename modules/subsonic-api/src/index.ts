@@ -34,6 +34,15 @@ interface SubsonicConfig {
 	reuseSalt?: boolean;
 
 	/**
+	 * Use legacy plaintext password authentication (`p` param) instead of
+	 * token-based auth (`t` + `s` params).
+	 *
+	 * Required for servers like Nextcloud Music and Ampache that reject token auth.
+	 * The password is sent hex-encoded with the `enc:` prefix.
+	 */
+	legacyAuth?: boolean;
+
+	/**
 	 * Whether to use a POST requests instead of GET requests.
 	 *
 	 * Only supported by OpenSubsonic compatible servers with the `formPost` extension.
@@ -88,7 +97,7 @@ export default class SubsonicAPI {
 
 		this.#config = config;
 		this.#crypto = config.crypto || globalThis.crypto;
-		if (!this.#crypto && !this.#config.salt)
+		if (!this.#crypto && !this.#config.salt && !config.legacyAuth)
 			throw new Error("no crypto implementation available. Provide a salt or crypto implementation.");
 
 		this.#fetch = (config.fetch || globalThis.fetch).bind(globalThis);
@@ -139,6 +148,29 @@ export default class SubsonicAPI {
 			salt,
 			token: md5(password + salt),
 		};
+	}
+
+	#hexEncode(password: string): string {
+		return "enc:" + Array.from(password)
+			.map((c) => c.charCodeAt(0).toString(16).padStart(2, "0"))
+			.join("");
+	}
+
+	async #applyAuth(url: URL): Promise<void> {
+		if (this.#config.auth.apiKey) {
+			url.searchParams.set("apiKey", this.#config.auth.apiKey);
+		} else if (this.#config.auth.username) {
+			url.searchParams.set("u", this.#config.auth.username);
+			if (this.#config.legacyAuth) {
+				url.searchParams.set("p", this.#hexEncode(this.#config.auth.password));
+			} else {
+				const { token, salt } = await this.#generateToken(this.#config.auth.password);
+				url.searchParams.set("t", token);
+				url.searchParams.set("s", salt);
+			}
+		} else {
+			throw new Error("no auth provided");
+		}
 	}
 
 	/**
@@ -195,16 +227,7 @@ export default class SubsonicAPI {
 			}
 		}
 
-		if (this.#config.auth.apiKey) {
-			url.searchParams.set("apiKey", this.#config.auth.apiKey);
-		} else if (this.#config.auth.username) {
-			url.searchParams.set("u", this.#config.auth.username);
-			const { token, salt } = await this.#generateToken(this.#config.auth.password);
-			url.searchParams.set("t", token);
-			url.searchParams.set("s", salt);
-		} else {
-			throw new Error("no auth provided");
-		}
+		await this.#applyAuth(url);
 
 		if (this.#config.post) {
 			const [path, search] = url.toString().split("?");
@@ -343,14 +366,7 @@ export default class SubsonicAPI {
 			if (value != null) url.searchParams.set(key, String(value));
 		}
 
-		if (this.#config.auth.apiKey) {
-			url.searchParams.set("apiKey", this.#config.auth.apiKey);
-		} else if (this.#config.auth.username) {
-			const { token, salt } = await this.#generateToken(this.#config.auth.password);
-			url.searchParams.set("u", this.#config.auth.username);
-			url.searchParams.set("t", token);
-			url.searchParams.set("s", salt);
-		}
+		await this.#applyAuth(url);
 
 		const res = await this.#fetch(url.toString(), {
 			method: "POST",

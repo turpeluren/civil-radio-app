@@ -1530,3 +1530,106 @@ describe('exports', () => {
     expect(mod.default.name).toBe(mod.SubsonicAPI.name);
   });
 });
+
+// ==========================
+// Legacy Auth
+// ==========================
+
+const LEGACY_AUTH_CONFIG = {
+  url: 'https://nextcloud.example.com',
+  auth: { username: 'testuser', password: 'testpass' },
+  legacyAuth: true,
+  fetch: jest.fn(),
+} as const;
+
+describe('legacy auth', () => {
+  it('constructs successfully without crypto when legacyAuth is true', () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true });
+    try {
+      const api = new SubsonicAPI({
+        url: 'https://example.com',
+        auth: { username: 'user', password: 'pass' },
+        legacyAuth: true,
+        fetch: noopFetch,
+      });
+      expect(api).toBeInstanceOf(SubsonicAPI);
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { value: originalCrypto, configurable: true });
+    }
+  });
+
+  it('sends p param with hex-encoded password and no t or s', async () => {
+    const { mockFetch, calls } = createMockFetch({ status: 'ok', version: '1.16.1' });
+    const api = new SubsonicAPI({ ...LEGACY_AUTH_CONFIG, fetch: mockFetch });
+    await api.ping();
+
+    const url = parseUrl(calls[0].url);
+    // "testpass" → hex: 7465737470617373
+    expect(url.searchParams.get('p')).toBe('enc:7465737470617373');
+    expect(url.searchParams.get('u')).toBe('testuser');
+    expect(url.searchParams.has('t')).toBe(false);
+    expect(url.searchParams.has('s')).toBe(false);
+  });
+
+  it('hex-encodes special characters correctly', async () => {
+    const { mockFetch, calls } = createMockFetch({ status: 'ok', version: '1.16.1' });
+    const api = new SubsonicAPI({
+      url: 'https://example.com',
+      auth: { username: 'user', password: 'p@ss!' },
+      legacyAuth: true,
+      fetch: mockFetch,
+    });
+    await api.ping();
+
+    const url = parseUrl(calls[0].url);
+    // p=0x70, @=0x40, s=0x73, s=0x73, !=0x21
+    expect(url.searchParams.get('p')).toBe('enc:7040737321');
+  });
+
+  it('does not affect API key auth', async () => {
+    const { mockFetch, calls } = createMockFetch({ status: 'ok', version: '1.16.1' });
+    const api = new SubsonicAPI({
+      ...API_KEY_CONFIG,
+      legacyAuth: true,
+      fetch: mockFetch,
+    });
+    await api.ping();
+
+    const url = parseUrl(calls[0].url);
+    expect(url.searchParams.get('apiKey')).toBe('my-api-key-123');
+    expect(url.searchParams.has('p')).toBe(false);
+    expect(url.searchParams.has('t')).toBe(false);
+  });
+
+  it('uses t+s when legacyAuth is false (default)', async () => {
+    const { mockFetch, calls } = createMockFetch({ status: 'ok', version: '1.16.1' });
+    const api = new SubsonicAPI({ ...PASSWORD_CONFIG, fetch: mockFetch });
+    await api.ping();
+
+    const url = parseUrl(calls[0].url);
+    expect(url.searchParams.has('t')).toBe(true);
+    expect(url.searchParams.has('s')).toBe(true);
+    expect(url.searchParams.has('p')).toBe(false);
+  });
+
+  it('uses legacy auth via #applyAuth in getTranscodeDecision', async () => {
+    const { mockFetch, calls } = createMockFetch({
+      status: 'ok',
+      version: '1.16.1',
+      transcodeDecision: { decision: 'transcode', format: 'mp3', bitRate: 320 },
+    });
+    const api = new SubsonicAPI({ ...LEGACY_AUTH_CONFIG, fetch: mockFetch });
+    await api.getTranscodeDecision({
+      mediaId: 'song-1',
+      mediaType: 'song',
+      clientInfo: { deviceName: 'test', deviceType: 'mobile' } as any,
+    });
+
+    const url = parseUrl(calls[0].url);
+    expect(url.searchParams.get('p')).toBe('enc:7465737470617373');
+    expect(url.searchParams.get('u')).toBe('testuser');
+    expect(url.searchParams.has('t')).toBe(false);
+    expect(url.searchParams.has('s')).toBe(false);
+  });
+});

@@ -48,12 +48,14 @@ type LoginResult = { success: true; version: string } | { success: false; error:
 export async function login(
   serverUrl: string,
   username: string,
-  password: string
+  password: string,
+  legacyAuth = false
 ): Promise<LoginResult> {
   const url = normalizeServerUrl(serverUrl);
   const api = new SubsonicAPI({
     url,
     auth: { username: username.trim(), password },
+    legacyAuth,
     reuseSalt: true,
     crypto: reactNativeCrypto,
     clientName: 'substreamer8',
@@ -92,17 +94,18 @@ export function getApi(): SubsonicAPI | null {
  * of offline state to detect when it becomes reachable again.
  */
 export function getApiUnchecked(): SubsonicAPI | null {
-  const { isLoggedIn, serverUrl, username, password } = authStore.getState();
+  const { isLoggedIn, serverUrl, username, password, legacyAuth } = authStore.getState();
   if (!isLoggedIn || !serverUrl || !username || !password) {
     return null;
   }
-  const key = `${normalizeServerUrl(serverUrl)}|${username}`;
+  const key = `${normalizeServerUrl(serverUrl)}|${username}|${legacyAuth}`;
   if (cachedKey === key && cachedApi) {
     return cachedApi;
   }
   cachedApi = new SubsonicAPI({
     url: normalizeServerUrl(serverUrl),
     auth: { username, password },
+    legacyAuth,
     reuseSalt: true,
     crypto: reactNativeCrypto,
     clientName: 'substreamer8',
@@ -142,22 +145,28 @@ export function isVariousArtists(name: string | undefined): boolean {
 }
 
 export async function ensureCoverArtAuth(): Promise<void> {
-  const { isLoggedIn, serverUrl, username, password } = authStore.getState();
+  const { isLoggedIn, serverUrl, username, password, legacyAuth } = authStore.getState();
   if (!isLoggedIn || !serverUrl || !username || !password) return;
-  const key = `${normalizeServerUrl(serverUrl)}|${username}`;
-  if (cachedCoverArtKey === key && cachedCoverArtSalt && cachedCoverArtToken) return;
-  const bytes = await getRandomBytesAsync(16);
-  const salt = Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  const token = await digestStringAsync(
-    CryptoDigestAlgorithm.MD5,
-    password + salt,
-    { encoding: CryptoEncoding.HEX }
-  );
+  const key = `${normalizeServerUrl(serverUrl)}|${username}|${legacyAuth}`;
+  if (cachedCoverArtKey === key && cachedCoverArtToken) return;
+
+  if (legacyAuth) {
+    cachedCoverArtSalt = null;
+    cachedCoverArtToken = 'enc:' + Array.from(password)
+      .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
+  } else {
+    const bytes = await getRandomBytesAsync(16);
+    cachedCoverArtSalt = Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    cachedCoverArtToken = await digestStringAsync(
+      CryptoDigestAlgorithm.MD5,
+      password + cachedCoverArtSalt,
+      { encoding: CryptoEncoding.HEX }
+    );
+  }
   cachedCoverArtKey = key;
-  cachedCoverArtSalt = salt;
-  cachedCoverArtToken = token;
 }
 
 /**
@@ -176,19 +185,27 @@ export function stripCoverArtSuffix(coverArtId: string): string {
   return coverArtId.slice(0, i);
 }
 
+function applyUrlAuth(params: URLSearchParams, username: string): void {
+  params.set('u', username);
+  if (cachedCoverArtSalt != null) {
+    params.set('t', cachedCoverArtToken!);
+    params.set('s', cachedCoverArtSalt);
+  } else {
+    params.set('p', cachedCoverArtToken!);
+  }
+}
+
 export function getCoverArtUrl(coverArtId: string, size?: number): string | null {
   const { isLoggedIn, serverUrl, username } = authStore.getState();
   if (!coverArtId || !isLoggedIn || !serverUrl || !username) return null;
-  if (cachedCoverArtKey === null || !cachedCoverArtSalt || !cachedCoverArtToken) return null;
+  if (cachedCoverArtKey === null || !cachedCoverArtToken) return null;
   const base = `${normalizeServerUrl(serverUrl)}/rest/getCoverArt.view`;
   const params = new URLSearchParams({
     id: stripCoverArtSuffix(coverArtId),
     v: '1.15.0',
     c: 'substreamer8',
-    u: username,
-    t: cachedCoverArtToken,
-    s: cachedCoverArtSalt,
   });
+  applyUrlAuth(params, username);
   if (size != null && size > 0) params.set('size', String(size));
   return `${base}?${params.toString()}`;
 }
@@ -204,16 +221,14 @@ export function getStreamUrl(
 ): string | null {
   const { isLoggedIn, serverUrl, username } = authStore.getState();
   if (!trackId || !isLoggedIn || !serverUrl || !username) return null;
-  if (cachedCoverArtKey === null || !cachedCoverArtSalt || !cachedCoverArtToken) return null;
+  if (cachedCoverArtKey === null || !cachedCoverArtToken) return null;
   const base = `${normalizeServerUrl(serverUrl)}/rest/stream.view`;
   const params = new URLSearchParams({
     id: trackId,
     v: '1.15.0',
     c: 'substreamer8',
-    u: username,
-    t: cachedCoverArtToken,
-    s: cachedCoverArtSalt,
   });
+  applyUrlAuth(params, username);
 
   // Apply playback settings
   const { maxBitRate, streamFormat, estimateContentLength } =
@@ -245,17 +260,15 @@ export function getStreamUrl(
 export function getDownloadStreamUrl(trackId: string): string | null {
   const { isLoggedIn, serverUrl, username } = authStore.getState();
   if (!trackId || !isLoggedIn || !serverUrl || !username) return null;
-  if (cachedCoverArtKey === null || !cachedCoverArtSalt || !cachedCoverArtToken) return null;
+  if (cachedCoverArtKey === null || !cachedCoverArtToken) return null;
   const base = `${normalizeServerUrl(serverUrl)}/rest/stream.view`;
   const params = new URLSearchParams({
     id: trackId,
     v: '1.15.0',
     c: 'substreamer8',
-    u: username,
-    t: cachedCoverArtToken,
-    s: cachedCoverArtSalt,
     estimateContentLength: 'true',
   });
+  applyUrlAuth(params, username);
 
   const { downloadMaxBitRate, downloadFormat } =
     playbackSettingsStore.getState();

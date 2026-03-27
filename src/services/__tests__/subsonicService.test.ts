@@ -1554,3 +1554,94 @@ describe('login (edge cases)', () => {
     expect(result).toEqual({ success: false, error: 'Authentication failed' });
   });
 });
+
+// ==========================
+// Legacy Auth URL Building
+// ==========================
+
+describe('legacy auth URL building', () => {
+  beforeEach(async () => {
+    clearApiCache();
+    mockAuthStore.getState.mockReturnValue({
+      isLoggedIn: true,
+      serverUrl: 'https://nextcloud.example.com',
+      username: 'ncuser',
+      password: 'ncpass',
+      legacyAuth: true,
+      apiVersion: '1.16.1',
+      rehydrated: true,
+    } as any);
+    await ensureCoverArtAuth();
+  });
+
+  it('getCoverArtUrl uses p param in legacy mode', () => {
+    const url = getCoverArtUrl('al-1');
+    expect(url).not.toBeNull();
+    // "ncpass" → hex: 6e6370617373
+    expect(url).toContain('p=enc%3A6e6370617373');
+    expect(url).toContain('u=ncuser');
+    expect(url).not.toContain('t=');
+    expect(url).not.toContain('s=');
+  });
+
+  it('getStreamUrl uses p param in legacy mode', () => {
+    const url = getStreamUrl('track-1');
+    expect(url).not.toBeNull();
+    expect(url).toContain('p=enc%3A6e6370617373');
+    expect(url).toContain('u=ncuser');
+    expect(url).not.toContain('t=');
+    expect(url).not.toContain('s=');
+  });
+
+  it('getDownloadStreamUrl uses p param in legacy mode', () => {
+    const url = getDownloadStreamUrl('track-1');
+    expect(url).not.toBeNull();
+    expect(url).toContain('p=enc%3A6e6370617373');
+    expect(url).toContain('u=ncuser');
+    expect(url).not.toContain('t=');
+    expect(url).not.toContain('s=');
+  });
+
+  it('token mode still uses t+s (regression)', async () => {
+    clearApiCache();
+    mockAuthStore.getState.mockReturnValue({
+      isLoggedIn: true,
+      serverUrl: 'https://navidrome.example.com',
+      username: 'user',
+      password: 'pass',
+      legacyAuth: false,
+      apiVersion: '1.16',
+      rehydrated: true,
+    } as any);
+    await ensureCoverArtAuth();
+
+    const url = getCoverArtUrl('al-1');
+    expect(url).not.toBeNull();
+    expect(url).toContain('t=');
+    expect(url).toContain('s=');
+    expect(url).not.toContain('p=');
+  });
+
+  it('cache invalidates when legacyAuth changes', async () => {
+    // Already in legacy mode from beforeEach
+    const legacyUrl = getCoverArtUrl('al-1');
+    expect(legacyUrl).toContain('p=enc');
+
+    // Switch to token mode
+    clearApiCache();
+    mockAuthStore.getState.mockReturnValue({
+      isLoggedIn: true,
+      serverUrl: 'https://nextcloud.example.com',
+      username: 'ncuser',
+      password: 'ncpass',
+      legacyAuth: false,
+      apiVersion: '1.16.1',
+      rehydrated: true,
+    } as any);
+    await ensureCoverArtAuth();
+
+    const tokenUrl = getCoverArtUrl('al-1');
+    expect(tokenUrl).toContain('t=');
+    expect(tokenUrl).not.toContain('p=');
+  });
+});

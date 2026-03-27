@@ -143,6 +143,48 @@ describe('supports', () => {
 			expect(supports('albumArtistRating')).toBe(true);
 			expect(supports('shares')).toBe(false);
 		});
+
+		it('matches Nextcloud Music case-insensitively', () => {
+			setServerInfo({ serverType: 'Nextcloud Music' });
+			expect(supports('albumArtistRating')).toBe(true);
+			expect(supports('shares')).toBe(false);
+		});
+
+		it('matches AMPACHE case-insensitively', () => {
+			setServerInfo({ serverType: 'AMPACHE' });
+			expect(supports('albumArtistRating')).toBe(true);
+			expect(supports('shares')).toBe(false);
+		});
+	});
+
+	describe('Nextcloud Music', () => {
+		beforeEach(() => setServerInfo({ serverType: 'nextcloud music' }));
+
+		it('supports albumArtistRating', () => {
+			expect(supports('albumArtistRating')).toBe(true);
+		});
+
+		it('does not support shares, scan, fullScan, internetRadioCrud', () => {
+			expect(supports('shares')).toBe(false);
+			expect(supports('scan')).toBe(false);
+			expect(supports('fullScan')).toBe(false);
+			expect(supports('internetRadioCrud')).toBe(false);
+		});
+	});
+
+	describe('Ampache', () => {
+		beforeEach(() => setServerInfo({ serverType: 'ampache' }));
+
+		it('supports albumArtistRating', () => {
+			expect(supports('albumArtistRating')).toBe(true);
+		});
+
+		it('does not support shares, scan, fullScan, internetRadioCrud', () => {
+			expect(supports('shares')).toBe(false);
+			expect(supports('scan')).toBe(false);
+			expect(supports('fullScan')).toBe(false);
+			expect(supports('internetRadioCrud')).toBe(false);
+		});
 	});
 
 	describe('Unknown OpenSubsonic server', () => {

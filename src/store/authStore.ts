@@ -8,13 +8,15 @@ export interface AuthState {
   username: string | null;
   password: string | null;
   apiVersion: string | null;
+  legacyAuth: boolean;
   isLoggedIn: boolean;
   rehydrated: boolean;
   setSession: (
     serverUrl: string,
     username: string,
     password: string,
-    apiVersion: string
+    apiVersion: string,
+    legacyAuth?: boolean
   ) => void;
   clearSession: () => void;
   setRehydrated: (value: boolean) => void;
@@ -29,15 +31,17 @@ export const authStore = create<AuthState>()(
       username: null,
       password: null,
       apiVersion: null,
+      legacyAuth: false,
       isLoggedIn: false,
       rehydrated: false,
 
-      setSession: (serverUrl, username, password, apiVersion) =>
+      setSession: (serverUrl, username, password, apiVersion, legacyAuth = false) =>
         set({
           serverUrl,
           username,
           password,
           apiVersion,
+          legacyAuth,
           isLoggedIn: true,
           rehydrated: true,
         }),
@@ -48,6 +52,7 @@ export const authStore = create<AuthState>()(
           username: null,
           password: null,
           apiVersion: null,
+          legacyAuth: false,
           isLoggedIn: false,
         }),
 
@@ -61,6 +66,7 @@ export const authStore = create<AuthState>()(
         username: state.username,
         password: state.password,
         apiVersion: state.apiVersion,
+        legacyAuth: state.legacyAuth,
         isLoggedIn: state.isLoggedIn,
       }),
     }

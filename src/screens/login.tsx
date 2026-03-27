@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -37,6 +38,8 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [legacyAuth, setLegacyAuth] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // SSL certificate prompt state
   const [certModalVisible, setCertModalVisible] = useState(false);
@@ -60,11 +63,11 @@ export function LoginScreen() {
       const user = username.trim();
       const pass = password;
 
-      const result = await subsonicLogin(url, user, pass);
+      const result = await subsonicLogin(url, user, pass, legacyAuth);
       setLoading(false);
 
       if (result.success) {
-        setSession(url, user, pass, result.version);
+        setSession(url, user, pass, result.version, legacyAuth);
         const info = await fetchServerInfo();
         if (info) serverInfoStore.getState().setServerInfo(info);
         router.replace('/');
@@ -79,7 +82,7 @@ export function LoginScreen() {
         }`
       );
     }
-  }, [certInfo, certHostname, serverUrl, username, password, setSession, router]);
+  }, [certInfo, certHostname, serverUrl, username, password, legacyAuth, setSession, router]);
 
   const handleCancelCert = useCallback(() => {
     setCertModalVisible(false);
@@ -89,6 +92,36 @@ export function LoginScreen() {
   if (isLoggedIn) {
     return <Redirect href="/" />;
   }
+
+  const handleManualCertTrust = async () => {
+    const url = serverUrl.trim();
+    if (!url) {
+      setError('Enter a server address first.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      let normalized = url;
+      if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+        normalized = `https://${normalized}`;
+      }
+      const hostname = extractHostname(url);
+      const info = await getCertificateInfo(normalized);
+      setCertInfo(info);
+      setCertHostname(hostname);
+      setIsCertRotation(false);
+      setCertModalVisible(true);
+    } catch (e) {
+      setError(
+        `Could not retrieve certificate: ${
+          e instanceof Error ? e.message : 'Unknown error'
+        }`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const extractHostname = (url: string): string => {
     let normalized = url.trim();
@@ -114,11 +147,11 @@ export function LoginScreen() {
     setError(null);
     setLoading(true);
 
-    const result = await subsonicLogin(url, user, pass);
+    const result = await subsonicLogin(url, user, pass, legacyAuth);
 
     if (result.success) {
       setLoading(false);
-      setSession(url, user, pass, result.version);
+      setSession(url, user, pass, result.version, legacyAuth);
       const info = await fetchServerInfo();
       if (info) serverInfoStore.getState().setServerInfo(info);
       if (!onboardingStore.getState().hasCompleted) {
@@ -215,6 +248,50 @@ export function LoginScreen() {
             returnKeyType="go"
             onSubmitEditing={handleSubmit}
           />
+
+          <Pressable
+            style={styles.advancedToggle}
+            onPress={() => setShowAdvanced((prev) => !prev)}
+          >
+            <Text style={styles.advancedToggleText}>
+              {showAdvanced ? 'Hide advanced options' : 'Advanced options'}
+            </Text>
+          </Pressable>
+
+          {showAdvanced && (
+            <View style={styles.advancedSection}>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabelContainer}>
+                  <Text style={styles.switchLabel}>Legacy authentication</Text>
+                  <Text style={styles.switchHint}>
+                    Required for Nextcloud Music and Ampache servers
+                  </Text>
+                </View>
+                <Switch
+                  value={legacyAuth}
+                  onValueChange={setLegacyAuth}
+                  trackColor={{ false: 'rgba(255,255,255,0.2)', true: '#FFFFFF' }}
+                  thumbColor={legacyAuth ? PRIMARY : 'rgba(255,255,255,0.9)'}
+                  ios_backgroundColor="rgba(255,255,255,0.2)"
+                  disabled={loading}
+                />
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.certButton,
+                  pressed && !loading && styles.certButtonPressed,
+                ]}
+                onPress={handleManualCertTrust}
+                disabled={loading}
+              >
+                <Text style={styles.certButtonText}>Trust server certificate</Text>
+                <Text style={styles.switchHint}>
+                  Manually trust a self-signed or custom certificate
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {error ? (
             <Text style={styles.error}>{error}</Text>
@@ -318,5 +395,49 @@ const styles = StyleSheet.create({
     color: PRIMARY,
     fontSize: 16,
     fontWeight: '700',
+  },
+  advancedToggle: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  advancedToggleText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  advancedSection: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  switchLabelContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  switchLabel: {
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  switchHint: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 2,
+  },
+  certButton: {
+    paddingVertical: 10,
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.15)',
+  },
+  certButtonPressed: {
+    opacity: 0.6,
+  },
+  certButtonText: {
+    fontSize: 15,
+    color: '#FFFFFF',
   },
 });

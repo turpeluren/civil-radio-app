@@ -8,6 +8,7 @@ beforeEach(() => {
     username: null,
     password: null,
     apiVersion: null,
+    legacyAuth: false,
     isLoggedIn: false,
     rehydrated: false,
   });
@@ -24,14 +25,25 @@ describe('authStore', () => {
     expect(state.isLoggedIn).toBe(true);
   });
 
-  it('clearSession resets all credentials', () => {
+  it('setSession defaults legacyAuth to false when omitted', () => {
     authStore.getState().setSession('https://music.example.com', 'user', 'pass', '1.16');
+    expect(authStore.getState().legacyAuth).toBe(false);
+  });
+
+  it('setSession stores legacyAuth when true', () => {
+    authStore.getState().setSession('https://music.example.com', 'user', 'pass', '1.16', true);
+    expect(authStore.getState().legacyAuth).toBe(true);
+  });
+
+  it('clearSession resets all credentials', () => {
+    authStore.getState().setSession('https://music.example.com', 'user', 'pass', '1.16', true);
     authStore.getState().clearSession();
     const state = authStore.getState();
     expect(state.serverUrl).toBeNull();
     expect(state.username).toBeNull();
     expect(state.password).toBeNull();
     expect(state.apiVersion).toBeNull();
+    expect(state.legacyAuth).toBe(false);
     expect(state.isLoggedIn).toBe(false);
   });
 
