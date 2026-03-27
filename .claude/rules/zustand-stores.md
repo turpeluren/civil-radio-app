@@ -102,6 +102,11 @@ albumListsStore.getState().refreshAll();
 | `ratingStore` | Yes | Optimistic rating overrides synced with server |
 | `mbidOverrideStore` | Yes | Manual MusicBrainz ID overrides per artist |
 | `backupStore` | Yes | Auto-backup toggle and last backup timestamp |
+| `autoOfflineStore` | Yes | Auto-offline mode configuration (home WiFi detection) |
+| `batteryOptimizationStore` | Yes | Battery optimization exemption status (Android) |
+| `genreStore` | Yes | Genre data cache |
+| `onboardingStore` | Yes | Onboarding/tutorial flow state |
+| `scrobbleExclusionStore` | Yes | Scrobble exclusion rules |
 | `playerStore` | No | Current track, queue, playback position |
 | `searchStore` | No | Search query and results |
 | `migrationStore` | No | Migration version tracking |
@@ -115,6 +120,9 @@ albumListsStore.getState().refreshAll();
 | `processingOverlayStore` | No | Processing overlay state |
 | `setRatingStore` | No | Set-rating sheet state |
 | `mbidSearchStore` | No | MBID search sheet state |
+| `audioDiagnosticsStore` | No | Audio diagnostics and metrics tracking |
+| `certPromptStore` | No | SSL certificate prompt modal state |
+| `devOptionsStore` | No | Developer options and debug features |
 
 ## Cross-Store Subscriptions
 

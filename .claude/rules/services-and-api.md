@@ -10,9 +10,9 @@ Services are plain TypeScript modules exporting async functions – no classes, 
 
 ## Subsonic API (`subsonicService.ts`)
 
-- Uses `subsonic-api` library with `expo-crypto` for MD5 token auth.
-- `getApi()` returns a cached `SubsonicAPI` instance, invalidated when server/user changes.
-- Auth tokens for cover art and stream URLs are cached separately via `ensureCoverArtAuth()`.
+- Uses `subsonic-api` library with two auth modes: MD5 token auth (`t`+`s` params, default) and legacy plaintext auth (`p` param with `enc:` hex encoding, for servers like Nextcloud Music and Ampache that reject token auth). Controlled by `legacyAuth` flag in `authStore`.
+- `getApi()` returns a cached `SubsonicAPI` instance, invalidated when server/user/legacyAuth changes.
+- Auth credentials for cover art and stream URLs are cached separately via `ensureCoverArtAuth()`. The `applyUrlAuth()` helper centralizes auth param application for all URL builders.
 - All API functions check `isLoggedIn` and return `null` on failure rather than throwing.
 - Types re-exported from `subsonic-api`: `AlbumID3`, `ArtistID3`, `Child`, `Playlist`, etc.
 
@@ -123,6 +123,39 @@ export async function getAlbum(albumId: string): Promise<AlbumWithSongsID3 | nul
 - Listens to native progress events from `expo-async-fs` via a global listener registered at module import.
 - Uses a 10-second rolling window of byte deltas for smoothed speed calculation.
 - Exports `getDownloadSpeed()` (bytes/sec), `getActiveDownloadCount()`, `beginDownload(id)`, and `clearDownload(id)`.
+
+## Server Capability Service (`serverCapabilityService.ts`)
+
+- Detects and gates features based on server type and Subsonic API version.
+- `KNOWN_SERVERS` maps OpenSubsonic server types (navidrome, gonic, nextcloud music, ampache) to explicit capability sets.
+- `API_VERSION_CAPABILITIES` maps classic Subsonic API versions to capabilities as a fallback.
+- `supports(capability)` checks whether the connected server supports a given feature.
+- Current capabilities: `shares`, `scan`, `fullScan`, `albumArtistRating`, `internetRadioCrud`.
+- UI code gates feature visibility via `supports()` — e.g. shares menu, scan buttons, rating options.
+
+## Search Service (`searchService.ts`)
+
+- Implements search across albums, artists, and songs via `search3` API.
+- Builds track cover art maps from multiple stores for offline search capability.
+- Coordinates with `searchStore` for state management.
+
+## Auto-Offline Service (`autoOfflineService.ts`)
+
+- Manages automatic offline mode toggling based on network state and WiFi detection.
+- Monitors network changes to detect home vs. away WiFi.
+- Pairs with `autoOfflineStore` for configuration persistence.
+
+## Battery Optimization Service (`batteryOptimizationService.ts`)
+
+- Manages Android battery optimization exemption requests.
+- Pairs with `batteryOptimizationStore` for status tracking.
+- No-op on iOS.
+
+## Tuned In Service (`tunedInService.ts`)
+
+- "Tuned In" music discovery and mix generation.
+- Time-of-day based mix generation (early morning, morning, midday, etc.).
+- Multi-genre blending strategies using random songs, similar songs, and genre filtering.
 
 ## Export Scoping
 
