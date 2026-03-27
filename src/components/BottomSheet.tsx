@@ -239,6 +239,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     paddingHorizontal: 16,
     zIndex: 1,
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
   },
   handleContainer: {
     paddingVertical: 12,
