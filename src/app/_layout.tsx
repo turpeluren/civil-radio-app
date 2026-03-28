@@ -3,9 +3,10 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Appearance, BackHandler, Dimensions, LogBox, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Easing, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 // Both expo-router (RouterFontUtils.swift) and react-native-screens
 // (RNSBarButtonItem.mm, RNSScreenStackHeaderConfig.mm) call
@@ -32,6 +33,9 @@ import { mixHexColors } from '../utils/colors';
 import AnimatedSplashScreen from '../components/AnimatedSplashScreen';
 import { CertificatePromptModal } from '../components/CertificatePromptModal';
 import { CreateShareSheet } from '../components/CreateShareSheet';
+import { ExpandedPlayerView } from '../components/ExpandedPlayerView';
+import { PlayerPanel } from '../components/PlayerPanel';
+import { SplitLayout } from '../components/SplitLayout';
 import { MbidSearchSheet } from '../components/MbidSearchSheet';
 import { MoreOptionsSheet } from '../components/MoreOptionsSheet';
 import { OnboardingGuide } from '../components/OnboardingGuide';
@@ -40,6 +44,7 @@ import { PlaybackToast } from '../components/PlaybackToast';
 import { ProcessingOverlay } from '../components/ProcessingOverlay';
 import { useDownloadBackgroundNotification } from '../hooks/useDownloadBackgroundNotification';
 import { useDownloadKeepAwake } from '../hooks/useDownloadKeepAwake';
+import { useLayoutMode } from '../hooks/useLayoutMode';
 import { useTheme } from '../hooks/useTheme';
 import { deferredImageCacheInit, getImageCacheStats, initImageCache } from '../services/imageCacheService';
 import { deferredMusicCacheInit, getMusicCacheStats, initMusicCache } from '../services/musicCacheService';
@@ -67,8 +72,10 @@ import { genreStore } from '../store/genreStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
 import { fetchServerInfo } from '../services/subsonicService';
+import { playerStore } from '../store/playerStore';
 import { serverInfoStore } from '../store/serverInfoStore';
 import { sqliteStorage } from '../store/sqliteStorage';
+import { tabletLayoutStore } from '../store/tabletLayoutStore';
 
 // react-native-bootsplash keeps the native splash visible by default
 // until BootSplash.hide() is called. AnimatedSplashScreen handles the
@@ -117,8 +124,44 @@ export default function RootLayout() {
   const rehydrated = authStore((s) => s.rehydrated);
   const isLoggedIn = authStore((s) => s.isLoggedIn);
   const { theme, colors, preference } = useTheme();
+  const layoutMode = useLayoutMode();
   const router = useRouter();
   const segments = useSegments();
+  const currentTrack = playerStore((s) => s.currentTrack);
+  const queueLoading = playerStore((s) => s.queueLoading);
+  const hasCurrentTrack = currentTrack !== null;
+  const playerExpanded = tabletLayoutStore((s) => s.playerExpanded);
+
+  const isWide = layoutMode === 'wide';
+  // Keep the panel visible during queue replacement — queueLoading is true
+  // while playTrack() is resetting and reloading the RNTP queue, during
+  // which currentTrack may momentarily go null.
+  const showPanel = isWide && (hasCurrentTrack || queueLoading);
+
+  // Skip the panel slide animation when the layout mode changes (rotation).
+  // The panel should appear/disappear instantly during orientation changes
+  // but animate smoothly for user-driven show/hide (e.g. clearing queue).
+  const prevIsWideRef = useRef(isWide);
+  const animatePanel = prevIsWideRef.current === isWide;
+  prevIsWideRef.current = isWide;
+
+  // --- Expand/collapse animation progress (0 = compact, 1 = expanded) ---
+  const expandProgress = useSharedValue(0);
+
+  useEffect(() => {
+    if (playerExpanded && isWide && hasCurrentTrack) {
+      expandProgress.value = withSpring(1, { damping: 20, stiffness: 200, mass: 1 });
+    } else {
+      expandProgress.value = withTiming(0, { duration: 300, easing: Easing.inOut(Easing.cubic) });
+    }
+  }, [playerExpanded, isWide, hasCurrentTrack, expandProgress]);
+
+  // Reset expanded state when leaving wide mode (e.g. rotating to portrait)
+  useEffect(() => {
+    if (!isWide) {
+      tabletLayoutStore.getState().setPlayerExpanded(false);
+    }
+  }, [isWide]);
 
   // Sync the app's theme preference to the native UIKit layer so that native
   // UI elements (e.g. iOS 26 liquid glass containers) render with the correct
@@ -356,14 +399,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
       <ThemeProvider value={navigationTheme}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.textPrimary,
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.background },
-        }}
-      >
+      <SplitLayout
+        animate={animatePanel}
+        main={
+          <View style={{ flex: 1 }}>
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.textPrimary,
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: colors.background },
+              }}
+            >
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
@@ -488,7 +535,16 @@ export default function RootLayout() {
           name="migration-log"
           options={{ ...blurHeaderOptions, title: 'Migration Log', headerBackTitle: 'Back' }}
         />
-      </Stack>
+            </Stack>
+          </View>
+        }
+        panel={showPanel ? <PlayerPanel /> : null}
+      />
+
+      {/* Full-screen expanded player — covers everything including SplitLayout */}
+      {showPanel && (
+        <ExpandedPlayerView expandProgress={expandProgress} />
+      )}
 
       {/* Global more-options bottom sheet driven by moreOptionsStore */}
       <MoreOptionsSheet />

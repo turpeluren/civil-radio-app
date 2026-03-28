@@ -421,9 +421,10 @@ export async function initPlayer(): Promise<void> {
       return;
     }
 
-    // During a shuffle the queue is replaced atomically.  RNTP may fire
-    // a transient null-track event — ignore it so the UI stays open.
-    if (isShuffling && (track == null || !track.id)) {
+    // During a shuffle or queue replacement (playTrack) RNTP may fire a
+    // transient null-track event from reset() — ignore it so the tablet
+    // panel stays open and the UI doesn't flicker.
+    if ((isShuffling || isSettingQueue) && (track == null || !track.id)) {
       return;
     }
 

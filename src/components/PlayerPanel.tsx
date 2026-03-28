@@ -1,19 +1,15 @@
 /**
- * PlayerView – full-screen "Now Playing" view.
+ * PlayerPanel — compact sidebar player for tablet wide layout.
  *
- * Slides up from the MiniPlayer and displays hero cover art with a
- * gradient background extracted from the artwork, playback controls,
- * a seekable progress bar, and the playback queue.
+ * Shows cover art, track info, playback controls, progress bar, and
+ * the play queue in a vertical layout sized for a ~1/3 screen panel.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { Stack, useNavigation, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -29,27 +25,25 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { Pressable as GHPressable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CachedImage } from '../components/CachedImage';
-import { EmptyState } from '../components/EmptyState';
-import { MarqueeText } from '../components/MarqueeText';
-import { MoreOptionsButton } from '../components/MoreOptionsButton';
-import { PlaybackRateButton } from '../components/PlaybackRateButton';
-import { PlayerProgressBar } from '../components/PlayerProgressBar';
-import { RepeatButton } from '../components/RepeatButton';
-import { ShuffleButton } from '../components/ShuffleButton';
-import { QueueItemRow } from '../components/QueueItemRow';
-import { closeOpenRow } from '../components/SwipeableRow';
+import { GradientBackground } from './GradientBackground';
+import { CachedImage } from './CachedImage';
+import { MarqueeText } from './MarqueeText';
+import { MoreOptionsButton } from './MoreOptionsButton';
+import { PlaybackRateButton } from './PlaybackRateButton';
+import { PlayerProgressBar } from './PlayerProgressBar';
+import { QueueItemRow } from './QueueItemRow';
+import { RepeatButton } from './RepeatButton';
+import { ShuffleButton } from './ShuffleButton';
+import { ThemedAlert } from './ThemedAlert';
+import { closeOpenRow } from './SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
-import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useIsStarred } from '../hooks/useIsStarred';
+import { mixHexColors } from '../utils/colors';
 import { useTheme } from '../hooks/useTheme';
-import { ThemedAlert } from '../components/ThemedAlert';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { toggleStar } from '../services/moreOptionsService';
-import { offlineModeStore } from '../store/offlineModeStore';
 import {
   clearQueue,
   retryPlayback,
@@ -63,70 +57,21 @@ import {
 import { type Child } from '../services/subsonicService';
 import { createShareStore } from '../store/createShareStore';
 import { moreOptionsStore } from '../store/moreOptionsStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { playerStore } from '../store/playerStore';
-import { mixHexColors } from '../utils/colors';
+import { tabletLayoutStore } from '../store/tabletLayoutStore';
 
+const COVER_SIZE = 300;
+const PADDING = 16;
 
-const HERO_PADDING = 32;
-const HERO_COVER_SIZE = 600;
-const HEADER_BAR_HEIGHT = 44;
-
-export function PlayerView() {
+export function PlayerPanel() {
   const { colors } = useTheme();
   const { alert, alertProps } = useThemedAlert();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
-  const router = useRouter();
   const currentTrack = playerStore((s) => s.currentTrack);
   const currentTrackIndex = playerStore((s) => s.currentTrackIndex);
   const queue = playerStore((s) => s.queue);
   const queueLoading = playerStore((s) => s.queueLoading);
-
-  const onClose = useCallback(() => router.back(), [router]);
-
-  // Auto-dismiss when the queue is externally cleared (e.g. offline mode
-  // removes all non-downloaded tracks while this screen is open).
-  const [wasPopulated, setWasPopulated] = useState(false);
-  useEffect(() => {
-    if (currentTrack) {
-      setWasPopulated(true);
-    } else if (wasPopulated) {
-      onClose();
-    }
-  }, [currentTrack, wasPopulated, onClose]);
-
-  const { coverBackgroundColor, gradientOpacity } = useColorExtraction(
-    currentTrack?.coverArt,
-    colors.background,
-  );
-
-  const gradientStart = coverBackgroundColor ?? colors.background;
-  const gradientEnd = colors.background;
-
-  /* ---- Header: dismiss button + more options ---- */
-  useEffect(() => {
-    if (Platform.OS === 'ios') return;
-    navigation.setOptions({
-      headerLeft: () => (
-        <GHPressable
-          onPress={onClose}
-          hitSlop={12}
-          style={({ pressed }) => [{ opacity: 1 }, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
-        </GHPressable>
-      ),
-      headerRight: () =>
-        currentTrack ? (
-          <MoreOptionsButton
-            onPress={() =>
-              moreOptionsStore.getState().show({ type: 'song', item: currentTrack }, 'player')
-            }
-            color={colors.textPrimary}
-          />
-        ) : null,
-    });
-  }, [currentTrack, navigation, onClose, colors.textPrimary]);
 
   const handleSeek = useCallback((seconds: number) => {
     seekTo(seconds);
@@ -146,28 +91,26 @@ export function PlayerView() {
       'This will stop playback and clear the queue.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            onClose();
-            setTimeout(() => {
-              clearQueue();
-            }, 350);
-          },
-        },
+        { text: 'Clear', style: 'destructive', onPress: clearQueue },
       ],
     );
-  }, [onClose]);
+  }, []);
+
+  const handleShareQueue = useCallback(() => {
+    const ids = queue.map((t) => t.id);
+    if (ids.length > 0) {
+      createShareStore.getState().showQueue(ids);
+    }
+  }, [queue]);
+
+  const handleExpand = useCallback(() => {
+    tabletLayoutStore.getState().setPlayerExpanded(true);
+  }, []);
 
   // --- Shuffle overlay state ---
   const [shuffling, setShuffling] = useState(false);
   const overlayOpacity = useSharedValue(0);
   const spinAnim = useSharedValue(0);
-
-  const gradientAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: gradientOpacity.value,
-  }));
 
   const overlayAnimatedStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
@@ -200,13 +143,6 @@ export function PlayerView() {
     });
   }, [shuffling, overlayOpacity, spinAnim]);
 
-  const handleShareQueue = useCallback(() => {
-    const ids = queue.map((t) => t.id);
-    if (ids.length > 0) {
-      createShareStore.getState().showQueue(ids);
-    }
-  }, [queue]);
-
   // Muted primary for active queue item highlight
   const queueColors = useMemo(() => ({
     ...colors,
@@ -232,110 +168,109 @@ export function PlayerView() {
     [],
   );
 
-  const listHeader = useMemo(
-    () => (
-      <PlayerListHeader
-        currentTrack={currentTrack}
-        colors={colors}
-        queueLoading={queueLoading}
-        handleSeek={handleSeek}
-        handleClearQueue={handleClearQueue}
-        handleShuffle={handleShuffle}
-        handleShareQueue={handleShareQueue}
-        shuffling={shuffling}
-        queueLength={queue.length}
-      />
-    ),
-    [
-      currentTrack,
-      colors,
-      queueLoading,
-      handleSeek,
-      handleClearQueue,
-      handleShuffle,
-      handleShareQueue,
-      shuffling,
-      queue.length,
-    ],
-  );
-
   if (!currentTrack) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <EmptyState
-          icon="musical-notes-outline"
-          title="Nothing Playing"
-          subtitle="It's quiet in here… pick something good and hit play!"
-        />
-      </View>
-    );
+    // During queue replacement queueLoading is true while currentTrack is
+    // momentarily null — show a loading placeholder so the SplitLayout
+    // panel keeps its content instead of collapsing.
+    if (queueLoading) {
+      return (
+        <GradientBackground style={{ flex: 1, paddingTop: insets.top }}>
+          <View style={styles.loadingFallback}>
+            <ActivityIndicator size="large" color={colors.textSecondary} />
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+              Loading...
+            </Text>
+          </View>
+        </GradientBackground>
+      );
+    }
+    return null;
   }
 
   return (
-    <>
-      {Platform.OS === 'ios' && (
-        <>
-          <Stack.Toolbar placement="left">
-            <Stack.Toolbar.Button icon="chevron.down" onPress={onClose} />
-          </Stack.Toolbar>
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button
-              icon="ellipsis"
-              onPress={() => moreOptionsStore.getState().show({ type: 'song', item: currentTrack! }, 'player')}
-              hidden={!currentTrack}
-            />
-          </Stack.Toolbar>
-        </>
-      )}
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Gradient background */}
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.background }]} />
-        <Animated.View
-          style={[StyleSheet.absoluteFillObject, gradientAnimatedStyle]}
-          pointerEvents="none"
-        >
-          <LinearGradient
-            colors={[gradientStart, gradientEnd]}
-            locations={[0, 0.6]}
-            style={StyleSheet.absoluteFillObject}
-          />
-        </Animated.View>
+    <GradientBackground style={{ paddingTop: insets.top }}>
+      {/* Player controls */}
+      <PanelHeader
+          currentTrack={currentTrack}
+          colors={colors}
+          handleSeek={handleSeek}
+          handleExpand={handleExpand}
+      />
 
+      {/* Fixed queue header */}
+      {queue.length > 0 && (
+        <View style={styles.queueSection}>
+          <View style={styles.queueHeaderRow}>
+            <Text style={[styles.queueHeader, { color: colors.textPrimary }]}>
+              Queue
+            </Text>
+            <View style={styles.queueActions}>
+              <ShuffleButton
+                onPress={handleShuffle}
+                disabled={shuffling || queue.length < 2}
+              />
+              <Pressable
+                onPress={handleShareQueue}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Share queue"
+                style={({ pressed }) => [
+                  styles.queueActionButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons name="share-outline" size={18} color={colors.textPrimary} />
+              </Pressable>
+              <Pressable
+                onPress={handleClearQueue}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear queue"
+                style={({ pressed }) => [
+                  styles.queueActionButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.clearButtonText, { color: colors.textPrimary }]}>
+                  Clear
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Scrollable queue list */}
+      <View style={styles.queueList}>
         <FlashList
           data={queue}
           renderItem={renderQueueItem}
           keyExtractor={keyExtractor}
-          ListHeaderComponent={listHeader}
           onScrollBeginDrag={closeOpenRow}
           drawDistance={200}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingBottom: insets.bottom + 24,
-            ...(Platform.OS !== 'ios' ? { paddingTop: insets.top + HEADER_BAR_HEIGHT } : undefined),
-          }}
-          contentInset={Platform.OS === 'ios' ? { top: insets.top + HEADER_BAR_HEIGHT } : undefined}
-          contentOffset={Platform.OS === 'ios' ? { x: 0, y: -(insets.top + HEADER_BAR_HEIGHT) } : undefined}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
         />
-
-        {/* Shuffle overlay */}
-        {shuffling && (
-          <Animated.View
-            style={[styles.shuffleOverlay, overlayAnimatedStyle]}
-            pointerEvents="auto"
-          >
-            <View style={[styles.shuffleCard, { backgroundColor: colors.card }]}>
-              <Animated.View style={spinStyle}>
-                <Ionicons name="shuffle" size={32} color={colors.primary} />
-              </Animated.View>
-              <Text style={[styles.shuffleText, { color: colors.textPrimary }]}>
-                Shuffling…
-              </Text>
-            </View>
-          </Animated.View>
-        )}
       </View>
+
+      {/* Shuffle overlay */}
+      {shuffling && (
+        <Animated.View
+          style={[styles.shuffleOverlay, overlayAnimatedStyle]}
+          pointerEvents="auto"
+        >
+          <View style={[styles.shuffleCard, { backgroundColor: colors.card }]}>
+            <Animated.View style={spinStyle}>
+              <Ionicons name="shuffle" size={32} color={colors.primary} />
+            </Animated.View>
+            <Text style={[styles.shuffleText, { color: colors.textPrimary }]}>
+              Shuffling…
+            </Text>
+          </View>
+        </Animated.View>
+      )}
       <ThemedAlert {...alertProps} />
-    </>
+    </GradientBackground>
   );
 }
 
@@ -343,7 +278,7 @@ export function PlayerView() {
 /*  Favorite button                                                    */
 /* ------------------------------------------------------------------ */
 
-const FavoriteButton = memo(function FavoriteButton({
+const PanelFavoriteButton = memo(function PanelFavoriteButton({
   trackId,
   colors,
 }: {
@@ -372,7 +307,7 @@ const FavoriteButton = memo(function FavoriteButton({
     >
       <Ionicons
         name={starred ? 'heart' : 'heart-outline'}
-        size={24}
+        size={20}
         color={starred ? colors.red : colors.textSecondary}
       />
     </Pressable>
@@ -380,32 +315,22 @@ const FavoriteButton = memo(function FavoriteButton({
 });
 
 /* ------------------------------------------------------------------ */
-/*  List header (hero, controls, queue heading)                        */
+/*  Panel header: cover art, controls, queue heading                   */
 /* ------------------------------------------------------------------ */
 
-interface PlayerListHeaderProps {
+interface PanelHeaderProps {
   currentTrack: Child | null;
   colors: ThemeColors;
-  queueLoading: boolean;
   handleSeek: (seconds: number) => void;
-  handleClearQueue: () => void;
-  handleShuffle: () => void;
-  handleShareQueue: () => void;
-  shuffling: boolean;
-  queueLength: number;
+  handleExpand: () => void;
 }
 
-const PlayerListHeader = memo(function PlayerListHeader({
+const PanelHeader = memo(function PanelHeader({
   currentTrack,
   colors,
-  queueLoading,
   handleSeek,
-  handleClearQueue,
-  handleShuffle,
-  handleShareQueue,
-  shuffling,
-  queueLength,
-}: PlayerListHeaderProps) {
+  handleExpand,
+}: PanelHeaderProps) {
   const playbackState = playerStore((s) => s.playbackState);
   const position = playerStore((s) => s.position);
   const duration = playerStore((s) => s.duration);
@@ -427,22 +352,32 @@ const PlayerListHeader = memo(function PlayerListHeader({
 
   return (
     <View>
-      {queueLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.textSecondary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading...
-          </Text>
-        </View>
-      ) : (
-        <>
-          {/* Hero cover art */}
-          <View style={styles.hero}>
-            <View style={styles.heroImageWrap}>
+          {/* Panel toolbar */}
+          <View style={styles.panelToolbar}>
+            <Pressable
+              onPress={handleExpand}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Expand player"
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Ionicons name="expand-outline" size={22} color={colors.textPrimary} />
+            </Pressable>
+            <MoreOptionsButton
+              onPress={() =>
+                moreOptionsStore.getState().show({ type: 'song', item: currentTrack }, 'player')
+              }
+              color={colors.textPrimary}
+            />
+          </View>
+
+          {/* Cover art */}
+          <View style={styles.coverSection}>
+            <View style={styles.coverWrap}>
               <CachedImage
                 coverArtId={currentTrack.coverArt}
-                size={HERO_COVER_SIZE}
-                style={styles.heroImage}
+                size={COVER_SIZE}
+                style={styles.coverImage}
                 resizeMode="cover"
               />
             </View>
@@ -462,7 +397,7 @@ const PlayerListHeader = memo(function PlayerListHeader({
                   {currentTrack.artist ?? 'Unknown Artist'}
                 </Text>
               </View>
-              <FavoriteButton trackId={currentTrack.id} colors={colors} />
+              <PanelFavoriteButton trackId={currentTrack.id} colors={colors} />
             </View>
           </View>
 
@@ -483,23 +418,17 @@ const PlayerListHeader = memo(function PlayerListHeader({
 
           {/* Playback controls */}
           <View style={styles.controls}>
-            {/* Playback rate toggle */}
             <View style={styles.controlSideLeft}>
               <PlaybackRateButton />
             </View>
 
-            {/* Transport controls */}
             <View style={styles.transportControls}>
               <Pressable
                 onPress={skipToPrevious}
                 hitSlop={12}
                 style={({ pressed }) => pressed && styles.pressed}
               >
-                <Ionicons
-                  name="play-back"
-                  size={32}
-                  color={colors.textPrimary}
-                />
+                <Ionicons name="play-back" size={24} color={colors.textPrimary} />
               </Pressable>
 
               <Pressable
@@ -515,7 +444,7 @@ const PlayerListHeader = memo(function PlayerListHeader({
                 ) : (
                   <Ionicons
                     name={isPlaying ? 'pause' : 'play'}
-                    size={32}
+                    size={24}
                     color={colors.background}
                     style={!isPlaying ? styles.playIcon : undefined}
                   />
@@ -527,71 +456,15 @@ const PlayerListHeader = memo(function PlayerListHeader({
                 hitSlop={12}
                 style={({ pressed }) => pressed && styles.pressed}
               >
-                <Ionicons
-                  name="play-forward"
-                  size={32}
-                  color={colors.textPrimary}
-                />
+                <Ionicons name="play-forward" size={24} color={colors.textPrimary} />
               </Pressable>
             </View>
 
-            {/* Repeat toggle */}
             <View style={styles.controlSideRight}>
               <RepeatButton />
             </View>
           </View>
 
-          {/* Queue section header */}
-          {queueLength > 0 && (
-            <View style={styles.queueSection}>
-              <View style={styles.queueHeaderRow}>
-                <Text
-                  style={[styles.queueHeader, { color: colors.textPrimary }]}
-                >
-                  Queue
-                </Text>
-                <View style={styles.queueActions}>
-                  <ShuffleButton
-                    onPress={handleShuffle}
-                    disabled={shuffling || queueLength < 2}
-                  />
-                  <Pressable
-                    onPress={handleShareQueue}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Share queue"
-                    style={({ pressed }) => [
-                      styles.queueActionButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
-                  </Pressable>
-                  <Pressable
-                    onPress={handleClearQueue}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear queue"
-                    style={({ pressed }) => [
-                      styles.queueActionButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.clearButtonText,
-                        { color: colors.textPrimary },
-                      ]}
-                    >
-                      Clear
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          )}
-        </>
-      )}
     </View>
   );
 });
@@ -604,48 +477,50 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loadingContainer: {
+  loadingFallback: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 120,
   },
   loadingText: {
-    fontSize: 16,
-    marginTop: 16,
+    fontSize: 14,
+    marginTop: 12,
   },
-  hero: {
-    width: '100%',
-    maxWidth: 464,
-    alignSelf: 'center',
-    paddingHorizontal: HERO_PADDING,
+  queueList: {
+    flex: 1,
+  },
+  panelToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: PADDING,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 4,
+  },
+  coverSection: {
+    paddingHorizontal: PADDING,
+    paddingBottom: 16,
     alignItems: 'center',
   },
-  heroImageWrap: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 12,
+  coverWrap: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.06)',
-    // Shadow for depth
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  heroImage: {
+  coverImage: {
     width: '100%',
     height: '100%',
   },
   trackInfo: {
-    paddingHorizontal: HERO_PADDING,
-    maxWidth: 464,
-    width: '100%',
-    alignSelf: 'center',
-    marginBottom: 16,
+    paddingHorizontal: PADDING,
+    marginBottom: 8,
   },
   trackInfoRow: {
     flexDirection: 'row',
@@ -656,34 +531,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   trackTitle: {
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '700',
   },
   trackArtist: {
-    fontSize: 16,
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 2,
   },
   favoriteButton: {
-    paddingLeft: 12,
+    paddingLeft: 8,
     paddingVertical: 4,
   },
   progressSection: {
-    paddingHorizontal: HERO_PADDING,
-    maxWidth: 464,
-    width: '100%',
-    alignSelf: 'center',
-    marginBottom: 8,
+    paddingHorizontal: PADDING,
+    marginBottom: 4,
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: HERO_PADDING,
-    maxWidth: 464,
-    width: '100%',
-    alignSelf: 'center',
-    marginBottom: 32,
+    paddingVertical: 4,
+    paddingHorizontal: PADDING,
+    marginBottom: 16,
   },
   controlSideLeft: {
     flex: 1,
@@ -698,12 +567,12 @@ const styles = StyleSheet.create({
   transportControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 28,
+    gap: 20,
   },
   playPauseButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -711,7 +580,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   playIcon: {
-    marginLeft: 3,
+    marginLeft: 2,
   },
   pressed: {
     opacity: 0.6,
@@ -720,8 +589,8 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   queueSection: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: PADDING,
+    paddingTop: 4,
   },
   queueHeaderRow: {
     flexDirection: 'row',
@@ -730,7 +599,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   queueHeader: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -738,7 +607,7 @@ const styles = StyleSheet.create({
   queueActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   queueActionButton: {
     alignItems: 'center',
@@ -746,7 +615,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   shuffleOverlay: {

@@ -12,21 +12,24 @@ import { StorageFullBanner } from '../../components/StorageFullBanner';
 import { MiniPlayer } from '../../components/MiniPlayer';
 import { SearchableHeader } from '../../components/SearchableHeader';
 import { SearchResultsOverlay } from '../../components/SearchResultsOverlay';
+import { useLayoutMode } from '../../hooks/useLayoutMode';
 import { useTheme } from '../../hooks/useTheme';
 import { searchStore } from '../../store/searchStore';
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  const layoutMode = useLayoutMode();
+  const isWide = layoutMode === 'wide';
 
   const renderTabBar = useCallback(
     (props: React.ComponentProps<typeof BottomTabBar>) => (
       <>
         <DownloadBanner />
-        <MiniPlayer />
+        {!isWide && <MiniPlayer />}
         <BottomTabBar {...props} />
       </>
     ),
-    [],
+    [isWide],
   );
 
   return (
