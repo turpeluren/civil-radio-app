@@ -146,6 +146,22 @@ describe('aggregates – incremental updates', () => {
     expect(aggregates.albumCounts['AlbumA::Art'].artist).toBe('Art');
   });
 
+  it('updates album coverArt when later scrobble provides it', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', album: 'AlbumA', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', album: 'AlbumA', coverArt: 'al-123', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.albumCounts['AlbumA::Art'].coverArt).toBe('al-123');
+  });
+
+  it('does not clear album coverArt when later scrobble lacks it', () => {
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', album: 'AlbumA', coverArt: 'al-123', duration: 100 } as any }));
+    completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', album: 'AlbumA', duration: 100 } as any }));
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.albumCounts['AlbumA::Art'].coverArt).toBe('al-123');
+  });
+
   it('updates songCounts incrementally and keeps latest song metadata', () => {
     completedScrobbleStore.getState().addCompleted(validScrobble({ id: '1', song: { id: 's1', title: 'Old Title', artist: 'Art', duration: 100 } as any }));
     completedScrobbleStore.getState().addCompleted(validScrobble({ id: '2', song: { id: 's1', title: 'New Title', artist: 'Art', duration: 100 } as any }));
@@ -313,6 +329,36 @@ describe('rebuildAggregates', () => {
     const aggAfterRebuild = completedScrobbleStore.getState().aggregates;
     expect(aggAfterRebuild.artistCounts).toEqual(aggAfterAdd.artistCounts);
     expect(aggAfterRebuild.dayCounts).toEqual(aggAfterAdd.dayCounts);
+  });
+
+  it('picks up album coverArt from later scrobbles', () => {
+    completedScrobbleStore.setState({
+      completedScrobbles: [
+        validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', album: 'Alb', duration: 100 } as any }),
+        validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', album: 'Alb', coverArt: 'al-99', duration: 100 } as any }),
+      ],
+      stats: { ...EMPTY_STATS },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
+    });
+    completedScrobbleStore.getState().rebuildAggregates();
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.albumCounts['Alb::Art'].coverArt).toBe('al-99');
+  });
+
+  it('does not clear album coverArt when later scrobbles lack it', () => {
+    completedScrobbleStore.setState({
+      completedScrobbles: [
+        validScrobble({ id: '1', song: { id: 's1', title: 'A', artist: 'Art', album: 'Alb', coverArt: 'al-99', duration: 100 } as any }),
+        validScrobble({ id: '2', song: { id: 's2', title: 'B', artist: 'Art', album: 'Alb', duration: 100 } as any }),
+      ],
+      stats: { ...EMPTY_STATS },
+      aggregates: { ...EMPTY_AGGREGATES, hourBuckets: new Array(24).fill(0) },
+    });
+    completedScrobbleStore.getState().rebuildAggregates();
+
+    const { aggregates } = completedScrobbleStore.getState();
+    expect(aggregates.albumCounts['Alb::Art'].coverArt).toBe('al-99');
   });
 });
 

@@ -1,4 +1,4 @@
-import { getFirstLetter, minDelay } from '../stringHelpers';
+import { getArtistInitials, getFirstLetter, minDelay } from '../stringHelpers';
 
 describe('getFirstLetter', () => {
   it('returns uppercase letter for letter input', () => {
@@ -28,6 +28,82 @@ describe('getFirstLetter', () => {
   it('returns # for non-ASCII letters (regex matches A-Z only)', () => {
     expect(getFirstLetter('É')).toBe('#');
     expect(getFirstLetter('ñ')).toBe('#');
+  });
+});
+
+describe('getArtistInitials', () => {
+  it('returns first 2 letters for single-word name', () => {
+    expect(getArtistInitials('Prince')).toBe('PR');
+    expect(getArtistInitials('Beyoncé')).toBe('BE');
+  });
+
+  it('returns first letter of first 2 words for multi-word name', () => {
+    expect(getArtistInitials('Daft Punk')).toBe('DP');
+    expect(getArtistInitials('Foo Fighters')).toBe('FF');
+  });
+
+  it('strips "The" prefix', () => {
+    expect(getArtistInitials('The Beatles')).toBe('BE');
+    expect(getArtistInitials('The Rolling Stones')).toBe('RS');
+  });
+
+  it('strips "A" prefix', () => {
+    expect(getArtistInitials('A Tribe Called Quest')).toBe('TC');
+  });
+
+  it('strips "An" prefix', () => {
+    expect(getArtistInitials('An Albatross')).toBe('AL');
+  });
+
+  it('strips Spanish articles', () => {
+    expect(getArtistInitials('El Canto del Loco')).toBe('CD');
+    expect(getArtistInitials('La Oreja de Van Gogh')).toBe('OD');
+    expect(getArtistInitials('Los Lobos')).toBe('LO');
+    expect(getArtistInitials('Las Ketchup')).toBe('KE');
+  });
+
+  it('strips French articles', () => {
+    expect(getArtistInitials('Le Tigre')).toBe('TI');
+    expect(getArtistInitials('Les Misérables')).toBe('MI');
+  });
+
+  it('strips German articles', () => {
+    expect(getArtistInitials('Die Antwoord')).toBe('AN');
+    expect(getArtistInitials('Der Plan')).toBe('PL');
+    expect(getArtistInitials('Das Racist')).toBe('RA');
+  });
+
+  it('strips Italian articles', () => {
+    expect(getArtistInitials('Il Divo')).toBe('DI');
+    expect(getArtistInitials('Lo Stato Sociale')).toBe('SS');
+    expect(getArtistInitials('Gli Amici')).toBe('AM');
+  });
+
+  it('strips Portuguese articles', () => {
+    expect(getArtistInitials('Os Mutantes')).toBe('MU');
+    expect(getArtistInitials('As Meninas')).toBe('ME');
+  });
+
+  it('is case-insensitive for prefix stripping', () => {
+    expect(getArtistInitials('the beatles')).toBe('BE');
+    expect(getArtistInitials('THE BEATLES')).toBe('BE');
+  });
+
+  it('does not strip prefix that is the entire name', () => {
+    expect(getArtistInitials('The')).toBe('TH');
+    expect(getArtistInitials('A')).toBe('A');
+  });
+
+  it('handles extra whitespace', () => {
+    expect(getArtistInitials('  Daft  Punk  ')).toBe('DP');
+  });
+
+  it('handles single letter name', () => {
+    expect(getArtistInitials('X')).toBe('X');
+  });
+
+  it('returns first 2 letters when prefix strip leaves single word', () => {
+    expect(getArtistInitials('The Weeknd')).toBe('WE');
   });
 });
 

@@ -89,6 +89,7 @@ function buildAggregates(scrobbles: CompletedScrobble[]): AnalyticsAggregates {
     const existingAlbum = albumCounts[albumKey];
     if (existingAlbum) {
       existingAlbum.count++;
+      if (s.song.coverArt) existingAlbum.coverArt = s.song.coverArt;
     } else {
       albumCounts[albumKey] = { artist, coverArt: s.song.coverArt ?? undefined, count: 1 };
     }
@@ -151,7 +152,7 @@ export const completedScrobbleStore = create<CompletedScrobbleState>()(
           const newAlbumCounts = {
             ...agg.albumCounts,
             [albumKey]: existingAlbum
-              ? { ...existingAlbum, count: existingAlbum.count + 1 }
+              ? { ...existingAlbum, count: existingAlbum.count + 1, coverArt: scrobble.song.coverArt ?? existingAlbum.coverArt }
               : { artist: artistName, coverArt: scrobble.song.coverArt ?? undefined, count: 1 },
           };
 

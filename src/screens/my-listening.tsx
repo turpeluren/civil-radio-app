@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useCallback, useContext, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { CachedImage } from '../components/CachedImage';
@@ -18,6 +18,7 @@ import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { pendingScrobbleStore } from '../store/pendingScrobbleStore';
+import { getArtistInitials, minDelay } from '../utils/stringHelpers';
 
 const PERIODS: { key: TimePeriod; label: string }[] = [
   { key: '7d', label: '7D' },
@@ -63,6 +64,7 @@ export function MyListeningScreen() {
   const transitionComplete = useTransitionComplete();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [period, setPeriod] = useState<TimePeriod>('30d');
+  const [refreshing, setRefreshing] = useState(false);
 
   const completedScrobbles = completedScrobbleStore((s) => s.completedScrobbles);
   const pendingScrobbles = pendingScrobbleStore((s) => s.pendingScrobbles);
@@ -73,6 +75,14 @@ export function MyListeningScreen() {
 
   const handlePeriodChange = useCallback((p: TimePeriod) => {
     setPeriod(p);
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const delay = minDelay();
+    completedScrobbleStore.getState().rebuildAggregates();
+    await delay;
+    setRefreshing(false);
   }, []);
 
   if (!transitionComplete) {
@@ -125,6 +135,14 @@ export function MyListeningScreen() {
       style={styles.screen}
       contentContainerStyle={[styles.content, { paddingTop: headerHeight + 8 }]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+          progressViewOffset={headerHeight}
+        />
+      }
     >
       {/* Period selector */}
       <View style={[styles.periodRow, { backgroundColor: colors.card }]}>
@@ -244,7 +262,7 @@ export function MyListeningScreen() {
               count={item.count}
               maxCount={analytics.topArtists[0].count}
               colors={colors}
-              initials={item.artist.substring(0, 2).toUpperCase()}
+              initials={getArtistInitials(item.artist)}
               index={i}
             />
           ))}

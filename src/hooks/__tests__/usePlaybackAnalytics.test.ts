@@ -461,6 +461,33 @@ describe('usePlaybackAnalytics', () => {
     const total = result.current.hourlyDistribution.reduce((a, b) => a + b, 0);
     expect(total).toBe(3);
   });
+
+  it('filter path uses latest song metadata for top songs', () => {
+    const records: ScrobbleRecord[] = [
+      { id: '1', song: { id: 's1', artist: 'A', album: 'B', duration: 100 } as any, time: ts(2025, 1, 14) },
+      { id: '2', song: { id: 's1', artist: 'A', album: 'B', duration: 100, coverArt: 'art-1' } as any, time: ts(2025, 1, 14) },
+    ];
+    const { result } = renderHook(() => usePlaybackAnalytics(records, '7d'));
+    expect(result.current.topSongs[0].song.coverArt).toBe('art-1');
+  });
+
+  it('filter path picks up album coverArt from later scrobble', () => {
+    const records: ScrobbleRecord[] = [
+      { id: '1', song: { id: 's1', artist: 'A', album: 'AlbX', duration: 100 } as any, time: ts(2025, 1, 14) },
+      { id: '2', song: { id: 's2', artist: 'A', album: 'AlbX', duration: 100, coverArt: 'al-42' } as any, time: ts(2025, 1, 14) },
+    ];
+    const { result } = renderHook(() => usePlaybackAnalytics(records, '7d'));
+    expect(result.current.topAlbums[0].coverArt).toBe('al-42');
+  });
+
+  it('filter path does not clear album coverArt when later scrobble lacks it', () => {
+    const records: ScrobbleRecord[] = [
+      { id: '1', song: { id: 's1', artist: 'A', album: 'AlbX', duration: 100, coverArt: 'al-42' } as any, time: ts(2025, 1, 14) },
+      { id: '2', song: { id: 's2', artist: 'A', album: 'AlbX', duration: 100 } as any, time: ts(2025, 1, 14) },
+    ];
+    const { result } = renderHook(() => usePlaybackAnalytics(records, '7d'));
+    expect(result.current.topAlbums[0].coverArt).toBe('al-42');
+  });
 });
 
 describe('usePlaybackAnalytics with aggregates', () => {
@@ -493,8 +520,12 @@ describe('usePlaybackAnalytics with aggregates', () => {
 
       const albumKey = `${s.song.album ?? 'Unknown'}::${artist}`;
       const existing = albumCounts[albumKey];
-      if (existing) existing.count++;
-      else albumCounts[albumKey] = { artist, count: 1 };
+      if (existing) {
+        existing.count++;
+        if (s.song.coverArt) existing.coverArt = s.song.coverArt;
+      } else {
+        albumCounts[albumKey] = { artist, coverArt: s.song.coverArt ?? undefined, count: 1 };
+      }
 
       const existingSong = songCounts[s.song.id];
       if (existingSong) { existingSong.count++; existingSong.song = s.song; }

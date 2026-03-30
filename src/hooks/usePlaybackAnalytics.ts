@@ -314,6 +314,7 @@ export function usePlaybackAnalytics(
       const existing = albumCounts.get(albumKey);
       if (existing) {
         existing.count++;
+        if (s.song.coverArt) existing.coverArt = s.song.coverArt;
       } else {
         albumCounts.set(albumKey, {
           artist,
@@ -325,6 +326,7 @@ export function usePlaybackAnalytics(
       const songEntry = songCounts.get(s.song.id);
       if (songEntry) {
         songEntry.count++;
+        songEntry.song = s.song;
       } else {
         songCounts.set(s.song.id, { song: s.song, count: 1 });
       }
