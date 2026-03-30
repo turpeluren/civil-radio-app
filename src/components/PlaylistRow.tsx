@@ -33,7 +33,7 @@ export const PlaylistRow = memo(function PlaylistRow({ playlist }: { playlist: P
   }, [playlist]);
 
   const rightActions: SwipeAction[] = useMemo(
-    () => [{ icon: 'list-outline', color: colors.primary, label: 'Queue', onPress: handleAddToQueue }],
+    () => [{ icon: 'playlist-play', iconFamily: 'mdi' as const, color: colors.primary, label: 'Queue', onPress: handleAddToQueue }],
     [colors.primary, handleAddToQueue],
   );
 

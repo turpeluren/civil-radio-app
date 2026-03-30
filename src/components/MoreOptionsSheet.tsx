@@ -10,7 +10,7 @@
  * Rendered once at the root layout level.
  */
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -530,8 +530,8 @@ export function MoreOptionsSheet() {
                   pressed && styles.optionPressed,
                 ]}
               >
-                <Ionicons
-                  name="albums-outline"
+                <MaterialCommunityIcons
+                  name="playlist-music-outline"
                   size={22}
                   color={colors.textPrimary}
                   style={styles.optionIcon}
@@ -635,8 +635,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="musical-notes-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-star"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -656,8 +656,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="shuffle-outline"
+                  <MaterialCommunityIcons
+                    name="account-group-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -698,8 +698,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="add-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-plus"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -720,7 +720,7 @@ export function MoreOptionsSheet() {
                   ]}
                 >
                   <Ionicons
-                    name="shuffle-outline"
+                    name="radio-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -740,8 +740,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="radio-outline"
+                  <MaterialCommunityIcons
+                    name="account-music-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -761,8 +761,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="list-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-play"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1053,8 +1053,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="musical-notes-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-star"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1074,8 +1074,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="shuffle-outline"
+                  <MaterialCommunityIcons
+                    name="account-group-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1116,8 +1116,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="add-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-plus"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1138,7 +1138,7 @@ export function MoreOptionsSheet() {
                   ]}
                 >
                   <Ionicons
-                    name="shuffle-outline"
+                    name="radio-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1158,8 +1158,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="radio-outline"
+                  <MaterialCommunityIcons
+                    name="account-music-outline"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}
@@ -1179,8 +1179,8 @@ export function MoreOptionsSheet() {
                     pressed && styles.optionPressed,
                   ]}
                 >
-                  <Ionicons
-                    name="list-outline"
+                  <MaterialCommunityIcons
+                    name="playlist-play"
                     size={22}
                     color={colors.textPrimary}
                     style={styles.optionIcon}

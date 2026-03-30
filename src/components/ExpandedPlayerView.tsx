@@ -8,7 +8,7 @@
  * - Animated entrance/exit driven by `expandProgress` (0 = hidden, 1 = fully expanded)
  */
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useMemo, useState } from 'react';
@@ -524,8 +524,8 @@ export function ExpandedPlayerView({
                     accessibilityLabel="Show lyrics"
                     style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
                   >
-                    <Ionicons
-                      name="text"
+                    <MaterialCommunityIcons
+                      name="microphone-outline"
                       size={22}
                       color={rightPanelMode === 'lyrics' ? colors.primary : colors.textSecondary}
                     />
@@ -537,8 +537,8 @@ export function ExpandedPlayerView({
                     accessibilityLabel="Show queue"
                     style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
                   >
-                    <Ionicons
-                      name="list"
+                    <MaterialCommunityIcons
+                      name="playlist-music"
                       size={22}
                       color={rightPanelMode === 'queue' ? colors.primary : colors.textSecondary}
                     />

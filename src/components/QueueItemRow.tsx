@@ -97,7 +97,8 @@ export const QueueItemRow = memo(function QueueItemRow({
         ? []
         : [
             {
-              icon: 'add-outline',
+              icon: 'playlist-plus',
+              iconFamily: 'mdi' as const,
               color: colors.primary,
               label: 'Playlist',
               onPress: handleAddToPlaylist,

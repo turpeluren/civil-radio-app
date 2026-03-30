@@ -15,7 +15,7 @@
  * - Module-level `closeOpenRow()` export for scroll-to-close behaviour
  */
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from '@/utils/haptics';
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -60,7 +60,9 @@ export function closeOpenRow() {
 /* ------------------------------------------------------------------ */
 
 export interface SwipeAction {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: keyof typeof Ionicons.glyphMap | keyof typeof MaterialCommunityIcons.glyphMap;
+  /** Icon library to use. Defaults to `'ionicons'`. */
+  iconFamily?: 'ionicons' | 'mdi';
   color: string;
   /** Text label displayed below the icon (e.g., "Queue", "Favorite"). */
   label?: string;
@@ -479,7 +481,11 @@ const ActionButton = memo(function ActionButton({
       <Animated.View
         style={[styles.iconDisc, { backgroundColor: action.color }, discStyle]}
       >
-        <Ionicons name={action.icon} size={ICON_SIZE} color="#fff" />
+        {action.iconFamily === 'mdi' ? (
+          <MaterialCommunityIcons name={action.icon as keyof typeof MaterialCommunityIcons.glyphMap} size={ICON_SIZE} color="#fff" />
+        ) : (
+          <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={ICON_SIZE} color="#fff" />
+        )}
       </Animated.View>
       {action.label != null && (
         <Animated.Text style={[styles.actionLabel, labelStyle]} numberOfLines={1}>

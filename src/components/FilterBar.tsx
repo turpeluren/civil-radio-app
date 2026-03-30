@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { memo, useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -137,8 +137,8 @@ export const FilterBar = memo(function FilterBar({
               ]}
               hitSlop={8}
             >
-              <Ionicons
-                name={layoutToggle.layout === 'list' ? 'grid-outline' : 'list-outline'}
+              <MaterialCommunityIcons
+                name={layoutToggle.layout === 'list' ? 'view-grid-outline' : 'view-list-outline'}
                 size={22}
                 color={colors.textPrimary}
               />

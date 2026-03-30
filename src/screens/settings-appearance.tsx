@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -419,8 +419,8 @@ export function SettingsAppearanceScreen() {
                     hitSlop={6}
                     style={({ pressed }) => pressed && styles.pressed}
                   >
-                    <Ionicons
-                      name="list-outline"
+                    <MaterialCommunityIcons
+                      name="view-list-outline"
                       size={22}
                       color={currentValue === 'list' ? colors.primary : colors.textSecondary}
                     />
@@ -430,8 +430,8 @@ export function SettingsAppearanceScreen() {
                     hitSlop={6}
                     style={({ pressed }) => pressed && styles.pressed}
                   >
-                    <Ionicons
-                      name="grid-outline"
+                    <MaterialCommunityIcons
+                      name="view-grid-outline"
                       size={22}
                       color={currentValue === 'grid' ? colors.primary : colors.textSecondary}
                     />
@@ -462,8 +462,8 @@ export function SettingsAppearanceScreen() {
                     hitSlop={6}
                     style={({ pressed }) => pressed && styles.pressed}
                   >
-                    <Ionicons
-                      name="list-outline"
+                    <MaterialCommunityIcons
+                      name="view-list-outline"
                       size={22}
                       color={currentValue === 'list' ? colors.primary : colors.textSecondary}
                     />
@@ -473,8 +473,8 @@ export function SettingsAppearanceScreen() {
                     hitSlop={6}
                     style={({ pressed }) => pressed && styles.pressed}
                   >
-                    <Ionicons
-                      name="grid-outline"
+                    <MaterialCommunityIcons
+                      name="view-grid-outline"
                       size={22}
                       color={currentValue === 'grid' ? colors.primary : colors.textSecondary}
                     />

@@ -49,7 +49,7 @@ export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
   }, [album]);
 
   const rightActions: SwipeAction[] = useMemo(
-    () => [{ icon: 'list-outline', color: colors.primary, label: 'Queue', onPress: handleAddToQueue }],
+    () => [{ icon: 'playlist-play', iconFamily: 'mdi' as const, color: colors.primary, label: 'Queue', onPress: handleAddToQueue }],
     [colors.primary, handleAddToQueue],
   );
 
@@ -59,7 +59,8 @@ export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
         ? []
         : [
             {
-              icon: 'add-outline',
+              icon: 'playlist-plus',
+              iconFamily: 'mdi' as const,
               color: colors.primary,
               label: 'Playlist',
               onPress: handleAddToPlaylist,
