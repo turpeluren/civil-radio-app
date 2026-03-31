@@ -109,8 +109,8 @@ export function performOfflineSearch(query: string): SearchResults {
   };
 }
 
-export function getOfflineSongsByGenre(genre: string): Child[] {
-  const g = genre.toLowerCase();
+function collectOfflineSongs(genreFilter?: string): Child[] {
+  const g = genreFilter?.toLowerCase();
   const { cachedItems } = musicCacheStore.getState();
 
   const cachedItemIds = new Set(Object.keys(cachedItems));
@@ -125,13 +125,9 @@ export function getOfflineSongsByGenre(genre: string): Child[] {
   const results: Child[] = [];
   const seenIds = new Set<string>();
 
-  function matchesGenre(song: Child): boolean {
-    return getGenreNames(song).some((name) => name.toLowerCase() === g);
-  }
-
   function addSong(song: Child): void {
     if (seenIds.has(song.id) || !cachedTrackIds.has(song.id)) return;
-    if (!matchesGenre(song)) return;
+    if (g && !getGenreNames(song).some((name) => name.toLowerCase() === g)) return;
     seenIds.add(song.id);
     results.push({
       ...song,
@@ -161,4 +157,12 @@ export function getOfflineSongsByGenre(genre: string): Child[] {
   }
 
   return results;
+}
+
+export function getOfflineSongsByGenre(genre: string): Child[] {
+  return collectOfflineSongs(genre);
+}
+
+export function getOfflineSongsAll(): Child[] {
+  return collectOfflineSongs();
 }

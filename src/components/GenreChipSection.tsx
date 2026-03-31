@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { type ThemeColors } from '../constants/theme';
-import { getOfflineSongsByGenre } from '../services/searchService';
+import { getOfflineSongsByGenre, getOfflineSongsAll } from '../services/searchService';
 import { getRandomSongs, type Child } from '../services/subsonicService';
 import { playTrack } from '../services/playerService';
 import { connectivityStore } from '../store/connectivityStore';
@@ -154,6 +154,84 @@ const GenreChip = memo(function GenreChip({ genre, index, colors }: GenreChipPro
   );
 });
 
+const MixItUpChip = memo(function MixItUpChip({ colors }: { colors: ThemeColors }) {
+  const [loading, setLoading] = useState(false);
+  const color = colors.primary;
+
+  // Staggered entrance (index 0)
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(10);
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 350 });
+    translateY.value = withTiming(0, { duration: 350 });
+  }, [opacity, translateY]);
+
+  // Press scale
+  const scale = useSharedValue(1);
+  const handlePressIn = useCallback(() => {
+    scale.value = withSpring(0.96, { damping: 15, stiffness: 150 });
+  }, [scale]);
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+  }, [scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+
+  const handlePress = useCallback(async () => {
+    if (loading) return;
+    selectionAsync();
+    setLoading(true);
+    try {
+      let songs: Child[] | null;
+      if (isOnline()) {
+        songs = await getRandomSongs(20);
+      } else {
+        songs = getOfflineSongsAll();
+        if (songs) shuffle(songs);
+        songs = songs?.slice(0, 20) ?? null;
+      }
+      if (songs && songs.length > 0) {
+        await playTrack(songs[0], songs);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[
+          styles.chip,
+          {
+            backgroundColor: color + '1A',
+            borderColor: color + '4D',
+          },
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator size={12} color={color} />
+        ) : (
+          <Ionicons name="shuffle" size={14} color={color} />
+        )}
+        <Text
+          style={[styles.chipText, { color: colors.textPrimary }]}
+          numberOfLines={1}
+        >
+          Mix It Up
+        </Text>
+        <Ionicons name="play" size={12} color={color} />
+      </Pressable>
+    </Animated.View>
+  );
+});
+
 interface GenreChipSectionProps {
   genreCounts: Record<string, number>;
   colors: ThemeColors;
@@ -240,11 +318,12 @@ export const GenreChipSection = memo(function GenreChipSection({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.chipRow}
       >
+        <MixItUpChip colors={colors} />
         {genres.map((genre, index) => (
           <GenreChip
             key={genre}
             genre={genre}
-            index={index}
+            index={index + 1}
             colors={colors}
           />
         ))}

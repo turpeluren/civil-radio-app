@@ -35,7 +35,7 @@ import {
 } from '../services/tunedInService';
 import { getOfflineSongsByGenre } from '../services/searchService';
 import { playTrack } from '../services/playerService';
-import { getAlbum } from '../services/subsonicService';
+import { getAlbum, type Child } from '../services/subsonicService';
 import { albumListsStore } from '../store/albumListsStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { connectivityStore } from '../store/connectivityStore';
@@ -618,17 +618,26 @@ const BuildMixSheetContent = memo(function BuildMixSheetContent({
   }, []);
 
   const handlePlay = useCallback(async () => {
-    if (selectedGenres.length === 0 || loading) return;
+    if (loading) return;
     selectionAsync();
     setLoading(true);
     try {
-      const decade = DECADES[selectedDecadeIndex];
-      const songs = await fetchCustomMix(
-        selectedGenres,
-        decade.fromYear,
-        decade.toYear,
-        online,
-      );
+      let songs: Child[];
+      if (selectedGenres.length === 0) {
+        // No selection — fully random "Mix It Up"
+        const strategy = online
+          ? { type: 'random' as const, size: 20 }
+          : { type: 'offline' as const };
+        songs = await fetchMixSongs(strategy);
+      } else {
+        const decade = DECADES[selectedDecadeIndex];
+        songs = await fetchCustomMix(
+          selectedGenres,
+          decade.fromYear,
+          decade.toYear,
+          online,
+        );
+      }
       if (songs.length > 0) {
         await playTrack(songs[0], songs);
       }
@@ -719,12 +728,10 @@ const BuildMixSheetContent = memo(function BuildMixSheetContent({
       {/* Play button */}
       <Pressable
         onPress={handlePlay}
-        disabled={selectedGenres.length === 0 || loading}
+        disabled={loading}
         style={[
           styles.playMixButton,
-          {
-            backgroundColor: selectedGenres.length > 0 ? colors.primary : colors.border,
-          },
+          { backgroundColor: colors.primary },
         ]}
       >
         {loading ? (

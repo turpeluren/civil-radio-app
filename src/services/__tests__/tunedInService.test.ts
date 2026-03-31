@@ -28,9 +28,11 @@ jest.mock('../subsonicService', () => ({
 }));
 
 const mockGetOfflineSongsByGenre = jest.fn();
+const mockGetOfflineSongsAll = jest.fn();
 
 jest.mock('../searchService', () => ({
   getOfflineSongsByGenre: (...args: unknown[]) => mockGetOfflineSongsByGenre(...args),
+  getOfflineSongsAll: (...args: unknown[]) => mockGetOfflineSongsAll(...args),
 }));
 
 beforeEach(() => {
@@ -39,6 +41,7 @@ beforeEach(() => {
   mockGetSimilarSongs.mockReset();
   mockGetSimilarSongs2.mockReset();
   mockGetOfflineSongsByGenre.mockReset();
+  mockGetOfflineSongsAll.mockReset();
 });
 
 /* ------------------------------------------------------------------ */
@@ -259,10 +262,11 @@ describe('generateMixes', () => {
     isOnline: true,
   };
 
-  it('always returns at least a "Right Now" card', () => {
+  it('always returns "Right Now" as first card and includes "Mix It Up"', () => {
     const mixes = generateMixes(baseInput);
-    expect(mixes.length).toBeGreaterThanOrEqual(1);
+    expect(mixes.length).toBeGreaterThanOrEqual(2);
     expect(mixes[0].id).toBe('right-now');
+    expect(mixes.map((m) => m.id)).toContain('mix-it-up');
   });
 
   it('includes Deep Cuts, Time Machine when online', () => {
@@ -381,7 +385,8 @@ describe('generateMixes', () => {
     expect(ids).not.toContain('time-machine');
 
     // Right Now uses offline strategy
-    expect(mixes[0].fetchStrategy.type).toBe('offline');
+    const rightNow = mixes.find((m) => m.id === 'right-now')!;
+    expect(rightNow.fetchStrategy.type).toBe('offline');
 
     // Genre Blend uses offline strategy
     const blend = mixes.find((m) => m.id === 'genre-blend');
@@ -408,7 +413,7 @@ describe('generateMixes', () => {
       ],
     };
     const mixes = generateMixes(input);
-    const rightNow = mixes[0];
+    const rightNow = mixes.find((m) => m.id === 'right-now')!;
     expect(rightNow.subtitle).toContain('Rock');
     if (rightNow.fetchStrategy.type === 'randomByGenre') {
       expect(rightNow.fetchStrategy.genre).toBe('Rock');
@@ -417,7 +422,7 @@ describe('generateMixes', () => {
 
   it('Right Now falls back to random when no genre data', () => {
     const mixes = generateMixes(baseInput);
-    const rightNow = mixes[0];
+    const rightNow = mixes.find((m) => m.id === 'right-now')!;
     expect(rightNow.fetchStrategy.type).toBe('random');
   });
 
@@ -594,10 +599,10 @@ describe('fetchMixSongs', () => {
   });
 
   it('handles offline without genre', async () => {
-    mockGetOfflineSongsByGenre.mockReturnValue(songs);
+    mockGetOfflineSongsAll.mockReturnValue(songs);
     const result = await fetchMixSongs({ type: 'offline' });
     expect(result.length).toBeLessThanOrEqual(20);
-    expect(mockGetOfflineSongsByGenre).toHaveBeenCalledWith('');
+    expect(mockGetOfflineSongsAll).toHaveBeenCalled();
   });
 
   it('returns empty array on null API response', async () => {

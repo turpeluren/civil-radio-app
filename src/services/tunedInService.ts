@@ -7,7 +7,7 @@ import {
   getSimilarSongs2,
   type Child,
 } from './subsonicService';
-import { getOfflineSongsByGenre } from './searchService';
+import { getOfflineSongsByGenre, getOfflineSongsAll } from './searchService';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -310,6 +310,18 @@ export function generateMixes(input: GenerateMixesInput): MixDefinition[] {
     }
   }
 
+  // 3b. "Mix It Up" — Completely random songs (always shown)
+  mixes.push({
+    id: 'mix-it-up',
+    name: 'Mix It Up',
+    subtitle: 'A completely random mix from your library',
+    icon: 'shuffle',
+    gradientColors: ['#3B82F6', '#6366F1'],
+    fetchStrategy: isOnline
+      ? { type: 'random', size: 20 }
+      : { type: 'offline' },
+  });
+
   // 4. "Favorites Radio" — Based on Starred Songs (online only, needs starred songs)
   if (isOnline && starredSongs.length > 0) {
     const randomStar = starredSongs[Math.floor(Math.random() * starredSongs.length)];
@@ -442,7 +454,7 @@ export async function fetchMixSongs(strategy: FetchStrategy): Promise<Child[]> {
           return shuffleArray([...songs]);
         }
         // No genre filter — get all offline songs and shuffle
-        const songs = getOfflineSongsByGenre('');
+        const songs = getOfflineSongsAll();
         return shuffleArray([...songs]).slice(0, 20);
       }
     }

@@ -456,7 +456,7 @@ export function HomeScreen() {
               onPress={() => router.push('/my-listening')}
               style={({ pressed }) => [
                 styles.listeningCard,
-                { backgroundColor: colors.card },
+                { backgroundColor: colors.card + 'B3' },
                 pressed && styles.listeningCardPressed,
               ]}
             >
