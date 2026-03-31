@@ -78,19 +78,15 @@ export PATH="/opt/homebrew/opt/ruby@3.2/bin:$PATH"
 
 Restart your terminal. Verify: `ruby -v` should show 3.2.x.
 
-### 4. Bundler + Fastlane
+### 4. Fastlane
 
-```bash
-gem install bundler
-```
-
-Then from the project root:
+Bundler ships with modern Ruby — no separate install needed. From the project root:
 
 ```bash
 bundle install
 ```
 
-This installs fastlane and its dependencies locally to `vendor/bundle`.
+This installs fastlane and its dependencies locally to `vendor/bundle`. If you see a message about a bundler version mismatch from an old `Gemfile.lock`, delete it and re-run (`Gemfile.lock` is gitignored).
 
 ### 5. Xcode (iOS builds)
 
