@@ -48,6 +48,7 @@ import { ShuffleButton } from './ShuffleButton';
 import { SkipIntervalButton } from './SkipIntervalButton';
 import { ThemedAlert } from './ThemedAlert';
 import { closeOpenRow } from './SwipeableRow';
+import { useCanSkip } from '../hooks/useCanSkip';
 import { useColorExtraction } from '../hooks/useColorExtraction';
 import { mixHexColors } from '../utils/colors';
 import { useIsStarred } from '../hooks/useIsStarred';
@@ -101,6 +102,7 @@ export function ExpandedPlayerView({
   const retrying = playerStore((s) => s.retrying);
 
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
+  const { canSkipNext, canSkipPrevious } = useCanSkip();
 
   const isPlaying =
     playbackState === 'playing' || playbackState === 'buffering';
@@ -454,9 +456,10 @@ export function ExpandedPlayerView({
                   <Pressable
                     onPress={skipToPrevious}
                     hitSlop={12}
-                    style={({ pressed }) => pressed && styles.pressed}
+                    disabled={!canSkipPrevious}
+                    style={({ pressed }) => [pressed && styles.pressed, !canSkipPrevious && styles.disabled]}
                   >
-                    <Ionicons name="play-back" size={32} color={colors.textPrimary} />
+                    <Ionicons name="play-back" size={32} color={canSkipPrevious ? colors.textPrimary : colors.textSecondary} />
                   </Pressable>
 
                   {showSkipInterval && (
@@ -490,9 +493,10 @@ export function ExpandedPlayerView({
                   <Pressable
                     onPress={skipToNext}
                     hitSlop={12}
-                    style={({ pressed }) => pressed && styles.pressed}
+                    disabled={!canSkipNext}
+                    style={({ pressed }) => [pressed && styles.pressed, !canSkipNext && styles.disabled]}
                   >
-                    <Ionicons name="play-forward" size={32} color={colors.textPrimary} />
+                    <Ionicons name="play-forward" size={32} color={canSkipNext ? colors.textPrimary : colors.textSecondary} />
                   </Pressable>
                 </View>
 

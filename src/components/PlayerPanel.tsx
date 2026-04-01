@@ -40,6 +40,7 @@ import { SkipIntervalButton } from './SkipIntervalButton';
 import { ThemedAlert } from './ThemedAlert';
 import { closeOpenRow } from './SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
+import { useCanSkip } from '../hooks/useCanSkip';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { mixHexColors } from '../utils/colors';
 import { useTheme } from '../hooks/useTheme';
@@ -341,6 +342,7 @@ const PanelHeader = memo(function PanelHeader({
   const retrying = playerStore((s) => s.retrying);
 
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
+  const { canSkipNext, canSkipPrevious } = useCanSkip();
 
   const isPlaying =
     playbackState === 'playing' || playbackState === 'buffering';
@@ -430,9 +432,10 @@ const PanelHeader = memo(function PanelHeader({
               <Pressable
                 onPress={skipToPrevious}
                 hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
+                disabled={!canSkipPrevious}
+                style={({ pressed }) => [pressed && styles.pressed, !canSkipPrevious && styles.disabled]}
               >
-                <Ionicons name="play-back" size={24} color={colors.textPrimary} />
+                <Ionicons name="play-back" size={24} color={canSkipPrevious ? colors.textPrimary : colors.textSecondary} />
               </Pressable>
 
               {showSkipInterval && (
@@ -466,9 +469,10 @@ const PanelHeader = memo(function PanelHeader({
               <Pressable
                 onPress={skipToNext}
                 hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
+                disabled={!canSkipNext}
+                style={({ pressed }) => [pressed && styles.pressed, !canSkipNext && styles.disabled]}
               >
-                <Ionicons name="play-forward" size={24} color={colors.textPrimary} />
+                <Ionicons name="play-forward" size={24} color={canSkipNext ? colors.textPrimary : colors.textSecondary} />
               </Pressable>
             </View>
 

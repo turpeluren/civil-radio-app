@@ -598,6 +598,24 @@ export async function skipToPrevious(): Promise<void> {
   await TrackPlayer.skipToPrevious();
 }
 
+/** Whether skip-to-next is possible given current queue position and repeat mode. */
+export function canSkipToNext(): boolean {
+  const { currentTrackIndex, queue } = playerStore.getState();
+  const { repeatMode } = playbackSettingsStore.getState();
+  if (currentTrackIndex == null || queue.length === 0) return false;
+  if (repeatMode !== 'off') return true;
+  return currentTrackIndex < queue.length - 1;
+}
+
+/** Whether skip-to-previous is possible given current queue position and repeat mode. */
+export function canSkipToPrevious(): boolean {
+  const { currentTrackIndex, queue } = playerStore.getState();
+  const { repeatMode } = playbackSettingsStore.getState();
+  if (currentTrackIndex == null || queue.length === 0) return false;
+  if (repeatMode !== 'off') return true;
+  return currentTrackIndex > 0;
+}
+
 /**
  * Seek to a position in seconds.
  *

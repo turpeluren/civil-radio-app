@@ -44,6 +44,7 @@ import { SkipIntervalButton } from '../components/SkipIntervalButton';
 import { QueueItemRow } from '../components/QueueItemRow';
 import { closeOpenRow } from '../components/SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
+import { useCanSkip } from '../hooks/useCanSkip';
 import { useColorExtraction } from '../hooks/useColorExtraction';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useTheme } from '../hooks/useTheme';
@@ -416,6 +417,7 @@ const PlayerListHeader = memo(function PlayerListHeader({
   const retrying = playerStore((s) => s.retrying);
 
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
+  const { canSkipNext, canSkipPrevious } = useCanSkip();
 
   const isPlaying =
     playbackState === 'playing' || playbackState === 'buffering';
@@ -497,12 +499,13 @@ const PlayerListHeader = memo(function PlayerListHeader({
               <Pressable
                 onPress={skipToPrevious}
                 hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
+                disabled={!canSkipPrevious}
+                style={({ pressed }) => [pressed && styles.pressed, !canSkipPrevious && styles.disabled]}
               >
                 <Ionicons
                   name="play-back"
                   size={32}
-                  color={colors.textPrimary}
+                  color={canSkipPrevious ? colors.textPrimary : colors.textSecondary}
                 />
               </Pressable>
 
@@ -537,12 +540,13 @@ const PlayerListHeader = memo(function PlayerListHeader({
               <Pressable
                 onPress={skipToNext}
                 hitSlop={12}
-                style={({ pressed }) => pressed && styles.pressed}
+                disabled={!canSkipNext}
+                style={({ pressed }) => [pressed && styles.pressed, !canSkipNext && styles.disabled]}
               >
                 <Ionicons
                   name="play-forward"
                   size={32}
-                  color={colors.textPrimary}
+                  color={canSkipNext ? colors.textPrimary : colors.textSecondary}
                 />
               </Pressable>
             </View>
