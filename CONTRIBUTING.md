@@ -97,7 +97,19 @@ sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 sudo xcodebuild -license accept
 ```
 
-### 6. Android Studio (Android builds)
+### 6. CocoaPods (iOS builds)
+
+CocoaPods is required for linking native dependencies in iOS builds. Install via gem (not Homebrew, to avoid Ruby version conflicts):
+
+```bash
+gem install cocoapods
+```
+
+Verify: `pod --version` should print a version number.
+
+> **Note:** Run `pod install` directly — not `bundle exec pod install`. CocoaPods is not in the project Gemfile since Expo prebuild regenerates the `ios/` directory and manages pod installation automatically.
+
+### 7. Android Studio (Android builds)
 
 Download from https://developer.android.com/studio and install to the default location (`/Applications/Android Studio.app/`). The build scripts expect this exact path.
 
@@ -111,7 +123,7 @@ Then create at least one AVD (emulator) via **Tools > Device Manager**. The `scr
 
 No manual `JAVA_HOME` or `ANDROID_HOME` exports are needed — the build scripts auto-detect from the default paths.
 
-### 7. GitHub CLI
+### 8. GitHub CLI
 
 Required for creating releases (`npm run release`):
 
@@ -122,14 +134,14 @@ gh auth login
 
 Select GitHub.com, HTTPS, and authenticate via browser.
 
-### 8. Project Dependencies
+### 9. Project Dependencies
 
 ```bash
 cd substreamer
 npm install
 ```
 
-### 9. Verify Your Setup
+### 10. Verify Your Setup
 
 ```bash
 npx tsc --noEmit          # TypeScript — should be clean
@@ -144,6 +156,7 @@ npm run android            # Android build (requires Android Studio + emulator)
 - **npm** (bundled with Node)
 - **Ruby 3.2** + Bundler (for fastlane)
 - **Xcode** (iOS builds, macOS only)
+- **CocoaPods** via gem (iOS native dependency linking)
 - **Android Studio** (Android builds — provides JBR 17 and Android SDK)
 - **GitHub CLI** (for releases)
 - A **Subsonic-compatible server** for testing (Navidrome recommended)
