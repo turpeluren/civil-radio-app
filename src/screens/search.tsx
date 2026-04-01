@@ -153,12 +153,12 @@ export function SearchScreen() {
           return (
             <SongRow
               song={item.data}
-              onPress={() => playTrack(item.data, filtered.songs)}
+              onPress={() => playTrack(item.data, [item.data])}
             />
           );
       }
     },
-    [filtered.songs]
+    []
   );
 
   const renderSectionHeader = useCallback(

@@ -203,9 +203,9 @@ export function SearchResultsOverlay() {
     (song: Child) => {
       hideOverlay();
       Keyboard.dismiss();
-      playTrack(song, results.songs);
+      playTrack(song, [song]);
     },
-    [hideOverlay, results.songs]
+    [hideOverlay]
   );
 
   if (!isOverlayVisible || !query.trim()) return null;
