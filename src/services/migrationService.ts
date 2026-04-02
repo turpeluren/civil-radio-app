@@ -208,6 +208,32 @@ const MIGRATION_TASKS: MigrationTask[] = [
     },
   },
 
+  {
+    id: 6,
+    name: 'Set platform default for estimate content length',
+    run: async (log) => {
+      const raw = await sqliteStorage.getItem('substreamer-playback-settings');
+      if (!raw) {
+        log('No persisted playback settings — new default will apply.');
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        const state = parsed?.state;
+        if (!state) {
+          log('No state in persisted data — skipping.');
+          return;
+        }
+        const desired = Platform.OS === 'android';
+        state.estimateContentLength = desired;
+        sqliteStorage.setItem('substreamer-playback-settings', JSON.stringify(parsed));
+        log(`Set estimateContentLength to ${desired} (${Platform.OS}).`);
+      } catch {
+        log('Failed to parse playback settings — new default will apply.');
+      }
+    },
+  },
+
   // -------------------------------------------------------------------
   // TEMPLATE – How to add a new migration task:
   //
@@ -220,7 +246,7 @@ const MIGRATION_TASKS: MigrationTask[] = [
   // Example:
   //
   // {
-  //   id: 6,
+  //   id: 7,
   //   name: 'Reset playback settings',
   //   run: async () => {
   //     // your migration logic here

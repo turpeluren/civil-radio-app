@@ -45,6 +45,7 @@ jest.mock('react-native', () => ({
   AppState: {
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
   },
+  Platform: { OS: 'android' },
 }));
 
 jest.mock('../../store/sqliteStorage', () => require('../../store/__mocks__/sqliteStorage'));

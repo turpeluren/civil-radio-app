@@ -43,6 +43,7 @@ jest.mock('react-native', () => ({
 import { Platform } from 'react-native';
 import { getPendingTasks, runMigrations } from '../migrationService';
 import { completedScrobbleStore } from '../../store/completedScrobbleStore';
+import { mbidOverrideStore } from '../../store/mbidOverrideStore';
 import { sqliteStorage } from '../../store/sqliteStorage';
 
 beforeEach(() => {
@@ -227,5 +228,88 @@ describe('runMigrations', () => {
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('Removed unparseable shares data');
     expect(sqliteStorage.getItem('substreamer-shares')).toBeNull();
+  });
+
+  it('Task 5 skips when no MBID overrides', async () => {
+    mbidOverrideStore.setState({ overrides: {} });
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No MBID overrides');
+  });
+
+  it('Task 5 skips when overrides already migrated', async () => {
+    mbidOverrideStore.setState({
+      overrides: {
+        'artist:123': { type: 'artist', entityId: '123', entityName: 'Test', mbid: 'abc' },
+      },
+    } as any);
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('already in new format');
+  });
+
+  it('Task 5 migrates old-format overrides to new format', async () => {
+    mbidOverrideStore.setState({
+      overrides: {
+        '123': { artistId: '123', artistName: 'Test Artist', mbid: 'abc-def' },
+      },
+    } as any);
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Migrated 1 MBID override(s)');
+    const overrides = mbidOverrideStore.getState().overrides;
+    expect(overrides['artist:123']).toEqual({
+      type: 'artist',
+      entityId: '123',
+      entityName: 'Test Artist',
+      mbid: 'abc-def',
+    });
+  });
+
+  it('Task 6 skips when no persisted playback settings', async () => {
+    sqliteStorage.removeItem('substreamer-playback-settings');
+    await runMigrations(5);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No persisted playback settings');
+  });
+
+  it('Task 6 sets estimateContentLength to false on iOS', async () => {
+    (Platform as any).OS = 'ios';
+    sqliteStorage.setItem(
+      'substreamer-playback-settings',
+      JSON.stringify({ state: { estimateContentLength: true } }),
+    );
+    await runMigrations(5);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Set estimateContentLength to false (ios)');
+    const restored = JSON.parse(sqliteStorage.getItem('substreamer-playback-settings') as string);
+    expect(restored.state.estimateContentLength).toBe(false);
+  });
+
+  it('Task 6 sets estimateContentLength to true on Android', async () => {
+    (Platform as any).OS = 'android';
+    sqliteStorage.setItem(
+      'substreamer-playback-settings',
+      JSON.stringify({ state: { estimateContentLength: false } }),
+    );
+    await runMigrations(5);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Set estimateContentLength to true (android)');
+    const restored = JSON.parse(sqliteStorage.getItem('substreamer-playback-settings') as string);
+    expect(restored.state.estimateContentLength).toBe(true);
+  });
+
+  it('Task 6 skips when persisted data has no state', async () => {
+    sqliteStorage.setItem('substreamer-playback-settings', JSON.stringify({}));
+    await runMigrations(5);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No state in persisted data');
+  });
+
+  it('Task 6 handles corrupted JSON gracefully', async () => {
+    sqliteStorage.setItem('substreamer-playback-settings', '{bad json');
+    await runMigrations(5);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Failed to parse playback settings');
   });
 });

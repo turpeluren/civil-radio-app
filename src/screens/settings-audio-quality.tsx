@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
@@ -16,6 +16,7 @@ import {
 const BITRATE_OPTIONS: { value: MaxBitRate; label: string }[] = [
   { value: 64, label: '64 kbps' },
   { value: 128, label: '128 kbps' },
+  { value: 192, label: '192 kbps' },
   { value: 256, label: '256 kbps' },
   { value: 320, label: '320 kbps' },
   { value: null, label: 'No limit' },
@@ -193,22 +194,8 @@ export function SettingsAudioQualityScreen() {
             </View>
           )}
 
-          {/* Estimate content length toggle */}
-          <View style={[styles.toggleRow, { borderBottomColor: colors.border }]}>
-            <View style={styles.toggleTextWrap}>
-              <Text style={[styles.label, { color: colors.textPrimary }]}>
-                Estimate content length
-              </Text>
-              <Text style={[styles.toggleHint, { color: colors.textSecondary }]}>
-                Enables the server to set the Content-Length header, which may improve compatibility with some players and casting devices.
-              </Text>
-            </View>
-            <Switch
-              value={estimateContentLength}
-              onValueChange={setEstimateContentLength}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
+          {/* Estimate content length toggle — hidden from UI; default is
+              platform-dependent (see playbackSettingsStore). */}
         </View>
       </View>
 

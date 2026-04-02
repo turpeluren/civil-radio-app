@@ -1,10 +1,11 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { sqliteStorage } from './sqliteStorage';
 
 export type StreamFormat = 'raw' | 'mp3';
-export type MaxBitRate = 64 | 128 | 256 | 320 | null;
+export type MaxBitRate = 64 | 128 | 192 | 256 | 320 | null;
 
 /** Repeat mode: off → repeat queue → repeat single track. */
 export type RepeatModeSetting = 'off' | 'all' | 'one';
@@ -66,7 +67,7 @@ export const playbackSettingsStore = create<PlaybackSettingsState>()(
     (set) => ({
       maxBitRate: null,
       streamFormat: 'raw',
-      estimateContentLength: false,
+      estimateContentLength: Platform.OS === 'android',
       repeatMode: 'off',
       playbackRate: 1,
       downloadMaxBitRate: 320,
