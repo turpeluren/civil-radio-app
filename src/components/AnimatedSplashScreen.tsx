@@ -32,6 +32,13 @@ import { sqliteStorage } from '../store/sqliteStorage';
 const SAFETY_TIMEOUT = 15_000;
 
 /**
+ * Minimum time (ms) the splash screen stays visible after the native splash
+ * is dismissed. Under normal motion the animation chain already exceeds this,
+ * so it only takes effect when reduce-motion skips animations instantly.
+ */
+const MIN_VISIBLE_MS = 2_000;
+
+/**
  * Scale of native splash logo content vs container. Must match logoScale (0.80)
  * in scripts/generate-assets.js for splash-logo.svg. If that changes, update here.
  */
@@ -70,8 +77,10 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
 
   const onFinishRef = useRef(onFinish);
   const didFinish = useRef(false);
+  const animateCompleted = useRef(false);
+  const waveformCompleted = useRef(false);
+  const visibleSince = useRef(0);
   const [migrationPhase, setMigrationPhase] = useState<MigrationPhase>('idle');
-  const [rippling, setRippling] = useState(false);
   onFinishRef.current = onFinish;
 
   const complete = useCallback(() => {
@@ -81,7 +90,7 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
     }
   }, []);
 
-  const fadeOut = useCallback(() => {
+  const doFadeOut = useCallback(() => {
     containerOpacity.value = withTiming(
       0,
       { duration: 500, easing: Easing.out(Easing.cubic) },
@@ -90,6 +99,16 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
       },
     );
   }, [containerOpacity, complete]);
+
+  const fadeOut = useCallback(() => {
+    const elapsed = Date.now() - visibleSince.current;
+    const remaining = MIN_VISIBLE_MS - elapsed;
+    if (remaining > 0) {
+      setTimeout(doFadeOut, remaining);
+    } else {
+      doFadeOut();
+    }
+  }, [doFadeOut]);
 
   const startBreathingDots = useCallback(() => {
     const breathe = withRepeat(
@@ -193,18 +212,40 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
     startBreathingDots();
   }, [fadeOut, logoScale, logoTranslateY, statusOpacity, startMigrations, startBreathingDots]);
 
+  // Two-flag rendezvous: both the BootSplash animate() callback and the
+  // waveform completion must fire before we proceed. Whichever arrives
+  // second triggers handleRippleComplete. This eliminates a race condition
+  // where reduce-motion causes the waveform to finish instantly (before
+  // animate() has been called), losing the completion callback.
+  const tryProceed = useCallback(() => {
+    if (animateCompleted.current && waveformCompleted.current) {
+      handleRippleComplete();
+    }
+  }, [handleRippleComplete]);
+
+  const onAnimateComplete = useCallback(() => {
+    animateCompleted.current = true;
+    tryProceed();
+  }, [tryProceed]);
+
+  const onWaveformComplete = useCallback(() => {
+    waveformCompleted.current = true;
+    tryProceed();
+  }, [tryProceed]);
+
   const { container, logo } = BootSplash.useHideAnimation({
     manifest: require('../../assets/bootsplash/manifest.json'),
     logo: require('../../assets/bootsplash/logo.png'),
 
     animate: () => {
+      visibleSince.current = Date.now();
       logoImageOpacity.value = 0;
       animatedLogoOpacity.value = 1;
       logoContentScale.value = withTiming(
         1,
         { duration: 300, easing: Easing.out(Easing.cubic) },
         (finished) => {
-          if (finished) runOnJS(setRippling)(true);
+          if (finished) runOnJS(onAnimateComplete)();
         },
       );
     },
@@ -291,7 +332,7 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
           <AnimatedWaveformLogo
             size={130}
             color="#FFFFFF"
-            onComplete={rippling ? handleRippleComplete : undefined}
+            onComplete={onWaveformComplete}
           />
         </Animated.View>
       </Animated.View>
