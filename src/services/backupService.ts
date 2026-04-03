@@ -3,6 +3,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { listDirectoryAsync } from 'expo-async-fs';
 import { compressToFile, decompressFromFile } from 'expo-gzip';
 
+import { authStore } from '../store/authStore';
 import { backupStore } from '../store/backupStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { mbidOverrideStore } from '../store/mbidOverrideStore';
@@ -21,13 +22,25 @@ interface BackupDatasetMeta {
   sizeBytes: number;
 }
 
-interface BackupMeta {
+interface BackupMetaV3 {
   version: 3;
   createdAt: string;
   scrobbles: BackupDatasetMeta | null;
   mbidOverrides: BackupDatasetMeta | null;
   scrobbleExclusions: BackupDatasetMeta | null;
 }
+
+interface BackupMetaV4 {
+  version: 4;
+  createdAt: string;
+  serverUrl: string;
+  username: string;
+  scrobbles: BackupDatasetMeta | null;
+  mbidOverrides: BackupDatasetMeta | null;
+  scrobbleExclusions: BackupDatasetMeta | null;
+}
+
+type BackupMeta = BackupMetaV3 | BackupMetaV4;
 
 export interface BackupEntry {
   createdAt: string;
@@ -38,6 +51,8 @@ export interface BackupEntry {
   scrobbleExclusionCount: number;
   scrobbleExclusionSizeBytes: number;
   stem: string;
+  serverUrl: string | null;
+  username: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -87,11 +102,41 @@ function exclusionsFileName(stem: string): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Identity helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+function normalizeServerUrl(url: string): string {
+  let base = url.trim().toLowerCase();
+  if (!base.startsWith('http://') && !base.startsWith('https://')) {
+    base = `https://${base}`;
+  }
+  return base.replace(/\/+$/, '');
+}
+
+export function makeBackupIdentityKey(serverUrl: string, username: string): string {
+  return `${normalizeServerUrl(serverUrl)}|${username.toLowerCase()}`;
+}
+
+function usernamesMatch(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function serverUrlsMatch(a: string, b: string): boolean {
+  return normalizeServerUrl(a) === normalizeServerUrl(b);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Create backup                                                      */
 /* ------------------------------------------------------------------ */
 
 export async function createBackup(): Promise<void> {
   initBackupDir();
+
+  const { serverUrl, username } = authStore.getState();
+  if (!serverUrl || !username) {
+    throw new Error('Cannot create backup: no active session');
+  }
+
   const timestamp = makeTimestamp();
   const stem = `backup-${timestamp}`;
 
@@ -164,9 +209,11 @@ export async function createBackup(): Promise<void> {
 
   if (!scrobblesMeta && !mbidMeta && !exclusionsMeta) return;
 
-  const meta: BackupMeta = {
-    version: 3,
+  const meta: BackupMetaV4 = {
+    version: 4,
     createdAt: new Date().toISOString(),
+    serverUrl,
+    username,
     scrobbles: scrobblesMeta,
     mbidOverrides: mbidMeta,
     scrobbleExclusions: exclusionsMeta,
@@ -175,24 +222,27 @@ export async function createBackup(): Promise<void> {
   const metaFile = new File(backupDir, metaFileName(stem));
   metaFile.write(JSON.stringify(meta));
 
-  backupStore.getState().setLastBackupTime(Date.now());
+  const identityKey = makeBackupIdentityKey(serverUrl, username);
+  backupStore.getState().setLastBackupTime(identityKey, Date.now());
 }
 
 /* ------------------------------------------------------------------ */
 /*  List backups                                                       */
 /* ------------------------------------------------------------------ */
 
-export async function listBackups(): Promise<BackupEntry[]> {
+export async function listBackups(
+  filter?: { serverUrl: string; username: string },
+): Promise<{ current: BackupEntry[]; other: BackupEntry[] }> {
   initBackupDir();
 
   let fileNames: string[];
   try {
     fileNames = await listDirectoryAsync(backupDir.uri);
   } catch {
-    return [];
+    return { current: [], other: [] };
   }
 
-  const entries: BackupEntry[] = [];
+  const all: BackupEntry[] = [];
 
   for (const name of fileNames) {
     if (!name.endsWith('.meta.json')) continue;
@@ -202,7 +252,7 @@ export async function listBackups(): Promise<BackupEntry[]> {
       const raw = await metaFile.text();
       const meta: BackupMeta = JSON.parse(raw);
 
-      if (meta.version !== 3) continue;
+      if (meta.version !== 3 && meta.version !== 4) continue;
 
       const stem = name.replace(/\.meta\.json$/, '');
 
@@ -211,7 +261,7 @@ export async function listBackups(): Promise<BackupEntry[]> {
       const hasExclusions = meta.scrobbleExclusions && new File(backupDir, exclusionsFileName(stem)).exists;
       if (!hasScrobbles && !hasMbid && !hasExclusions) continue;
 
-      entries.push({
+      all.push({
         createdAt: meta.createdAt,
         scrobbleCount: meta.scrobbles?.itemCount ?? 0,
         scrobbleSizeBytes: meta.scrobbles?.sizeBytes ?? 0,
@@ -220,14 +270,40 @@ export async function listBackups(): Promise<BackupEntry[]> {
         scrobbleExclusionCount: meta.scrobbleExclusions?.itemCount ?? 0,
         scrobbleExclusionSizeBytes: meta.scrobbleExclusions?.sizeBytes ?? 0,
         stem,
+        serverUrl: meta.version === 4 ? meta.serverUrl : null,
+        username: meta.version === 4 ? meta.username : null,
       });
     } catch {
       continue;
     }
   }
 
-  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return entries;
+  all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (!filter) {
+    return { current: all, other: [] };
+  }
+
+  const current: BackupEntry[] = [];
+  const other: BackupEntry[] = [];
+
+  for (const entry of all) {
+    if (!entry.username) {
+      // v3 backups with no identity — skip (should have been migrated)
+      continue;
+    }
+    if (!usernamesMatch(entry.username, filter.username)) {
+      // Different user — hidden for privacy
+      continue;
+    }
+    if (entry.serverUrl && serverUrlsMatch(entry.serverUrl, filter.serverUrl)) {
+      current.push(entry);
+    } else {
+      other.push(entry);
+    }
+  }
+
+  return { current, other };
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,10 +385,17 @@ export async function restoreBackup(
 /* ------------------------------------------------------------------ */
 
 export async function pruneBackups(keep = MAX_BACKUPS): Promise<void> {
-  const all = await listBackups();
-  if (all.length <= keep) return;
+  const { serverUrl, username } = authStore.getState();
+  if (!serverUrl || !username) return;
 
-  const toDelete = all.slice(keep);
+  // Get all backups for the current username (across all server URLs)
+  const { current, other } = await listBackups({ serverUrl, username });
+  const allForUser = [...current, ...other];
+  allForUser.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (allForUser.length <= keep) return;
+
+  const toDelete = allForUser.slice(keep);
   for (const entry of toDelete) {
     const filesToRemove = [
       metaFileName(entry.stem),
@@ -379,9 +462,14 @@ async function cleanUpOrphanedFiles(): Promise<void> {
 export async function runAutoBackupIfNeeded(): Promise<void> {
   await cleanUpOrphanedFiles();
 
-  const { autoBackupEnabled, lastBackupTime } = backupStore.getState();
-
+  const { autoBackupEnabled } = backupStore.getState();
   if (!autoBackupEnabled) return;
+
+  const { serverUrl, username } = authStore.getState();
+  if (!serverUrl || !username) return;
+
+  const identityKey = makeBackupIdentityKey(serverUrl, username);
+  const lastBackupTime = backupStore.getState().getLastBackupTime(identityKey);
 
   const now = Date.now();
   if (lastBackupTime && now - lastBackupTime < AUTO_BACKUP_INTERVAL_MS) return;
@@ -392,4 +480,57 @@ export async function runAutoBackupIfNeeded(): Promise<void> {
   } catch {
     /* Auto-backup is best-effort; don't crash the app on failure */
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  V3 → V4 migration helper                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Upgrade all v3 backup meta files to v4 by stamping them with the
+ * provided server URL and username. Called from migrationService.
+ */
+export async function migrateV3BackupMetas(
+  serverUrl: string,
+  username: string,
+): Promise<number> {
+  initBackupDir();
+
+  let fileNames: string[];
+  try {
+    fileNames = await listDirectoryAsync(backupDir.uri);
+  } catch {
+    return 0;
+  }
+
+  let migrated = 0;
+
+  for (const name of fileNames) {
+    if (!name.endsWith('.meta.json')) continue;
+
+    const metaFile = new File(backupDir, name);
+    try {
+      const raw = await metaFile.text();
+      const meta = JSON.parse(raw);
+
+      if (meta.version !== 3) continue;
+
+      const upgraded: BackupMetaV4 = {
+        version: 4,
+        createdAt: meta.createdAt,
+        serverUrl,
+        username,
+        scrobbles: meta.scrobbles,
+        mbidOverrides: meta.mbidOverrides,
+        scrobbleExclusions: meta.scrobbleExclusions,
+      };
+
+      metaFile.write(JSON.stringify(upgraded));
+      migrated++;
+    } catch {
+      continue;
+    }
+  }
+
+  return migrated;
 }

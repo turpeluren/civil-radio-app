@@ -1,11 +1,14 @@
 jest.mock('../sqliteStorage', () => require('../__mocks__/sqliteStorage'));
 
-import { backupStore } from '../backupStore';
+import { backupStore, migrateBackupState } from '../backupStore';
+import { sqliteStorage } from '../sqliteStorage';
+
+const PERSIST_KEY = 'substreamer-backup-settings';
 
 beforeEach(() => {
   backupStore.setState({
     autoBackupEnabled: true,
-    lastBackupTime: null,
+    lastBackupTimes: {},
   });
 });
 
@@ -21,8 +24,90 @@ describe('backupStore', () => {
     expect(backupStore.getState().autoBackupEnabled).toBe(true);
   });
 
-  it('setLastBackupTime updates timestamp', () => {
-    backupStore.getState().setLastBackupTime(1234567890);
-    expect(backupStore.getState().lastBackupTime).toBe(1234567890);
+  it('setLastBackupTime stores time for identity key', () => {
+    backupStore.getState().setLastBackupTime('https://server.com|user', 1234567890);
+    expect(backupStore.getState().lastBackupTimes['https://server.com|user']).toBe(1234567890);
+  });
+
+  it('getLastBackupTime returns null for unknown key', () => {
+    expect(backupStore.getState().getLastBackupTime('unknown-key')).toBeNull();
+  });
+
+  it('getLastBackupTime returns stored time for known key', () => {
+    backupStore.getState().setLastBackupTime('key-a', 9999);
+    expect(backupStore.getState().getLastBackupTime('key-a')).toBe(9999);
+  });
+
+  it('stores multiple identity keys independently', () => {
+    backupStore.getState().setLastBackupTime('key-a', 1000);
+    backupStore.getState().setLastBackupTime('key-b', 2000);
+
+    expect(backupStore.getState().getLastBackupTime('key-a')).toBe(1000);
+    expect(backupStore.getState().getLastBackupTime('key-b')).toBe(2000);
+  });
+
+  it('updating one key does not affect another', () => {
+    backupStore.getState().setLastBackupTime('key-a', 1000);
+    backupStore.getState().setLastBackupTime('key-b', 2000);
+    backupStore.getState().setLastBackupTime('key-a', 3000);
+
+    expect(backupStore.getState().getLastBackupTime('key-a')).toBe(3000);
+    expect(backupStore.getState().getLastBackupTime('key-b')).toBe(2000);
+  });
+
+  it('migrateBackupState converts v0 lastBackupTime to lastBackupTimes', () => {
+    const result = migrateBackupState(
+      { autoBackupEnabled: true, lastBackupTime: 9999 },
+      0,
+    );
+    expect(result).toEqual({ autoBackupEnabled: true, lastBackupTimes: {} });
+    expect(result.lastBackupTime).toBeUndefined();
+  });
+
+  it('migrateBackupState handles undefined version (no version in storage)', () => {
+    const result = migrateBackupState(
+      { autoBackupEnabled: false, lastBackupTime: 5000 },
+      undefined as any,
+    );
+    expect(result).toEqual({ autoBackupEnabled: false, lastBackupTimes: {} });
+  });
+
+  it('migrateBackupState passes through v1 data unchanged', () => {
+    const data = { autoBackupEnabled: true, lastBackupTimes: { 'key': 1000 } };
+    const result = migrateBackupState(data, 1);
+    expect(result).toBe(data);
+  });
+
+  it('rehydrates v1 persisted data correctly', async () => {
+    sqliteStorage.setItem(
+      PERSIST_KEY,
+      JSON.stringify({
+        version: 1,
+        state: { autoBackupEnabled: false, lastBackupTimes: { 'key-x': 5000 } },
+      }),
+    );
+
+    await backupStore.persist.rehydrate();
+
+    const state = backupStore.getState();
+    expect(state.autoBackupEnabled).toBe(false);
+    expect(state.lastBackupTimes).toEqual({ 'key-x': 5000 });
+  });
+
+  it('partializes state correctly (excludes functions)', () => {
+    backupStore.getState().setLastBackupTime('key-a', 1000);
+    backupStore.getState().setAutoBackupEnabled(false);
+
+    const persisted = sqliteStorage.getItem(PERSIST_KEY) as string | null;
+    expect(persisted).not.toBeNull();
+    const parsed = JSON.parse(persisted!);
+    expect(parsed.state).toEqual({
+      autoBackupEnabled: false,
+      lastBackupTimes: { 'key-a': 1000 },
+    });
+    // Functions should not be in persisted state
+    expect(parsed.state.setAutoBackupEnabled).toBeUndefined();
+    expect(parsed.state.setLastBackupTime).toBeUndefined();
+    expect(parsed.state.getLastBackupTime).toBeUndefined();
   });
 });

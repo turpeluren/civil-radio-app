@@ -15,6 +15,7 @@ import { ThemedAlert } from '../components/ThemedAlert';
 import {
   createBackup,
   listBackups,
+  makeBackupIdentityKey,
   pruneBackups,
   restoreBackup,
   type BackupEntry,
@@ -30,6 +31,7 @@ import {
 } from '../store/imageCacheStore';
 import { albumDetailStore } from '../store/albumDetailStore';
 import { artistDetailStore } from '../store/artistDetailStore';
+import { authStore } from '../store/authStore';
 import { backupStore } from '../store/backupStore';
 import {
   musicCacheStore,
@@ -66,6 +68,8 @@ export function SettingsStorageScreen() {
   const [dangerousExpanded, setDangerousExpanded] = useState(false);
   const [restoreSheetVisible, setRestoreSheetVisible] = useState(false);
   const [restoreBackups, setRestoreBackups] = useState<BackupEntry[]>([]);
+  const [otherBackups, setOtherBackups] = useState<BackupEntry[]>([]);
+  const [otherExpanded, setOtherExpanded] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<BackupEntry | null>(null);
   const [restoreState, setRestoreState] = useState<RestoreState>('idle');
   const [backingUp, setBackingUp] = useState(false);
@@ -78,9 +82,14 @@ export function SettingsStorageScreen() {
   }, []);
 
   const chevronRotation = useSharedValue(0);
+  const otherChevronRotation = useSharedValue(0);
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevronRotation.value}deg` }],
+  }));
+
+  const otherChevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${otherChevronRotation.value}deg` }],
   }));
 
   const handleToggleDangerous = useCallback(() => {
@@ -120,7 +129,14 @@ export function SettingsStorageScreen() {
   const maxConcurrentDownloads = musicCacheStore((s) => s.maxConcurrentDownloads);
 
   const autoBackupEnabled = backupStore((s) => s.autoBackupEnabled);
-  const lastBackupTime = backupStore((s) => s.lastBackupTime);
+  const serverUrl = authStore((s) => s.serverUrl);
+  const authUsername = authStore((s) => s.username);
+  const backupIdentityKey = serverUrl && authUsername
+    ? makeBackupIdentityKey(serverUrl, authUsername)
+    : null;
+  const lastBackupTime = backupStore((s) =>
+    backupIdentityKey ? s.lastBackupTimes[backupIdentityKey] ?? null : null,
+  );
 
   const limitMode = storageLimitStore((s) => s.limitMode);
   const maxCacheSizeGB = storageLimitStore((s) => s.maxCacheSizeGB);
@@ -252,18 +268,25 @@ export function SettingsStorageScreen() {
   }, []);
 
   const handleOpenRestoreSheet = useCallback(async () => {
-    const backups = await listBackups();
-    setRestoreBackups(backups);
+    const { serverUrl, username } = authStore.getState();
+    const result = serverUrl && username
+      ? await listBackups({ serverUrl, username })
+      : await listBackups();
+    setRestoreBackups(result.current);
+    setOtherBackups(result.other);
     setSelectedBackup(null);
     setRestoreState('idle');
+    setOtherExpanded(false);
+    otherChevronRotation.value = 0;
     setRestoreSheetVisible(true);
-  }, []);
+  }, [otherChevronRotation]);
 
   const handleCloseRestoreSheet = useCallback(() => {
     if (restoreState === 'restoring') return;
     if (restoreTimer.current) clearTimeout(restoreTimer.current);
     setRestoreSheetVisible(false);
     setRestoreBackups([]);
+    setOtherBackups([]);
     setSelectedBackup(null);
     setRestoreState('idle');
   }, [restoreState]);
@@ -319,6 +342,7 @@ export function SettingsStorageScreen() {
               restoreTimer.current = setTimeout(() => {
                 setRestoreSheetVisible(false);
                 setRestoreBackups([]);
+                setOtherBackups([]);
                 setSelectedBackup(null);
                 setRestoreState('idle');
               }, SUCCESS_DELAY_MS);
@@ -912,7 +936,7 @@ export function SettingsStorageScreen() {
         <Text style={[styles.restoreSubtitle, { color: colors.textSecondary }]}>
           Select a backup to restore. This will replace your current data.
         </Text>
-        {restoreBackups.length === 0 ? (
+        {restoreBackups.length === 0 && otherBackups.length === 0 ? (
           <View style={styles.emptyBackups}>
             <Ionicons name="cloud-offline-outline" size={32} color={colors.primary} />
             <Text style={[styles.emptyBackupsText, { color: colors.textSecondary }]}>
@@ -961,6 +985,72 @@ export function SettingsStorageScreen() {
                 </Pressable>
               );
             })}
+
+            {otherBackups.length > 0 && (
+              <>
+                <Pressable
+                  onPress={() => {
+                    setOtherExpanded((prev) => {
+                      otherChevronRotation.value = withTiming(prev ? 0 : 90, { duration: 200 });
+                      return !prev;
+                    });
+                  }}
+                  style={[styles.otherBackupsHeader, { borderBottomColor: colors.border }]}
+                >
+                  <Text style={[styles.otherBackupsTitle, { color: colors.textSecondary }]}>
+                    Other Backups
+                  </Text>
+                  <Animated.View style={otherChevronStyle}>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                  </Animated.View>
+                </Pressable>
+                {otherExpanded && otherBackups.map((entry) => {
+                  const isSelected = selectedBackup?.stem === entry.stem;
+                  const dateStr = new Date(entry.createdAt).toLocaleString(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  });
+                  const details: string[] = [];
+                  if (entry.scrobbleCount > 0) {
+                    details.push(`${entry.scrobbleCount.toLocaleString()} scrobbles`);
+                  }
+                  if (entry.mbidOverrideCount > 0) {
+                    details.push(`${entry.mbidOverrideCount.toLocaleString()} MBID overrides`);
+                  }
+                  const totalBytes = entry.scrobbleSizeBytes + entry.mbidOverrideSizeBytes + entry.scrobbleExclusionSizeBytes;
+                  return (
+                    <Pressable
+                      key={entry.stem}
+                      onPress={() => handleSelectBackup(entry)}
+                      style={({ pressed }) => [
+                        styles.restoreRow,
+                        { borderBottomColor: colors.border },
+                        isSelected && { borderLeftColor: colors.primary, borderLeftWidth: 3 },
+                        pressed && styles.restoreRowPressed,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.restoreRowTitle,
+                          { color: colors.textPrimary },
+                          isSelected && { color: colors.primary },
+                        ]}
+                      >
+                        {dateStr}
+                      </Text>
+                      <Text style={[styles.restoreRowDetail, { color: colors.textSecondary }]}>
+                        {details.join(', ')} · {formatBytes(totalBytes)}
+                      </Text>
+                      {entry.serverUrl && (
+                        <Text style={[styles.restoreRowServer, { color: colors.label }]}>
+                          {entry.serverUrl}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
 
             <View style={styles.restoreActions}>
               <Pressable
@@ -1221,6 +1311,23 @@ const styles = StyleSheet.create({
   },
   restoreRowDetail: {
     fontSize: 13,
+  },
+  restoreRowServer: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  otherBackupsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
+  otherBackupsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   restoreActions: {
     paddingHorizontal: 4,

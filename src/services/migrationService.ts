@@ -12,6 +12,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
+import { migrateV3BackupMetas } from './backupService';
+import { authStore } from '../store/authStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { mbidOverrideStore } from '../store/mbidOverrideStore';
 import { sqliteStorage } from '../store/sqliteStorage';
@@ -234,6 +236,24 @@ const MIGRATION_TASKS: MigrationTask[] = [
     },
   },
 
+  {
+    id: 7,
+    name: 'Stamp backup files with user identity',
+    run: async (log) => {
+      const { serverUrl, username } = authStore.getState();
+      if (!serverUrl || !username) {
+        log('No active session — skipping backup identity migration.');
+        return;
+      }
+      const count = await migrateV3BackupMetas(serverUrl, username);
+      if (count > 0) {
+        log(`Upgraded ${count} backup(s) from v3 to v4 with identity ${username}@${serverUrl}.`);
+      } else {
+        log('No v3 backup files found — skipping.');
+      }
+    },
+  },
+
   // -------------------------------------------------------------------
   // TEMPLATE – How to add a new migration task:
   //
@@ -246,7 +266,7 @@ const MIGRATION_TASKS: MigrationTask[] = [
   // Example:
   //
   // {
-  //   id: 7,
+  //   id: 8,
   //   name: 'Reset playback settings',
   //   run: async () => {
   //     // your migration logic here
