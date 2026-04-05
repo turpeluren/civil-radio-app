@@ -1,5 +1,9 @@
 # Changelog
 
+## [8.0.47] - 2026-04-05
+
+- publishing: change log too long
+- ci: update coverage badge [skip ci]
 ## [8.0.46] - 2026-04-05
 
 - publishing: changelog trimmed
