@@ -47,6 +47,7 @@ import { RepeatButton } from '../components/RepeatButton';
 import { ShuffleButton } from '../components/ShuffleButton';
 import { SkipIntervalButton } from '../components/SkipIntervalButton';
 import { SleepTimerButton } from '../components/SleepTimerButton';
+import { SleepTimerCapsule } from '../components/SleepTimerCapsule';
 import { QueueItemRow } from '../components/QueueItemRow';
 import { closeOpenRow } from '../components/SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
@@ -568,6 +569,9 @@ const PlayerContent = memo(function PlayerContent({
             style={styles.heroImage}
             resizeMode="cover"
           />
+          <View style={styles.sleepCapsuleOverlay} pointerEvents="box-none">
+            <SleepTimerCapsule />
+          </View>
         </View>
       </View>
 
@@ -890,6 +894,14 @@ const styles = StyleSheet.create({
   heroImage: {
     width: '100%',
     height: '100%',
+  },
+  sleepCapsuleOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   trackInfo: {
     paddingHorizontal: HERO_PADDING,

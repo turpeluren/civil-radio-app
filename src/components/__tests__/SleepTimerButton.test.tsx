@@ -65,29 +65,6 @@ describe('SleepTimerButton', () => {
     expect(getByTestId('icon-moon-outline').props.style.color).toBe('#ffffff');
   });
 
-  it('shows countdown when active with remaining seconds', () => {
-    sleepTimerStore.setState({ endTime: Date.now() / 1000 + 600, remaining: 125 });
-    const { getByText } = render(<SleepTimerButton />);
-    expect(getByText('2:05')).toBeTruthy();
-  });
-
-  it('formats countdown with hours when >= 3600s', () => {
-    sleepTimerStore.setState({ endTime: Date.now() / 1000 + 3700, remaining: 3661 });
-    const { getByText } = render(<SleepTimerButton />);
-    expect(getByText('1:01:01')).toBeTruthy();
-  });
-
-  it('does not show countdown when inactive', () => {
-    const { queryByText } = render(<SleepTimerButton />);
-    expect(queryByText(/\d:\d/)).toBeNull();
-  });
-
-  it('does not show countdown when remaining is null', () => {
-    sleepTimerStore.setState({ endTime: Date.now() / 1000 + 600, remaining: null });
-    const { queryByText } = render(<SleepTimerButton />);
-    expect(queryByText(/\d:\d/)).toBeNull();
-  });
-
   it('opens sheet on press', () => {
     const { getByRole } = render(<SleepTimerButton />);
     fireEvent.press(getByRole('button'));
