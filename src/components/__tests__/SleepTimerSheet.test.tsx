@@ -164,7 +164,7 @@ describe('SleepTimerSheet', () => {
     const { UNSAFE_root } = render(<SleepTimerSheet />);
     // Find all elements with both onPress and a function style (Pressable internals)
     const pressables = UNSAFE_root.findAll(
-      (node) =>
+      (node: { props?: Record<string, unknown> }) =>
         typeof node.props?.onPress === 'function' &&
         typeof node.props?.style === 'function',
     );
