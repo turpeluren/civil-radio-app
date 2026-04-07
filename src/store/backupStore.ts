@@ -15,6 +15,11 @@ interface BackupState {
 const PERSIST_KEY = 'substreamer-backup-settings';
 
 export function migrateBackupState(persisted: any, version: number) {
+  if (!persisted || typeof persisted !== 'object') {
+    // Fresh install or corrupt blob — return safe defaults so the
+    // Zustand persist pipeline can't throw on destructure.
+    return { autoBackupEnabled: true, lastBackupTimes: {} };
+  }
   if (version === 0 || version === undefined) {
     // Migrate from scalar lastBackupTime to keyed lastBackupTimes.
     // We can't determine which identity the old value belonged to, so discard it.

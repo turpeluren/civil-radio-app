@@ -78,6 +78,21 @@ describe('backupStore', () => {
     expect(result).toBe(data);
   });
 
+  it('migrateBackupState returns safe defaults when persisted is null', () => {
+    const result = migrateBackupState(null, 0);
+    expect(result).toEqual({ autoBackupEnabled: true, lastBackupTimes: {} });
+  });
+
+  it('migrateBackupState returns safe defaults when persisted is undefined', () => {
+    const result = migrateBackupState(undefined, 1);
+    expect(result).toEqual({ autoBackupEnabled: true, lastBackupTimes: {} });
+  });
+
+  it('migrateBackupState returns safe defaults when persisted is a non-object', () => {
+    const result = migrateBackupState('garbage' as any, 0);
+    expect(result).toEqual({ autoBackupEnabled: true, lastBackupTimes: {} });
+  });
+
   it('rehydrates v1 persisted data correctly', async () => {
     sqliteStorage.setItem(
       PERSIST_KEY,

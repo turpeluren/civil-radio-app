@@ -75,7 +75,14 @@ export function initBackupDir() {
   }
 }
 
-initBackupDir();
+try {
+  initBackupDir();
+} catch {
+  /* Non-critical at module init. Exported functions re-attempt this
+     inside their own try/catch scopes. Swallowing here prevents the
+     module import from crashing startup if the FS is temporarily
+     inaccessible (e.g. iOS backup restore, Android external storage). */
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -460,25 +467,27 @@ async function cleanUpOrphanedFiles(): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 export async function runAutoBackupIfNeeded(): Promise<void> {
-  await cleanUpOrphanedFiles();
-
-  const { autoBackupEnabled } = backupStore.getState();
-  if (!autoBackupEnabled) return;
-
-  const { serverUrl, username } = authStore.getState();
-  if (!serverUrl || !username) return;
-
-  const identityKey = makeBackupIdentityKey(serverUrl, username);
-  const lastBackupTime = backupStore.getState().getLastBackupTime(identityKey);
-
-  const now = Date.now();
-  if (lastBackupTime && now - lastBackupTime < AUTO_BACKUP_INTERVAL_MS) return;
-
   try {
+    await cleanUpOrphanedFiles();
+
+    const { autoBackupEnabled } = backupStore.getState();
+    if (!autoBackupEnabled) return;
+
+    const { serverUrl, username } = authStore.getState();
+    if (!serverUrl || !username) return;
+
+    const identityKey = makeBackupIdentityKey(serverUrl, username);
+    const lastBackupTime = backupStore.getState().getLastBackupTime(identityKey);
+
+    const now = Date.now();
+    if (lastBackupTime && now - lastBackupTime < AUTO_BACKUP_INTERVAL_MS) return;
+
     await createBackup();
     await pruneBackups();
   } catch {
-    /* Auto-backup is best-effort; don't crash the app on failure */
+    /* Auto-backup is best-effort; don't crash the app on failure.
+       This includes init-time FS failures from cleanUpOrphanedFiles/
+       createBackup/pruneBackups and any transient file system errors. */
   }
 }
 
