@@ -53,10 +53,21 @@ jest.mock('react-native', () => ({
 
 import { Platform } from 'react-native';
 import { getPendingTasks, runMigrations } from '../migrationService';
-import { authStore } from '../../store/authStore';
 import { completedScrobbleStore } from '../../store/completedScrobbleStore';
 import { mbidOverrideStore } from '../../store/mbidOverrideStore';
+import { playbackSettingsStore } from '../../store/playbackSettingsStore';
 import { sqliteStorage } from '../../store/sqliteStorage';
+
+function seedAuthInSqlite(serverUrl: string | null, username: string | null) {
+  if (!serverUrl || !username) {
+    sqliteStorage.removeItem('substreamer-auth');
+    return;
+  }
+  sqliteStorage.setItem(
+    'substreamer-auth',
+    JSON.stringify({ state: { serverUrl, username } }),
+  );
+}
 
 beforeEach(() => {
   mockFileWrite.mockClear();
@@ -66,7 +77,12 @@ beforeEach(() => {
   mockFileExists = false;
   mockDirExists = false;
   (Platform as any).OS = 'ios';
-  authStore.setState({ serverUrl: 'https://music.example.com', username: 'testuser', isLoggedIn: true });
+  sqliteStorage.removeItem('substreamer-auth');
+  sqliteStorage.removeItem('substreamer-mbid-overrides');
+  sqliteStorage.removeItem('substreamer-playback-settings');
+  sqliteStorage.removeItem('substreamer-shares');
+  mbidOverrideStore.setState({ overrides: {} } as any);
+  seedAuthInSqlite('https://music.example.com', 'testuser');
 });
 
 describe('getPendingTasks', () => {
@@ -244,35 +260,76 @@ describe('runMigrations', () => {
     expect(sqliteStorage.getItem('substreamer-shares')).toBeNull();
   });
 
-  it('Task 5 skips when no MBID overrides', async () => {
-    mbidOverrideStore.setState({ overrides: {} });
+  it('Task 5 skips when no persisted MBID overrides', async () => {
+    sqliteStorage.removeItem('substreamer-mbid-overrides');
     await runMigrations(4);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
-    expect(logContent).toContain('No MBID overrides');
+    expect(logContent).toContain('No persisted MBID overrides');
+  });
+
+  it('Task 5 skips when persisted MBID overrides are unparseable', async () => {
+    sqliteStorage.setItem('substreamer-mbid-overrides', '{bad json');
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Failed to parse MBID overrides');
+  });
+
+  it('Task 5 skips when persisted data has no overrides object', async () => {
+    sqliteStorage.setItem('substreamer-mbid-overrides', JSON.stringify({ state: {} }));
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No overrides object');
+  });
+
+  it('Task 5 skips when overrides object is empty', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({ state: { overrides: {} } }),
+    );
+    await runMigrations(4);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('MBID overrides empty');
   });
 
   it('Task 5 skips when overrides already migrated', async () => {
-    mbidOverrideStore.setState({
-      overrides: {
-        'artist:123': { type: 'artist', entityId: '123', entityName: 'Test', mbid: 'abc' },
-      },
-    } as any);
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            'artist:123': { type: 'artist', entityId: '123', entityName: 'Test', mbid: 'abc' },
+          },
+        },
+      }),
+    );
     await runMigrations(4);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('already in new format');
   });
 
   it('Task 5 migrates old-format overrides to new format', async () => {
-    mbidOverrideStore.setState({
-      overrides: {
-        '123': { artistId: '123', artistName: 'Test Artist', mbid: 'abc-def' },
-      },
-    } as any);
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            '123': { artistId: '123', artistName: 'Test Artist', mbid: 'abc-def' },
+          },
+        },
+      }),
+    );
     await runMigrations(4);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('Migrated 1 MBID override(s)');
-    const overrides = mbidOverrideStore.getState().overrides;
-    expect(overrides['artist:123']).toEqual({
+
+    const persisted = JSON.parse(sqliteStorage.getItem('substreamer-mbid-overrides') as string);
+    expect(persisted.state.overrides['artist:123']).toEqual({
+      type: 'artist',
+      entityId: '123',
+      entityName: 'Test Artist',
+      mbid: 'abc-def',
+    });
+    expect(mbidOverrideStore.getState().overrides['artist:123']).toEqual({
       type: 'artist',
       entityId: '123',
       entityName: 'Test Artist',
@@ -280,11 +337,43 @@ describe('runMigrations', () => {
     });
   });
 
-  it('Task 6 skips when no persisted playback settings', async () => {
+  it('Task 5 skips entries without mbid when migrating', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            '123': { artistId: '123', artistName: 'With MBID', mbid: 'abc' },
+            '456': { artistId: '456', artistName: 'Missing MBID' },
+          },
+        },
+      }),
+    );
+    await runMigrations(4);
+    const persisted = JSON.parse(sqliteStorage.getItem('substreamer-mbid-overrides') as string);
+    expect(Object.keys(persisted.state.overrides)).toEqual(['artist:123']);
+  });
+
+  it('Task 6 sets default on in-memory store when no persisted playback settings', async () => {
+    (Platform as any).OS = 'android';
+    playbackSettingsStore.setState({ estimateContentLength: false });
+    // Remove AFTER setState — Zustand persist writes through to SQLite on setState.
     sqliteStorage.removeItem('substreamer-playback-settings');
     await runMigrations(5);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('No persisted playback settings');
+    expect(playbackSettingsStore.getState().estimateContentLength).toBe(true);
+  });
+
+  it('Task 6 updates in-memory store after persisting', async () => {
+    (Platform as any).OS = 'android';
+    sqliteStorage.setItem(
+      'substreamer-playback-settings',
+      JSON.stringify({ state: { estimateContentLength: false } }),
+    );
+    playbackSettingsStore.setState({ estimateContentLength: false });
+    await runMigrations(5);
+    expect(playbackSettingsStore.getState().estimateContentLength).toBe(true);
   });
 
   it('Task 6 sets estimateContentLength to false on iOS', async () => {
@@ -327,8 +416,22 @@ describe('runMigrations', () => {
     expect(logContent).toContain('Failed to parse playback settings');
   });
 
-  it('Task 7 skips when not logged in', async () => {
-    authStore.setState({ serverUrl: null, username: null, isLoggedIn: false });
+  it('Task 7 skips when no persisted auth', async () => {
+    seedAuthInSqlite(null, null);
+    await runMigrations(6);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No persisted auth');
+  });
+
+  it('Task 7 skips when persisted auth is unparseable', async () => {
+    sqliteStorage.setItem('substreamer-auth', '{bad json');
+    await runMigrations(6);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Failed to parse persisted auth');
+  });
+
+  it('Task 7 skips when persisted auth has no serverUrl/username', async () => {
+    sqliteStorage.setItem('substreamer-auth', JSON.stringify({ state: {} }));
     await runMigrations(6);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('No active session');
@@ -341,14 +444,156 @@ describe('runMigrations', () => {
     expect(logContent).toContain('No v3 backup files found');
   });
 
-  it('Task 7 logs count when v3 backups are migrated', async () => {
+  it('Task 7 logs task header when processing backup files', async () => {
     // The actual migration logic is tested in backupService.test.ts.
-    // Here we verify the migration task logs correctly when migrateV3BackupMetas returns > 0.
-    // Since our MockFile.text() returns '' which fails JSON.parse, the migration
-    // function silently skips files — so we get 0 migrated. We verify the skip log.
+    // Here we verify the migration task logs correctly when delegate runs.
     mockListDirectoryAsync.mockResolvedValue(['backup-old.meta.json']);
     await runMigrations(6);
     const logContent = mockFileWrite.mock.calls[0][0] as string;
     expect(logContent).toContain('Task 7: Stamp backup files with user identity');
+  });
+
+  it('Task 8 skips when no persisted overrides', async () => {
+    sqliteStorage.removeItem('substreamer-mbid-overrides');
+    await runMigrations(7);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No persisted MBID overrides — nothing to repair');
+  });
+
+  it('Task 8 skips when overrides payload is unparseable', async () => {
+    sqliteStorage.setItem('substreamer-mbid-overrides', '{bad json');
+    await runMigrations(7);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Failed to parse MBID overrides — skipping repair');
+  });
+
+  it('Task 8 skips when overrides object is missing', async () => {
+    sqliteStorage.setItem('substreamer-mbid-overrides', JSON.stringify({ state: {} }));
+    await runMigrations(7);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No overrides object');
+  });
+
+  it('Task 8 reports when all entries are already in correct shape', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            'artist:123': { type: 'artist', entityId: '123', entityName: 'X', mbid: 'm1' },
+          },
+        },
+      }),
+    );
+    await runMigrations(7);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('already in correct shape');
+  });
+
+  it('Task 8 synthesizes normalized entry from old-shape key without prefix', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            '123': { artistId: '123', artistName: 'Old Artist', mbid: 'm1' },
+          },
+        },
+      }),
+    );
+    await runMigrations(7);
+    const persisted = JSON.parse(sqliteStorage.getItem('substreamer-mbid-overrides') as string);
+    expect(persisted.state.overrides['artist:123']).toEqual({
+      type: 'artist',
+      entityId: '123',
+      entityName: 'Old Artist',
+      mbid: 'm1',
+    });
+    expect(mbidOverrideStore.getState().overrides['artist:123']).toBeDefined();
+  });
+
+  it('Task 8 synthesizes album entry when key has album: prefix', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            'album:999': { mbid: 'm2' },
+          },
+        },
+      }),
+    );
+    await runMigrations(7);
+    const persisted = JSON.parse(sqliteStorage.getItem('substreamer-mbid-overrides') as string);
+    expect(persisted.state.overrides['album:999']).toEqual({
+      type: 'album',
+      entityId: '999',
+      entityName: '',
+      mbid: 'm2',
+    });
+  });
+
+  it('Task 8 skips entries without mbid', async () => {
+    sqliteStorage.setItem(
+      'substreamer-mbid-overrides',
+      JSON.stringify({
+        state: {
+          overrides: {
+            '123': { artistId: '123', artistName: 'Missing MBID' },
+            '456': { artistId: '456', artistName: 'Has MBID', mbid: 'm1' },
+          },
+        },
+      }),
+    );
+    await runMigrations(7);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('skipped 1 malformed');
+    const persisted = JSON.parse(sqliteStorage.getItem('substreamer-mbid-overrides') as string);
+    expect(Object.keys(persisted.state.overrides)).toEqual(['artist:456']);
+  });
+
+  it('Task 9 delegates to v3 backup stamping helper', async () => {
+    seedAuthInSqlite('https://music.example.com', 'testuser');
+    mockListDirectoryAsync.mockResolvedValue([]);
+    await runMigrations(8);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Task 9: Repair v3 backup identity stamping');
+    expect(logContent).toContain('No v3 backup files found');
+  });
+
+  it('Task 9 skips when no persisted auth', async () => {
+    seedAuthInSqlite(null, null);
+    await runMigrations(8);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No persisted auth');
+  });
+});
+
+describe('runMigrations resilience', () => {
+  it('breaks loop and persists partial progress when a task throws', async () => {
+    // Seed unparseable shares so Task 4 doesn't throw (it catches JSON errors),
+    // then force Task 3 to throw via a rebuildAggregates that throws.
+    completedScrobbleStore.setState({
+      completedScrobbles: [
+        { id: '1', song: { id: 's1', title: 'Song', artist: 'A', duration: 200 }, time: Date.now() },
+      ],
+      rebuildAggregates: () => {
+        throw new Error('simulated task failure');
+      },
+    } as any);
+    const finalVersion = await runMigrations(2);
+    // Task 3 threw → final version should stay at 2 (last successful).
+    expect(finalVersion).toBe(2);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('FAILED: simulated task failure');
+    // Should not have progressed to subsequent tasks.
+    expect(logContent).not.toContain('Task 4:');
+  });
+
+  it('does not throw when log file write fails', async () => {
+    mockFileWrite.mockImplementationOnce(() => {
+      throw new Error('EROFS: read-only filesystem');
+    });
+    await expect(runMigrations(0)).resolves.toBeGreaterThanOrEqual(2);
   });
 });

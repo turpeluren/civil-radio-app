@@ -129,10 +129,19 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
 
   const startMigrations = useCallback(
     (completedVersion: number) => {
-      runMigrations(completedVersion).then((finalVersion) => {
-        migrationStore.getState().setCompletedVersion(finalVersion);
-        setMigrationPhase('done');
-      });
+      runMigrations(completedVersion)
+        .then((finalVersion) => {
+          migrationStore.getState().setCompletedVersion(finalVersion);
+          setMigrationPhase('done');
+        })
+        .catch((e) => {
+          // Defensive: runMigrations catches its own task-level errors
+          // and returns partial progress, so this should never fire.
+          // If it does, still transition to 'done' so the splash does
+          // not hang on the 15s safety timeout.
+          console.warn('[splash] runMigrations rejected unexpectedly', e);
+          setMigrationPhase('done');
+        });
     },
     [],
   );

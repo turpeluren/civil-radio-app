@@ -439,6 +439,54 @@ describe('AnimatedSplashScreen', () => {
 
       expect(onFinish).toHaveBeenCalledTimes(1);
     });
+
+    it('still finishes when runMigrations rejects unexpectedly', async () => {
+      mockPendingTasks = [{ version: 1, name: 'test-migration' }];
+      mockRunMigrations = jest
+        .fn()
+        .mockRejectedValue(new Error('unexpected migration framework failure'));
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const onFinish = jest.fn();
+      render(<AnimatedSplashScreen onFinish={onFinish} />);
+
+      act(() => {
+        completeBothFlags();
+      });
+
+      // Fire the statusOpacity callback to trigger startMigrations.
+      act(() => {
+        fireLastCallback();
+      });
+
+      // Flush the rejected promise.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockRunMigrations).toHaveBeenCalled();
+      // setCompletedVersion must NOT be called on failure — we don't want
+      // to mark migrations as done if they didn't complete.
+      expect(mockSetCompletedVersion).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[splash] runMigrations rejected unexpectedly',
+        expect.any(Error),
+      );
+
+      // migrationPhase should still transition to 'done' so the splash
+      // doesn't hang on the 15s safety timeout.
+      act(() => {
+        jest.advanceTimersByTime(2_000);
+      });
+
+      act(() => {
+        fireLastCallback();
+      });
+
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
   });
 
   /* ---------------------------------------------------------------- */

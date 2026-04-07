@@ -13,9 +13,9 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 import { migrateV3BackupMetas } from './backupService';
-import { authStore } from '../store/authStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
-import { mbidOverrideStore } from '../store/mbidOverrideStore';
+import { mbidOverrideStore, type MbidOverride } from '../store/mbidOverrideStore';
+import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { sqliteStorage } from '../store/sqliteStorage';
 
 /* ------------------------------------------------------------------ */
@@ -29,6 +29,47 @@ interface MigrationTask {
   name: string;
   /** The work to perform. Use `log` to record findings. Throw on unrecoverable failure. */
   run: (log: (message: string) => void) => Promise<void>;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shared helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Shared body for Migration 7 (forward run) and Migration 9 (repair).
+ * Reads auth credentials directly from the persisted SQLite blob rather
+ * than from authStore.getState(), avoiding a race with Zustand rehydration.
+ * The underlying migrateV3BackupMetas is idempotent — it only rewrites
+ * files that are still at v3, so running this twice is safe.
+ */
+async function stampV3BackupsFromStoredAuth(
+  log: (message: string) => void,
+): Promise<void> {
+  const raw = await sqliteStorage.getItem('substreamer-auth');
+  if (!raw) {
+    log('No persisted auth — skipping backup identity stamping.');
+    return;
+  }
+  let serverUrl: string | undefined;
+  let username: string | undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    serverUrl = parsed?.state?.serverUrl;
+    username = parsed?.state?.username;
+  } catch {
+    log('Failed to parse persisted auth — skipping.');
+    return;
+  }
+  if (!serverUrl || !username) {
+    log('No active session in persisted auth — skipping.');
+    return;
+  }
+  const count = await migrateV3BackupMetas(serverUrl, username);
+  if (count > 0) {
+    log(`Upgraded ${count} backup(s) from v3 to v4 with identity ${username}@${serverUrl}.`);
+  } else {
+    log('No v3 backup files found — skipping.');
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,10 +217,30 @@ const MIGRATION_TASKS: MigrationTask[] = [
     id: 5,
     name: 'Migrate MBID overrides to new shape',
     run: async (log) => {
-      const overrides = mbidOverrideStore.getState().overrides;
+      // Read raw from SQLite rather than from mbidOverrideStore.getState()
+      // to avoid a race with Zustand rehydration: the store can still hold
+      // its default empty state at the moment this migration runs, which
+      // would cause the migration to silently skip and mark itself complete.
+      const raw = await sqliteStorage.getItem('substreamer-mbid-overrides');
+      if (!raw) {
+        log('No persisted MBID overrides — skipping.');
+        return;
+      }
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        log('Failed to parse MBID overrides — skipping.');
+        return;
+      }
+      const overrides = parsed?.state?.overrides;
+      if (!overrides || typeof overrides !== 'object') {
+        log('No overrides object in persisted data — skipping.');
+        return;
+      }
       const keys = Object.keys(overrides);
       if (keys.length === 0) {
-        log('No MBID overrides — skipping.');
+        log('MBID overrides empty — skipping.');
         return;
       }
 
@@ -192,19 +253,23 @@ const MIGRATION_TASKS: MigrationTask[] = [
 
       // Old format: keyed by artistId with { artistId, artistName, mbid }
       // New format: keyed by "artist:{artistId}" with { type, entityId, entityName, mbid }
-      const migrated: Record<string, { type: 'artist'; entityId: string; entityName: string; mbid: string }> = {};
+      const migrated: Record<string, MbidOverride> = {};
       for (const key of keys) {
-        const entry = overrides[key] as any;
-        const entityId = entry.artistId ?? entry.entityId ?? key;
-        const entityName = entry.artistName ?? entry.entityName ?? '';
+        const entry = overrides[key];
+        const entityId = entry?.artistId ?? entry?.entityId ?? key;
+        const entityName = entry?.artistName ?? entry?.entityName ?? '';
+        const mbid = entry?.mbid;
+        if (!mbid) continue;
         migrated[`artist:${entityId}`] = {
           type: 'artist',
           entityId,
           entityName,
-          mbid: entry.mbid,
+          mbid,
         };
       }
 
+      parsed.state.overrides = migrated;
+      await sqliteStorage.setItem('substreamer-mbid-overrides', JSON.stringify(parsed));
       mbidOverrideStore.setState({ overrides: migrated });
       log(`Migrated ${keys.length} MBID override(s) to new format.`);
     },
@@ -214,9 +279,11 @@ const MIGRATION_TASKS: MigrationTask[] = [
     id: 6,
     name: 'Set platform default for estimate content length',
     run: async (log) => {
+      const desired = Platform.OS === 'android';
       const raw = await sqliteStorage.getItem('substreamer-playback-settings');
       if (!raw) {
-        log('No persisted playback settings — new default will apply.');
+        playbackSettingsStore.setState({ estimateContentLength: desired });
+        log('No persisted playback settings — set default on in-memory store.');
         return;
       }
       try {
@@ -226,9 +293,11 @@ const MIGRATION_TASKS: MigrationTask[] = [
           log('No state in persisted data — skipping.');
           return;
         }
-        const desired = Platform.OS === 'android';
         state.estimateContentLength = desired;
-        sqliteStorage.setItem('substreamer-playback-settings', JSON.stringify(parsed));
+        await sqliteStorage.setItem('substreamer-playback-settings', JSON.stringify(parsed));
+        // Also update the in-memory store so the current session reflects
+        // the new value without waiting for an app restart.
+        playbackSettingsStore.setState({ estimateContentLength: desired });
         log(`Set estimateContentLength to ${desired} (${Platform.OS}).`);
       } catch {
         log('Failed to parse playback settings — new default will apply.');
@@ -240,17 +309,103 @@ const MIGRATION_TASKS: MigrationTask[] = [
     id: 7,
     name: 'Stamp backup files with user identity',
     run: async (log) => {
-      const { serverUrl, username } = authStore.getState();
-      if (!serverUrl || !username) {
-        log('No active session — skipping backup identity migration.');
+      await stampV3BackupsFromStoredAuth(log);
+    },
+  },
+
+  {
+    id: 8,
+    name: 'Repair MBID override shape',
+    run: async (log) => {
+      // Forward-only idempotent repair: walks the persisted MBID
+      // overrides and normalizes any entries left in an inconsistent
+      // shape by the original buggy Migration 5 (which read from
+      // mbidOverrideStore.getState() before rehydration completed).
+      // Runs unconditionally for every user — a no-op on fresh installs
+      // and correctly-migrated users.
+      const raw = await sqliteStorage.getItem('substreamer-mbid-overrides');
+      if (!raw) {
+        log('No persisted MBID overrides — nothing to repair.');
         return;
       }
-      const count = await migrateV3BackupMetas(serverUrl, username);
-      if (count > 0) {
-        log(`Upgraded ${count} backup(s) from v3 to v4 with identity ${username}@${serverUrl}.`);
-      } else {
-        log('No v3 backup files found — skipping.');
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        log('Failed to parse MBID overrides — skipping repair.');
+        return;
       }
+      const overrides = parsed?.state?.overrides;
+      if (!overrides || typeof overrides !== 'object') {
+        log('No overrides object — nothing to repair.');
+        return;
+      }
+
+      const repaired: Record<string, MbidOverride> = {};
+      let repairCount = 0;
+      let skippedCount = 0;
+      const totalCount = Object.keys(overrides).length;
+
+      for (const [key, value] of Object.entries(overrides) as [string, any][]) {
+        if (!value || typeof value !== 'object' || !value.mbid) {
+          skippedCount++;
+          continue;
+        }
+
+        // Already in new shape: key has prefix AND entry has all required fields
+        const hasPrefix = key.startsWith('artist:') || key.startsWith('album:');
+        const hasNewFields =
+          (value.type === 'artist' || value.type === 'album') &&
+          typeof value.entityId === 'string';
+
+        if (hasPrefix && hasNewFields) {
+          repaired[key] = {
+            type: value.type,
+            entityId: value.entityId,
+            entityName: typeof value.entityName === 'string' ? value.entityName : '',
+            mbid: value.mbid,
+          };
+          continue;
+        }
+
+        // Synthesize a normalized entry. Default to 'artist' since the
+        // old shape only had artist overrides — there was no album variant.
+        const type: MbidOverride['type'] =
+          value.type === 'album' || key.startsWith('album:') ? 'album' : 'artist';
+        const entityId: string =
+          value.entityId ?? value.artistId ?? (hasPrefix ? key.split(':')[1] : key);
+        const entityName: string = value.entityName ?? value.artistName ?? '';
+        const newKey = `${type}:${entityId}`;
+        repaired[newKey] = { type, entityId, entityName, mbid: value.mbid };
+        repairCount++;
+      }
+
+      if (repairCount === 0 && skippedCount === 0) {
+        log(`All ${totalCount} override(s) already in correct shape.`);
+        return;
+      }
+
+      parsed.state.overrides = repaired;
+      await sqliteStorage.setItem('substreamer-mbid-overrides', JSON.stringify(parsed));
+      mbidOverrideStore.setState({ overrides: repaired });
+      log(
+        `Repaired ${repairCount} entries, skipped ${skippedCount} malformed, ` +
+        `${Object.keys(repaired).length} total after repair.`,
+      );
+    },
+  },
+
+  {
+    id: 9,
+    name: 'Repair v3 backup identity stamping',
+    run: async (log) => {
+      // Forward-only repair for users whose original Migration 7 silently
+      // skipped stamping because authStore had not rehydrated yet, leaving
+      // their v3 backups invisible in the UI. Delegates to the same helper
+      // Migration 7 now uses. migrateV3BackupMetas is a no-op on already-v4
+      // files, so this is safe for users who ran Migration 7 correctly and
+      // for fresh installs.
+      await stampV3BackupsFromStoredAuth(log);
     },
   },
 
@@ -307,13 +462,27 @@ export async function runMigrations(
   for (const task of pending) {
     onProgress?.(task);
     lines.push(`--- Task ${task.id}: ${task.name} ---`);
-    await task.run((msg) => lines.push(msg));
-    completedVersion = task.id;
-    lines.push('');
+    try {
+      await task.run((msg) => lines.push(msg));
+      completedVersion = task.id;
+      lines.push('');
+    } catch (e) {
+      lines.push(`FAILED: ${e instanceof Error ? e.message : String(e)}`);
+      lines.push('');
+      // Stop processing further tasks — a failed migration may leave
+      // later ones in an ambiguous state. Persist progress up to the
+      // last successful task so they aren't re-run on next launch.
+      break;
+    }
   }
 
-  const logFile = new File(Paths.document, 'migration-log.txt');
-  logFile.write(lines.join('\n'));
+  try {
+    const logFile = new File(Paths.document, 'migration-log.txt');
+    logFile.write(lines.join('\n'));
+  } catch {
+    /* Non-critical: failing to write the migration log must not
+       fail the migration run itself. */
+  }
 
   return completedVersion;
 }
