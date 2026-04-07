@@ -3,7 +3,6 @@ import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -54,9 +53,17 @@ export function SplitLayout({ main, panel, panelPlaceholder, animate = true }: S
         panelProgress.value = withTiming(1, {
           duration: SLIDE_DURATION,
           easing: SLIDE_EASING,
-        }, (finished) => {
-          if (finished) runOnJS(setPanelReady)(true);
         });
+        // Drive panelReady from a JS-side timer rather than the worklet
+        // completion callback. The Reanimated callback fires with
+        // finished=false whenever the animation is cancelled — which
+        // happens any time this effect re-runs while the animation is in
+        // flight (e.g. when `showPanel` briefly flickers during a track
+        // change because `hasCurrentTrack || queueLoading` transitions).
+        // Relying on the callback could leave panelReady stranded at
+        // false and strand the placeholder gradient forever.
+        const timer = setTimeout(() => setPanelReady(true), SLIDE_DURATION);
+        return () => clearTimeout(timer);
       } else {
         panelProgress.value = 1;
         setPanelReady(true);
@@ -74,12 +81,12 @@ export function SplitLayout({ main, panel, panelPlaceholder, animate = true }: S
         panelProgress.value = withTiming(0, {
           duration: SLIDE_DURATION,
           easing: SLIDE_EASING,
-        }, (finished) => {
-          if (finished) {
-            runOnJS(setRenderPanel)(false);
-            runOnJS(setPanelReady)(false);
-          }
         });
+        const timer = setTimeout(() => {
+          setRenderPanel(false);
+          setPanelReady(false);
+        }, SLIDE_DURATION);
+        return () => clearTimeout(timer);
       } else {
         panelProgress.value = 0;
         contentOpacity.value = 0;

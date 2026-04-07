@@ -38,6 +38,8 @@ import { QueueItemRow } from './QueueItemRow';
 import { RepeatButton } from './RepeatButton';
 import { ShuffleButton } from './ShuffleButton';
 import { SkipIntervalButton } from './SkipIntervalButton';
+import { SleepTimerButton } from './SleepTimerButton';
+import { SleepTimerCapsule } from './SleepTimerCapsule';
 import { ThemedAlert } from './ThemedAlert';
 import { closeOpenRow } from './SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
@@ -346,6 +348,7 @@ const PanelHeader = memo(function PanelHeader({
   const retrying = playerStore((s) => s.retrying);
 
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
+  const showSleepTimer = playbackSettingsStore((s) => s.showSleepTimerButton);
   const { canSkipNext, canSkipPrevious } = useCanSkip();
 
   const isPlaying =
@@ -390,6 +393,9 @@ const PanelHeader = memo(function PanelHeader({
                 style={styles.coverImage}
                 resizeMode="cover"
               />
+              <View style={styles.sleepCapsuleOverlay} pointerEvents="box-none">
+                <SleepTimerCapsule />
+              </View>
             </View>
           </View>
 
@@ -485,6 +491,17 @@ const PanelHeader = memo(function PanelHeader({
             </View>
           </View>
 
+          {/* Secondary controls row — sleep timer button */}
+          {showSleepTimer && (
+            <View style={styles.secondaryControls}>
+              <View style={styles.controlSideLeft}>
+                <SleepTimerButton />
+              </View>
+              <View style={styles.secondaryCenter} />
+              <View style={styles.controlSideRight} />
+            </View>
+          )}
+
     </View>
   );
 });
@@ -538,6 +555,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  sleepCapsuleOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   trackInfo: {
     paddingHorizontal: PADDING,
     marginBottom: 8,
@@ -572,7 +597,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 4,
     paddingHorizontal: PADDING,
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  secondaryControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 36,
+    paddingHorizontal: PADDING,
+    marginBottom: 8,
+  },
+  secondaryCenter: {
+    width: 190,
   },
   controlSideLeft: {
     flex: 1,

@@ -45,6 +45,8 @@ import { QueueItemRow } from './QueueItemRow';
 import { RepeatButton } from './RepeatButton';
 import { ShuffleButton } from './ShuffleButton';
 import { SkipIntervalButton } from './SkipIntervalButton';
+import { SleepTimerButton } from './SleepTimerButton';
+import { SleepTimerCapsule } from './SleepTimerCapsule';
 import { ThemedAlert } from './ThemedAlert';
 import { closeOpenRow } from './SwipeableRow';
 import { useCanSkip } from '../hooks/useCanSkip';
@@ -101,6 +103,7 @@ export function ExpandedPlayerView({
   const retrying = playerStore((s) => s.retrying);
 
   const showSkipInterval = playbackSettingsStore((s) => s.showSkipIntervalButtons);
+  const showSleepTimer = playbackSettingsStore((s) => s.showSleepTimerButton);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const { canSkipNext, canSkipPrevious } = useCanSkip();
 
@@ -395,6 +398,9 @@ export function ExpandedPlayerView({
                       style={styles.coverImage}
                       resizeMode="cover"
                     />
+                    <View style={styles.sleepCapsuleOverlay} pointerEvents="box-none">
+                      <SleepTimerCapsule />
+                    </View>
                   </Animated.View>
                 )}
               </View>
@@ -504,6 +510,17 @@ export function ExpandedPlayerView({
                   <RepeatButton />
                 </View>
               </View>
+
+              {/* Secondary controls row — sleep timer button */}
+              {showSleepTimer && (
+                <View style={styles.secondaryControls}>
+                  <View style={styles.controlSideLeft}>
+                    <SleepTimerButton />
+                  </View>
+                  <View style={styles.secondaryCenter} />
+                  <View style={styles.controlSideRight} />
+                </View>
+              )}
 
               {/* Quality badge */}
               {qualityLabel && (
@@ -769,6 +786,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  sleepCapsuleOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   /* --- Left column: track info --- */
   trackInfo: {
@@ -808,7 +833,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  secondaryControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 36,
+    marginBottom: 8,
+  },
+  secondaryCenter: {
+    width: 248,
   },
   controlSideLeft: {
     flex: 1,
