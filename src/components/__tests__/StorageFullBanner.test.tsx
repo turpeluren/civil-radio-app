@@ -28,7 +28,12 @@ jest.mock('react-native-reanimated', () => {
     withTiming: (val: number) => val,
     withDelay: (_: number, val: number) => val,
     withSpring: (val: number) => val,
-    Easing: { out: (e: unknown) => e, in: (e: unknown) => e, cubic: (t: number) => t },
+    Easing: {
+      out: (e: unknown) => e,
+      in: (e: unknown) => e,
+      inOut: (e: unknown) => e,
+      cubic: (t: number) => t,
+    },
   };
 });
 
@@ -45,7 +50,7 @@ describe('StorageFullBanner', () => {
     const { toJSON } = render(<StorageFullBanner />);
     const root = toJSON() as import('react-test-renderer').ReactTestRendererJSON;
     expect(root.props.style).toEqual(
-      expect.objectContaining({ height: 0 }),
+      expect.arrayContaining([expect.objectContaining({ height: 0 })]),
     );
   });
 
@@ -74,7 +79,7 @@ describe('StorageFullBanner', () => {
     const root = toJSON() as any;
     // Root wrapper has expanded height
     expect(root.props.style).toEqual(
-      expect.objectContaining({ height: 52 }),
+      expect.arrayContaining([expect.objectContaining({ height: 52 })]),
     );
   });
 

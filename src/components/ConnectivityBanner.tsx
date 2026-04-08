@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
+import { memo, useCallback, useEffect, useRef } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -16,10 +16,6 @@ import { handleSslCertPrompt } from '../services/connectivityService';
 import { connectivityStore, type BannerState } from '../store/connectivityStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
 const CAPSULE_HEIGHT = 44;
 const CAPSULE_BORDER_RADIUS = CAPSULE_HEIGHT / 2;
 export const BANNER_HEIGHT = CAPSULE_HEIGHT + 8;
@@ -31,9 +27,7 @@ const EXPAND_MS = 300;
 const COLLAPSE_MS = 280;
 const SHRINK_MS = 300;
 const SHRINK_EASING = Easing.in(Easing.cubic);
-
-const LAYOUT_ANIM_EXPAND = LayoutAnimation.create(EXPAND_MS, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity);
-const LAYOUT_ANIM_COLLAPSE = LayoutAnimation.create(COLLAPSE_MS, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity);
+const LAYOUT_EASING = Easing.inOut(Easing.cubic);
 
 const SUCCESS = '#00BA7C';
 const ERROR_RED = '#FF453A';
@@ -68,15 +62,14 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
   const bannerState: BannerState = offlineMode ? 'hidden' : rawBannerState;
   const prev = useRef<BannerState>(bannerState);
 
-  const [expanded, setExpanded] = useState(bannerState !== 'hidden');
-  const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const capsuleScale = useSharedValue(bannerState !== 'hidden' ? 1 : 0);
-  const capsuleOpacity = useSharedValue(bannerState !== 'hidden' ? 1 : 0);
-  const contentOpacity = useSharedValue(bannerState !== 'hidden' ? 1 : 0);
-  const contentTranslateY = useSharedValue(0);
-
   const visible = bannerState !== 'hidden';
   const tappable = bannerState === 'ssl-error';
+
+  const heightValue = useSharedValue(visible ? BANNER_HEIGHT : 0);
+  const capsuleScale = useSharedValue(visible ? 1 : 0);
+  const capsuleOpacity = useSharedValue(visible ? 1 : 0);
+  const contentOpacity = useSharedValue(visible ? 1 : 0);
+  const contentTranslateY = useSharedValue(0);
 
   const liveConfig = getConfig(bannerState, isInternetReachable);
   const frozenConfig = useRef(liveConfig);
@@ -88,22 +81,13 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
   }, [tappable]);
 
   useEffect(() => {
-    return () => {
-      if (collapseTimer.current) clearTimeout(collapseTimer.current);
-    };
-  }, []);
-
-  useEffect(() => {
     const wasVisible = prev.current !== 'hidden';
     const prevState = prev.current;
     prev.current = bannerState;
 
     if (visible && !wasVisible) {
-      // Cancel any pending collapse
-      if (collapseTimer.current) { clearTimeout(collapseTimer.current); collapseTimer.current = null; }
-      // Expand space (LayoutAnimation syncs content push), then spring the pill in
-      LayoutAnimation.configureNext(LAYOUT_ANIM_EXPAND);
-      setExpanded(true);
+      // Expand space, then spring the pill in
+      heightValue.value = withTiming(BANNER_HEIGHT, { duration: EXPAND_MS, easing: LAYOUT_EASING });
       contentTranslateY.value = 0;
       contentOpacity.value = withTiming(1, { duration: 200 });
       capsuleOpacity.value = withDelay(80, withTiming(1, { duration: 150 }));
@@ -113,11 +97,10 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
       contentOpacity.value = withTiming(0, { duration: 150 });
       capsuleScale.value = withTiming(0, { duration: SHRINK_MS, easing: SHRINK_EASING });
       capsuleOpacity.value = withTiming(0, { duration: SHRINK_MS - 50 });
-      collapseTimer.current = setTimeout(() => {
-        collapseTimer.current = null;
-        LayoutAnimation.configureNext(LAYOUT_ANIM_COLLAPSE);
-        setExpanded(false);
-      }, SHRINK_MS - 80);
+      heightValue.value = withDelay(
+        SHRINK_MS - 80,
+        withTiming(0, { duration: COLLAPSE_MS, easing: LAYOUT_EASING }),
+      );
     } else if (visible && wasVisible && bannerState !== prevState) {
       // Content swap within the pill
       contentOpacity.value = 0;
@@ -125,7 +108,11 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
       contentOpacity.value = withTiming(1, { duration: SWAP_MS });
       contentTranslateY.value = withTiming(0, { duration: SWAP_MS, easing: Easing.out(Easing.cubic) });
     }
-  }, [bannerState, visible, capsuleScale, capsuleOpacity, contentOpacity, contentTranslateY]);
+  }, [bannerState, visible, heightValue, capsuleScale, capsuleOpacity, contentOpacity, contentTranslateY]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    height: heightValue.value,
+  }));
 
   const capsuleStyle = useAnimatedStyle(() => ({
     opacity: capsuleOpacity.value,
@@ -141,7 +128,7 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
   }));
 
   return (
-    <View style={{ height: expanded ? BANNER_HEIGHT : 0, overflow: 'hidden' }}>
+    <Animated.View style={[styles.outer, containerStyle]}>
       <View style={styles.pillContainer}>
         <Pressable onPress={handlePress} disabled={!tappable}>
           <Animated.View style={[styles.capsule, capsuleStyle]}>
@@ -154,11 +141,14 @@ export const ConnectivityBanner = memo(function ConnectivityBanner() {
           </Animated.View>
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
+  outer: {
+    overflow: 'hidden',
+  },
   pillContainer: {
     height: BANNER_HEIGHT,
     alignItems: 'center',
