@@ -294,6 +294,64 @@ describe('initScrobbleService', () => {
       expect.objectContaining({ id: 's3', submission: true }),
     );
   });
+
+  it('re-triggers processing when AppState returns to active (U17)', async () => {
+    jest.resetModules();
+
+    const { pendingScrobbleStore: ps } = require('../../store/pendingScrobbleStore');
+    const { completedScrobbleStore: cs } = require('../../store/completedScrobbleStore');
+    const { getApi: ga } = require('../subsonicService');
+    const { AppState } = require('react-native');
+
+    // Capture the AppState change handler that scrobbleService registers.
+    let appStateHandler: ((next: string) => void) | undefined;
+    const addEventListenerSpy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((...args: unknown[]) => {
+        const event = args[0] as string;
+        const handler = args[1] as (next: string) => void;
+        if (event === 'change') appStateHandler = handler;
+        return { remove: jest.fn() } as any;
+      });
+
+    ps.setState({ pendingScrobbles: [] });
+    cs.setState({ completedScrobbles: [], stats: { totalPlays: 0, totalListeningSeconds: 0, uniqueArtists: {} } });
+    (ga as jest.Mock).mockReturnValue(null);
+
+    const { initScrobbleService: init } = require('../scrobbleService');
+    init();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(appStateHandler).toBeDefined();
+
+    // Queue a scrobble after init (simulating one that arrived while
+    // backgrounded), then enable the API.
+    ps.setState({
+      pendingScrobbles: [{
+        id: 'fg-1',
+        song: { id: 's4', title: 'Song4', artist: 'D' },
+        time: Date.now(),
+      }],
+    });
+    const mockScrobble = jest.fn().mockResolvedValue(undefined);
+    (ga as jest.Mock).mockReturnValue({ scrobble: mockScrobble });
+
+    // Simulate the app returning to the foreground.
+    appStateHandler!('active');
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(mockScrobble).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 's4', submission: true }),
+    );
+
+    // Background transitions are no-ops.
+    mockScrobble.mockClear();
+    appStateHandler!('background');
+    await jest.advanceTimersByTimeAsync(0);
+    expect(mockScrobble).not.toHaveBeenCalled();
+
+    addEventListenerSpy.mockRestore();
+  });
 });
 
 describe('scrobble exclusions', () => {
