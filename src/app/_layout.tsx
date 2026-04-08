@@ -24,7 +24,7 @@ LogBox.ignoreLogs([
   // navigation. UIKit logs a warning for every scroll view on screen
   // because the override disables its internal linear-focus-movement
   // cache optimisation. This affects all ScrollView-based components
-  // (FlashList, FlatList, DraggableFlatList, etc.) and is a known
+  // (FlashList, FlatList, ReorderableList, etc.) and is a known
   // React Native issue with no user-side fix.
   'RCTScrollViewComponentView implements focusItemsInRect:',
 ]);

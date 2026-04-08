@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -16,12 +16,11 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import DraggableFlatList, {
-  ScaleDecorator,
-  ShadowDecorator,
-  type RenderItemParams,
-  type DragEndParams,
-} from 'react-native-draggable-flatlist';
+import ReorderableList, {
+  reorderItems,
+  useReorderableDrag,
+  type ReorderableListReorderEvent,
+} from 'react-native-reorderable-list';
 
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
@@ -63,6 +62,72 @@ const HERO_PADDING = 24;
 const HERO_COVER_SIZE = 600;
 const HEADER_BAR_HEIGHT = 44;
 const EDIT_ROW_HEIGHT = 64;
+
+const EditTrackRow = memo(function EditTrackRow({
+  item,
+  index,
+  colors,
+  onDelete,
+}: {
+  item: Child;
+  index: number;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onDelete: (index: number) => void;
+}) {
+  const { t } = useTranslation();
+  const drag = useReorderableDrag();
+
+  const handleDelete = useCallback(() => onDelete(index), [onDelete, index]);
+
+  const rightActions: SwipeAction[] = useMemo(
+    () => [
+      {
+        icon: 'trash-outline',
+        color: colors.red,
+        label: t('remove'),
+        onPress: handleDelete,
+        removesRow: true,
+      },
+    ],
+    [colors.red, handleDelete, t],
+  );
+
+  return (
+    <SwipeableRow
+      rightActions={rightActions}
+      enableFullSwipeRight
+      restingBackgroundColor={colors.background}
+    >
+      <View style={[styles.editRow, { borderBottomColor: colors.border }]}>
+        <CachedImage
+          coverArtId={item.coverArt}
+          size={300}
+          style={styles.editCover}
+          resizeMode="cover"
+        />
+
+        <View style={styles.editTrackInfo}>
+          <Text
+            style={[styles.editTrackTitle, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {index + 1}. {item.title}
+          </Text>
+          <Text
+            style={[styles.editTrackArtist, { color: colors.textSecondary }]}
+            numberOfLines={1}
+          >
+            {item.artist ?? t('unknownArtist')}
+          </Text>
+        </View>
+
+        <Pressable onPressIn={drag} hitSlop={8} style={styles.editDragHandle}>
+          <Ionicons name="reorder-three" size={28} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+    </SwipeableRow>
+  );
+});
 
 export function PlaylistDetailScreen() {
   const { t } = useTranslation();
@@ -145,8 +210,8 @@ export function PlaylistDetailScreen() {
     setEditedTracks([]);
   }, []);
 
-  const handleReorder = useCallback(({ data }: DragEndParams<Child>) => {
-    setEditedTracks(data);
+  const handleReorder = useCallback(({ from, to }: ReorderableListReorderEvent) => {
+    setEditedTracks((prev) => reorderItems(prev, from, to));
   }, []);
 
   const handleDeleteTrack = useCallback(
@@ -289,53 +354,15 @@ export function PlaylistDetailScreen() {
   /* ---- Edit-mode renderItem ---- */
 
   const renderEditItem = useCallback(
-    ({ item, getIndex, drag }: RenderItemParams<Child>) => {
-      const index = getIndex() ?? 0;
-      const rightActions: SwipeAction[] = [
-        { icon: 'trash-outline', color: colors.red, label: t('remove'), onPress: () => handleDeleteTrack(index), removesRow: true },
-      ];
-      return (
-        <ScaleDecorator activeScale={1.03}>
-          <ShadowDecorator>
-            <SwipeableRow rightActions={rightActions} enableFullSwipeRight restingBackgroundColor={colors.background}>
-              <View
-                style={[
-                  styles.editRow,
-                  { borderBottomColor: colors.border },
-                ]}
-              >
-                <CachedImage
-                  coverArtId={item.coverArt}
-                  size={300}
-                  style={styles.editCover}
-                  resizeMode="cover"
-                />
-
-                <View style={styles.editTrackInfo}>
-                  <Text
-                    style={[styles.editTrackTitle, { color: colors.textPrimary }]}
-                    numberOfLines={1}
-                  >
-                    {index + 1}. {item.title}
-                  </Text>
-                  <Text
-                    style={[styles.editTrackArtist, { color: colors.textSecondary }]}
-                    numberOfLines={1}
-                  >
-                    {item.artist ?? t('unknownArtist')}
-                  </Text>
-                </View>
-
-                <Pressable onPressIn={drag} hitSlop={8} style={styles.editDragHandle}>
-                  <Ionicons name="reorder-three" size={28} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-            </SwipeableRow>
-          </ShadowDecorator>
-        </ScaleDecorator>
-      );
-    },
-    [colors, handleDeleteTrack, t],
+    ({ item, index }: { item: Child; index: number }) => (
+      <EditTrackRow
+        item={item}
+        index={index}
+        colors={colors}
+        onDelete={handleDeleteTrack}
+      />
+    ),
+    [colors, handleDeleteTrack],
   );
 
   const keyExtractor = useCallback(
@@ -542,11 +569,11 @@ export function PlaylistDetailScreen() {
         )}
 
       {editing ? (
-        <DraggableFlatList
+        <ReorderableList
           data={editedTracks}
           renderItem={renderEditItem}
           keyExtractor={keyExtractor}
-          onDragEnd={handleReorder}
+          onReorder={handleReorder}
           onScrollBeginDrag={closeOpenRow}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={listEmpty}

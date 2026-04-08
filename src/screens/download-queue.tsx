@@ -10,12 +10,10 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import DraggableFlatList, {
-  ScaleDecorator,
-  ShadowDecorator,
-  type DragEndParams,
-  type RenderItemParams,
-} from 'react-native-draggable-flatlist';
+import ReorderableList, {
+  useReorderableDrag,
+  type ReorderableListReorderEvent,
+} from 'react-native-reorderable-list';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -118,17 +116,16 @@ const DownloadStatsCard = memo(function DownloadStatsCard({
 const QueueRow = memo(function QueueRow({
   item,
   colors,
-  drag,
   onRemove,
   onRetry,
 }: {
   item: DownloadQueueItem;
   colors: ReturnType<typeof useTheme>['colors'];
-  drag?: () => void;
   onRemove: (queueId: string) => void;
   onRetry: (queueId: string) => void;
 }) {
   const { t } = useTranslation();
+  const drag = useReorderableDrag();
   const isDownloading = item.status === 'downloading';
   const isQueued = item.status === 'queued';
   const isError = item.status === 'error';
@@ -158,85 +155,81 @@ const QueueRow = memo(function QueueRow({
   );
 
   return (
-    <ScaleDecorator activeScale={1.03}>
-      <ShadowDecorator>
-        <View style={styles.rowWrapper}>
-        <SwipeableRow rightActions={rightActions} enableFullSwipeRight borderRadius={12}>
-          <View style={styles.row}>
-            <View style={styles.thumbWrap}>
-              <CachedImage
-                coverArtId={item.coverArtId}
-                size={300}
-                style={[styles.thumb, { backgroundColor: colors.border }]}
-                resizeMode="cover"
-              />
-              {isDownloading && (
-                <View style={styles.spinnerOverlay}>
-                  <ActivityIndicator size="small" color={colors.primary} style={{ opacity: 1 }} />
-                </View>
-              )}
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={[styles.rowTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                {item.name}
+    <View style={styles.rowWrapper}>
+      <SwipeableRow rightActions={rightActions} enableFullSwipeRight borderRadius={12}>
+        <View style={styles.row}>
+          <View style={styles.thumbWrap}>
+            <CachedImage
+              coverArtId={item.coverArtId}
+              size={300}
+              style={[styles.thumb, { backgroundColor: colors.border }]}
+              resizeMode="cover"
+            />
+            {isDownloading && (
+              <View style={styles.spinnerOverlay}>
+                <ActivityIndicator size="small" color={colors.primary} style={{ opacity: 1 }} />
+              </View>
+            )}
+          </View>
+          <View style={styles.rowContent}>
+            <Text style={[styles.rowTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {item.artist && (
+              <Text style={[styles.rowSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                {item.artist}
               </Text>
-              {item.artist && (
-                <Text style={[styles.rowSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {item.artist}
-                </Text>
-              )}
+            )}
 
-              {isDownloading && (
-                <View style={styles.progressSection}>
-                  <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-                    {t('downloadProgress', { completed: item.completedTracks, total: item.totalTracks })}
-                  </Text>
-                  <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                    {progress > 0 && (
-                      <Animated.View
-                        style={[styles.progressSegment, { backgroundColor: colors.primary }, fillStyle]}
-                      />
-                    )}
+            {isDownloading && (
+              <View style={styles.progressSection}>
+                <Text style={[styles.progressText, { color: colors.textSecondary }]}>
+                  {t('downloadProgress', { completed: item.completedTracks, total: item.totalTracks })}
+                </Text>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  {progress > 0 && (
                     <Animated.View
-                      style={[styles.progressSegment, { backgroundColor: colors.inputBg }, freeStyle]}
+                      style={[styles.progressSegment, { backgroundColor: colors.primary }, fillStyle]}
                     />
-                  </View>
+                  )}
+                  <Animated.View
+                    style={[styles.progressSegment, { backgroundColor: colors.inputBg }, freeStyle]}
+                  />
                 </View>
-              )}
+              </View>
+            )}
 
-              {isQueued && (
-                <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-                  {t('trackWithCount', { count: item.totalTracks })} · {t('queued')}
-                </Text>
-              )}
-
-              {isError && (
-                <Text style={[styles.statusText, { color: colors.red }]}>
-                  {item.error ?? t('downloadFailed')}
-                </Text>
-              )}
-            </View>
-
-            {isQueued && drag && (
-              <Pressable onPressIn={drag} hitSlop={8} style={styles.dragHandle}>
-                <Ionicons name="reorder-three" size={28} color={colors.textSecondary} />
-              </Pressable>
+            {isQueued && (
+              <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+                {t('trackWithCount', { count: item.totalTracks })} · {t('queued')}
+              </Text>
             )}
 
             {isError && (
-              <Pressable
-                onPress={() => onRetry(item.queueId)}
-                hitSlop={8}
-                style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
-              >
-                <Ionicons name="refresh" size={20} color={colors.primary} />
-              </Pressable>
+              <Text style={[styles.statusText, { color: colors.red }]}>
+                {item.error ?? t('downloadFailed')}
+              </Text>
             )}
           </View>
-        </SwipeableRow>
+
+          {isQueued && (
+            <Pressable onPressIn={drag} hitSlop={8} style={styles.dragHandle}>
+              <Ionicons name="reorder-three" size={28} color={colors.textSecondary} />
+            </Pressable>
+          )}
+
+          {isError && (
+            <Pressable
+              onPress={() => onRetry(item.queueId)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.retryButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="refresh" size={20} color={colors.primary} />
+            </Pressable>
+          )}
         </View>
-      </ShadowDecorator>
-    </ScaleDecorator>
+      </SwipeableRow>
+    </View>
   );
 });
 
@@ -342,38 +335,44 @@ export function DownloadQueueScreen() {
 
   /* ---- Drag reorder ---- */
 
-  const handleDragEnd = useCallback(({ data }: DragEndParams<DownloadQueueItem>) => {
-    const newQueued = data.filter((q) => q.status === 'queued');
-    const storeQueue = musicCacheStore.getState().downloadQueue;
-    const storeQueued = storeQueue.filter((q) => q.status === 'queued');
+  const handleReorder = useCallback(
+    ({ from, to }: ReorderableListReorderEvent) => {
+      // `from` and `to` are indices into the displayed sortedQueue, which is partitioned
+      // [downloading..., queued..., error...]. The drag handle is only rendered for queued
+      // rows, so `from` is always within the queued region. Clamp `to` to the queued region
+      // so users can't drop into the downloading or error sections.
+      const dragged = sortedQueue[from];
+      if (!dragged || dragged.status !== 'queued') return;
 
-    // Check if queued item order actually changed
-    const changed = newQueued.some((q, i) => q.queueId !== storeQueued[i]?.queueId);
-    if (!changed) return;
+      const downloadingCount = sortedQueue.filter((q) => q.status === 'downloading').length;
+      const queuedCount = sortedQueue.filter((q) => q.status === 'queued').length;
+      const queuedStart = downloadingCount;
+      const queuedEnd = downloadingCount + queuedCount - 1;
+      const clampedTo = Math.max(queuedStart, Math.min(to, queuedEnd));
+      if (from === clampedTo) return;
 
-    // Apply the new queued order to the store by sequential reorders
-    for (let i = 0; i < newQueued.length; i++) {
-      const currentQueue = musicCacheStore.getState().downloadQueue;
-      const fromIdx = currentQueue.findIndex((q) => q.queueId === newQueued[i].queueId);
+      const target = sortedQueue[clampedTo];
+      if (!target) return;
 
-      // Find the correct target position: after downloading items, in order
-      const downloadingCount = currentQueue.filter((q) => q.status === 'downloading').length;
-      const desiredIdx = downloadingCount + i;
+      // Translate display indices to store indices via queueId — the store array is not
+      // guaranteed to be in the same partitioned order as the displayed list.
+      const storeQueue = musicCacheStore.getState().downloadQueue;
+      const fromInStore = storeQueue.findIndex((q) => q.queueId === dragged.queueId);
+      const toInStore = storeQueue.findIndex((q) => q.queueId === target.queueId);
+      if (fromInStore < 0 || toInStore < 0 || fromInStore === toInStore) return;
 
-      if (fromIdx >= 0 && fromIdx !== desiredIdx) {
-        musicCacheStore.getState().reorderQueue(fromIdx, desiredIdx);
-      }
-    }
-  }, []);
+      musicCacheStore.getState().reorderQueue(fromInStore, toInStore);
+    },
+    [sortedQueue],
+  );
 
   /* ---- Render ---- */
 
   const renderItem = useCallback(
-    ({ item, drag }: RenderItemParams<DownloadQueueItem>) => (
+    ({ item }: { item: DownloadQueueItem }) => (
       <QueueRow
         item={item}
         colors={colors}
-        drag={item.status === 'queued' ? drag : undefined}
         onRemove={handleRemove}
         onRetry={handleRetry}
       />
@@ -417,15 +416,15 @@ export function DownloadQueueScreen() {
 
   return (
     <GradientBackground style={styles.container} scrollable>
-      <DraggableFlatList
+      <ReorderableList
         data={sortedQueue}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        onDragEnd={handleDragEnd}
+        onReorder={handleReorder}
         onScrollBeginDrag={closeOpenRow}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
-        containerStyle={styles.container}
+        style={styles.container}
         contentContainerStyle={contentStyle}
       />
       <ThemedAlert {...alertProps} />

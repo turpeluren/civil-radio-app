@@ -1,23 +1,37 @@
 diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
-index 65c6e30..c8f18ca 100644
+index 65c6e30..3bf4d9d 100644
 --- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
 +++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
-@@ -327,6 +327,15 @@ open class ScreenFragment :
+@@ -316,7 +316,8 @@ open class ScreenFragment :
+     override fun onDestroy() {
+         super.onDestroy()
+         val container = screen.container
+-        if (container == null || !container.hasScreen(this.screen.fragmentWrapper)) {
++        val isScreenDismissed = container == null || !container.hasScreen(this.screen.fragmentWrapper)
++        if (isScreenDismissed) {
+             // we only send dismissed even when the screen has been removed from its container
+             val screenContext = screen.context
+             if (screenContext is ReactContext) {
+@@ -325,6 +326,19 @@ open class ScreenFragment :
+                     .getEventDispatcherForReactTag(screenContext, screen.id)
+                     ?.dispatchEvent(ScreenDismissedEvent(surfaceId, screen.id))
              }
++            // Local patch (substreamer-rn): break the Screen->fragmentWrapper
++            // retain cycle so Fabric's mTagToViewState doesn't keep the
++            // destroyed ScreenFragment alive. See upstream issue
++            // software-mansion/react-native-screens#3755. Gated on the
++            // maintainer's own isScreenDismissed discriminator above so this
++            // only fires for permanent dismissal, not covered-push (which we
++            // proved breaks navigation when nulled unconditionally). The
++            // `=== this` identity guard avoids clobbering a re-attached
++            // wrapper if the fragment is somehow recreated against the same
++            // Screen.
++            if (this.screen.fragmentWrapper === this) {
++                this.screen.fragmentWrapper = null
++            }
          }
          childScreenContainers.clear()
-+        // Local patch (substreamer-rn): null out the back-reference to break a
-+        // memory leak between Screen and its destroyed Fragment under Fabric.
-+        // ScreenFragment holds `screen` (and indirectly the React tree); Screen
-+        // holds `fragmentWrapper` -> this fragment. Without this clear, every
-+        // pushed/popped detail screen leaks an entire fragment + view tree on
-+        // Android. Reported as react-native-screens#3755.
-+        if (this is ScreenFragmentWrapper && screen.fragmentWrapper === this) {
-+            screen.fragmentWrapper = null
-+        }
      }
- 
-     companion object {
 diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt
 index 34f19a9..ed75355 100644
 --- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt
@@ -61,3 +75,32 @@ index 9a9cbf3..6f65a88 100644
              return
          }
  
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt
+index 19c44f5..b6989a6 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt
+@@ -99,6 +99,24 @@ open class ScreenViewManager :
+         view.onFinalizePropsUpdate()
+     }
+ 
++    // Local patch (substreamer-rn): belt-and-braces fragmentWrapper cleanup.
++    // The discriminator-gated null in ScreenFragment.onDestroy handles the
++    // common case, but if Fabric drops the view without firing onDestroy on
++    // schedule we want to break the Screen->fragmentWrapper retain cycle here
++    // too. See upstream issue software-mansion/react-native-screens#3755.
++    // Defensive guard: only null if no fragment is currently attached, to
++    // avoid the (vanishingly small) risk of clobbering a live wrapper if
++    // Fabric drops then re-attaches via a different path.
++    // NOTE: PR software-mansion/react-native-screens#3250 touches this file
++    // for unrelated transition cleanup; if it merges upstream this hunk may
++    // need to rebase.
++    override fun onDropViewInstance(view: Screen) {
++        if (view.fragmentWrapper?.fragment?.isAdded != true) {
++            view.fragmentWrapper = null
++        }
++        super.onDropViewInstance(view)
++    }
++
+     private fun logNotAvailable(propName: String) {
+         Log.w("[RNScreens]", "$propName prop is not available on Android")
+     }
