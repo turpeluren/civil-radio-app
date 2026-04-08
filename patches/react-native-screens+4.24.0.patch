@@ -1,3 +1,23 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
+index 65c6e30..c8f18ca 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenFragment.kt
+@@ -327,6 +327,15 @@ open class ScreenFragment :
+             }
+         }
+         childScreenContainers.clear()
++        // Local patch (substreamer-rn): null out the back-reference to break a
++        // memory leak between Screen and its destroyed Fragment under Fabric.
++        // ScreenFragment holds `screen` (and indirectly the React tree); Screen
++        // holds `fragmentWrapper` -> this fragment. Without this clear, every
++        // pushed/popped detail screen leaks an entire fragment + view tree on
++        // Android. Reported as react-native-screens#3755.
++        if (this is ScreenFragmentWrapper && screen.fragmentWrapper === this) {
++            screen.fragmentWrapper = null
++        }
+     }
+ 
+     companion object {
 diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt
 index 34f19a9..ed75355 100644
 --- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt
