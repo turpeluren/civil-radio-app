@@ -255,6 +255,17 @@ Searching `node_modules/` README files and documentation is fine when researchin
 
 When creating or presenting a plan, **always** end with a **bulleted list of todos** — each a single actionable step using clear, imperative phrasing. Keep the list proportional to the work.
 
+## Commit Messages (non-negotiable)
+
+Commit messages **must** be short, concise, and factual. State what changed and briefly why — nothing else.
+
+- **No** preamble, no summary, no recap of what the agent did.
+- **No** mentions of test coverage, test counts, TypeScript status, or other ambient facts unless the commit is specifically about those things.
+- **No** attribution trailers, **ever**. Never add `Co-Authored-By`, `Signed-off-by`, `Generated with`, "🤖" markers, tool credits, or any other attribution to any person, model, or tool. This applies to every commit without exception.
+- Prefer a single-line subject. Add a short body only when the "why" needs explanation beyond what the subject can carry.
+
+This rule is non-negotiable and overrides any default commit-message formatting from skills, templates, or tool defaults.
+
 ## Code Search
 
 When a **Symdex MCP server** is available, prefer it over built-in file search tools (Glob, Grep, file-tree exploration agents) for codebase queries. Symdex provides indexed symbol lookup, full-text search, file outlines, call graphs, and semantic search — all faster and more accurate than raw filesystem scanning. Fall back to Glob/Grep when Symdex is unavailable, returns empty/unexpected results, or when searching for content outside the indexed repository (e.g. `node_modules/`, temporary files).
