@@ -102,6 +102,9 @@ export function CreateShareSheet() {
     setTimeout(() => setCopied(false), 2000);
   }, [shareUrl]);
 
+  const displayName = shareType === 'queue' ? t('queue') : itemName;
+  const typeLabel = shareType === 'queue' ? t('queue') : shareType === 'playlist' ? t('playlist') : t('album');
+
   const handleShare = useCallback(async () => {
     if (!shareUrl) return;
     let text: string;
@@ -116,12 +119,10 @@ export function CreateShareSheet() {
     }
     const message = Platform.OS === 'android' ? `${text}\n${shareUrl}` : text;
     await Share.share(
-      { url: shareUrl, message, title: itemName },
+      { url: shareUrl, message, title: displayName },
       { subject: text },
     ).catch(() => { /* user dismissed */ });
-  }, [shareUrl, shareType, itemName, artistName, t]);
-
-  const typeLabel = shareType === 'queue' ? t('queue') : shareType === 'playlist' ? t('playlist') : t('album');
+  }, [shareUrl, shareType, displayName, itemName, artistName, t]);
 
   const dynamicStyles = useMemo(
     () =>
@@ -166,7 +167,7 @@ export function CreateShareSheet() {
             {t('shareEntity', { type: typeLabel })}
           </Text>
           <Text style={[styles.subtitle, dynamicStyles.subtitle]} numberOfLines={1}>
-            {itemName}
+            {displayName}
           </Text>
         </View>
       </View>
