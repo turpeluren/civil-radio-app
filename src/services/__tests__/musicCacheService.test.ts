@@ -75,6 +75,7 @@ jest.mock('../downloadSpeedTracker', () => ({
 
 jest.mock('../imageCacheService', () => ({
   cacheAllSizes: jest.fn().mockResolvedValue(undefined),
+  cacheEntityCoverArt: jest.fn(),
   getCachedImageUri: jest.fn().mockReturnValue(null),
 }));
 
@@ -142,7 +143,7 @@ import { favoritesStore } from '../../store/favoritesStore';
 import { storageLimitStore } from '../../store/storageLimitStore';
 import { playbackSettingsStore } from '../../store/playbackSettingsStore';
 import { checkStorageLimit } from '../storageService';
-import { cacheAllSizes } from '../imageCacheService';
+import { cacheAllSizes, cacheEntityCoverArt } from '../imageCacheService';
 import { getDownloadStreamUrl } from '../subsonicService';
 import { beginDownload, clearDownload } from '../downloadSpeedTracker';
 import {
@@ -771,7 +772,9 @@ describe('enqueueAlbumDownload', () => {
     await enqueueAlbumDownload('album-1');
 
     expect(cacheAllSizes).toHaveBeenCalledWith('album-cover');
-    expect(cacheAllSizes).toHaveBeenCalledWith('track-cover');
+    expect(cacheEntityCoverArt).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ coverArt: 'track-cover' })]),
+    );
   });
 
   it('uses displayArtist when artist is missing', async () => {

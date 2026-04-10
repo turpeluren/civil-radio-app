@@ -5,6 +5,7 @@ import i18n from '../i18n/i18n';
 
 import { sqliteStorage } from './sqliteStorage';
 
+import { cacheAllSizes, cacheEntityCoverArt } from '../services/imageCacheService';
 import {
   ensureCoverArtAuth,
   getStarred2,
@@ -80,6 +81,15 @@ export const favoritesStore = create<FavoritesState>()(
             lastFetchedAt: Date.now(),
             overrides: {},
           });
+
+          // Proactively cache cover art for new IDs so they survive offline
+          cacheEntityCoverArt(songs);
+          for (const a of albums) {
+            if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
+          }
+          for (const a of artists) {
+            if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
+          }
         } catch (e) {
           set({
             loading: false,

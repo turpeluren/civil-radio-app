@@ -1,6 +1,10 @@
 jest.mock('../sqliteStorage', () => require('../__mocks__/sqliteStorage'));
 jest.mock('../../services/subsonicService');
 jest.mock('../../services/musicbrainzService');
+jest.mock('../../services/imageCacheService', () => ({
+  cacheAllSizes: jest.fn().mockResolvedValue(undefined),
+  cacheEntityCoverArt: jest.fn(),
+}));
 jest.mock('../layoutPreferencesStore', () => ({
   layoutPreferencesStore: {
     getState: jest.fn(() => ({ listLength: 20 })),

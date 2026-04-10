@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { getOverride, mbidOverrideStore } from './mbidOverrideStore';
 import { sqliteStorage } from './sqliteStorage';
 
+import { cacheEntityCoverArt } from '../services/imageCacheService';
 import {
   ensureCoverArtAuth,
   getArtist,
@@ -130,6 +131,9 @@ export const artistDetailStore = create<ArtistDetailState>()(
           },
         });
 
+        // Proactively cache cover art for new IDs so they survive offline
+        if (topSongs.length > 0) cacheEntityCoverArt(topSongs);
+
         return entry;
       },
 
@@ -137,16 +141,21 @@ export const artistDetailStore = create<ArtistDetailState>()(
         const entries = get().artists;
         const size = layoutPreferencesStore.getState().listLength;
         const updates: Record<string, ArtistDetailEntry> = { ...entries };
+        const allTopSongs: Child[] = [];
         for (const [id, entry] of Object.entries(entries)) {
           if (isVariousArtists(entry.artist.name)) continue;
           try {
             const topSongs = await getTopSongs(entry.artist.name, size);
             updates[id] = { ...entry, topSongs };
+            allTopSongs.push(...topSongs);
           } catch {
             /* keep existing topSongs */
           }
         }
         set({ artists: updates });
+
+        // Proactively cache cover art for new IDs so they survive offline
+        if (allTopSongs.length > 0) cacheEntityCoverArt(allTopSongs);
       },
 
       clearArtists: () => set({ artists: {} }),

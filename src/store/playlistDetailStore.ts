@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { sqliteStorage } from './sqliteStorage';
 
+import { cacheAllSizes, cacheEntityCoverArt } from '../services/imageCacheService';
 import {
   ensureCoverArtAuth,
   getPlaylist,
@@ -53,6 +54,10 @@ export const playlistDetailStore = create<PlaylistDetailState>()(
               [id]: { playlist: data, retrievedAt: Date.now() },
             },
           });
+
+          // Proactively cache cover art for new IDs so they survive offline
+          if (data.coverArt) cacheAllSizes(data.coverArt).catch(() => { /* non-critical */ });
+          if (data.entry?.length) cacheEntityCoverArt(data.entry);
         }
         return data;
       },

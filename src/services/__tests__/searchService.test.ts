@@ -1,5 +1,9 @@
 jest.mock('../subsonicService');
 jest.mock('../../store/sqliteStorage', () => require('../../store/__mocks__/sqliteStorage'));
+jest.mock('../imageCacheService', () => ({
+  cacheAllSizes: jest.fn().mockResolvedValue(undefined),
+  cacheEntityCoverArt: jest.fn(),
+}));
 
 import { ensureCoverArtAuth, search3 } from '../subsonicService';
 import { albumDetailStore } from '../../store/albumDetailStore';

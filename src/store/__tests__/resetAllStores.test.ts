@@ -9,6 +9,10 @@ jest.mock('../../services/subsonicService');
 jest.mock('../../services/playerService', () => ({}));
 jest.mock('../../services/moreOptionsService', () => ({}));
 jest.mock('../../services/scrobbleService', () => ({}));
+jest.mock('../../services/imageCacheService', () => ({
+  cacheAllSizes: jest.fn().mockResolvedValue(undefined),
+  cacheEntityCoverArt: jest.fn(),
+}));
 
 import { clearAllStorage } from '../sqliteStorage';
 import { authStore } from '../authStore';

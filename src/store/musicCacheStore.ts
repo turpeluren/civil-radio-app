@@ -25,6 +25,7 @@ export interface CachedTrack {
   id: string;
   title: string;
   artist: string;
+  coverArt?: string;
   fileName: string;
   bytes: number;
   duration: number;

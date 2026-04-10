@@ -642,3 +642,19 @@ export async function clearImageCache(): Promise<number> {
   imageCacheStore.getState().reset();
   return freedBytes;
 }
+
+/**
+ * Proactively cache cover art for a list of entities (songs, albums, etc.).
+ * Deduplicates by coverArt ID and skips entries already in cache.
+ */
+export function cacheEntityCoverArt(entities: Array<{ coverArt?: string }>): void {
+  const seen = new Set<string>();
+  for (const entity of entities) {
+    if (entity.coverArt && !seen.has(entity.coverArt)) {
+      seen.add(entity.coverArt);
+      if (!getCachedImageUri(entity.coverArt, 300)) {
+        cacheAllSizes(entity.coverArt).catch(() => { /* non-critical */ });
+      }
+    }
+  }
+}

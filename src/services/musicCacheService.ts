@@ -38,7 +38,7 @@ import {
   getDownloadStreamUrl,
   type Child,
 } from './subsonicService';
-import { cacheAllSizes, getCachedImageUri } from './imageCacheService';
+import { cacheAllSizes, cacheEntityCoverArt, getCachedImageUri } from './imageCacheService';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -343,15 +343,7 @@ export function getTrackQueueStatus(trackId: string): 'queued' | 'downloading' |
 /* ------------------------------------------------------------------ */
 
 function cacheTrackCoverArt(tracks: Child[]): void {
-  const seen = new Set<string>();
-  for (const track of tracks) {
-    if (track.coverArt && !seen.has(track.coverArt)) {
-      seen.add(track.coverArt);
-      if (!getCachedImageUri(track.coverArt, 300)) {
-        cacheAllSizes(track.coverArt).catch(() => { /* non-critical */ });
-      }
-    }
-  }
+  cacheEntityCoverArt(tracks);
 }
 
 /**
@@ -661,6 +653,7 @@ async function downloadTrack(
       id: track.id,
       title: track.title ?? 'Unknown',
       artist: track.artist ?? i18n.t('unknownArtist'),
+      coverArt: track.coverArt,
       fileName,
       bytes,
       duration: track.duration ?? 0,
