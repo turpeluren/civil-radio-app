@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     borderRadius: CAPSULE_BORDER_RADIUS,
     height: CAPSULE_HEIGHT,
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,

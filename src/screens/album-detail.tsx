@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     height: 8,
   },
   discTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyTracksSubtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
 });

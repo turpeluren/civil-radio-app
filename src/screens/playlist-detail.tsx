@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   headerButtonText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '400',
   },
   subtitleRow: {
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyTracksSubtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
   /* ---- Edit mode ---- */
@@ -761,11 +761,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   editTrackTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   editTrackArtist: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   editDragHandle: {

@@ -5,6 +5,7 @@ import Svg, { Path as SvgPath, Circle as SvgCircle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 
 import { type ThemeColors } from '../constants/theme';
+import { VIZ_PALETTE } from '../constants/vizColors';
 
 const AnimatedPath = Animated.createAnimatedComponent(SvgPath);
 
@@ -13,15 +14,6 @@ const STROKE_WIDTH = 28;
 const RADIUS = (SIZE - STROKE_WIDTH) / 2;
 const CENTER = SIZE / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-const PALETTE = [
-  '#6366F1', // indigo
-  '#F59E0B', // amber
-  '#10B981', // emerald
-  '#EF4444', // red
-  '#8B5CF6', // violet
-  '#64748B', // slate (for "Other")
-];
 
 interface GenreSlice {
   genre: string;
@@ -92,7 +84,7 @@ export const GenreChart = memo(function GenreChart({ data, totalPlays, colors }:
     return {
       offset,
       length: adjustedLength,
-      color: PALETTE[i % PALETTE.length],
+      color: VIZ_PALETTE[i % VIZ_PALETTE.length],
       genre: slice.genre,
       count: slice.count,
       percentage: slice.percentage,
@@ -148,7 +140,7 @@ export const GenreChart = memo(function GenreChart({ data, totalPlays, colors }:
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 20,
+    gap: 24,
   },
   chartRow: {
     width: SIZE,
@@ -184,11 +176,11 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
   legendValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   emptyContainer: {
@@ -196,7 +188,7 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
 });

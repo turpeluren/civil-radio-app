@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     width: ACTION_WIDTH,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
   iconDisc: {
     width: ICON_DISC_SIZE,
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.1,
   },

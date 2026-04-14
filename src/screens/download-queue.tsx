@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   statBlock: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   statIcon: {
     width: 40,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
   statDivider: {
@@ -515,18 +515,18 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   rowSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   progressSection: {
     marginTop: 6,
   },
   progressText: {
-    fontSize: 11,
+    fontSize: 12,
     marginBottom: 4,
   },
   progressBar: {
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   pressed: {

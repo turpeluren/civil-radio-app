@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   playlistCount: {
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 1,
   },
   newPlaylistLabel: {
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,

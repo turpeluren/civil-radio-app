@@ -516,6 +516,7 @@ export function HomeScreen() {
                     <AnimatedNumber
                       value={listeningStats.streak}
                       style={[styles.statValue, { color: colors.textPrimary }]}
+                      suffix="d"
                     />
                     <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
                       {t('streak')}
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
   },
   sectionHeaderActions: {
@@ -595,7 +596,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
   emptySection: {
@@ -661,7 +662,7 @@ const styles = StyleSheet.create({
   statBlock: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   statIcon: {
     width: 40,
@@ -675,7 +676,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
   statDivider: {
@@ -686,7 +687,7 @@ const styles = StyleSheet.create({
   statsEmpty: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     paddingVertical: 4,
   },
   statsEmptyText: {

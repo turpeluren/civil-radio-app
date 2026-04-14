@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   artistName: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   ratingOverlay: {

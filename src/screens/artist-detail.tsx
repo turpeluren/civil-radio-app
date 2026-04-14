@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(128,128,128,0.12)',
   },
   artistName: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
     marginTop: 16,
     textAlign: 'center',
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
   heroPlayButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   shufflePlayButton: {
     width: 36,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
 
   /* Biography */
   bioText: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
   },
   bioToggle: {

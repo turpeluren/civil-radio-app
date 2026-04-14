@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
     marginLeft: 3,
   },
 });

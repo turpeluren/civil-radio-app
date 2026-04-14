@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -425,18 +425,18 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingVertical: 12,
   },
   secondaryButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
   },
   doneButton: {
     paddingVertical: 12,
   },
   doneButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
   },
 });

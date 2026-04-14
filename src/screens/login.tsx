@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   advancedToggleText: {
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.6)',
   },
   advancedSection: {

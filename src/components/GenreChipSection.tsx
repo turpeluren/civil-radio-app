@@ -27,21 +27,10 @@ import { connectivityStore } from '../store/connectivityStore';
 import { genreStore } from '../store/genreStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { selectionAsync } from '../utils/haptics';
+import { VIZ_PALETTE } from '../constants/vizColors';
 
 const MAX_GENRE_CHIPS = 8;
 
-const GENRE_PALETTE = [
-  '#6366F1', // indigo
-  '#F59E0B', // amber
-  '#10B981', // emerald
-  '#EF4444', // red
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#14B8A6', // teal
-  '#F97316', // orange
-  '#3B82F6', // blue
-  '#84CC16', // lime
-];
 
 /** Deterministic color for a genre name (stable across re-renders/sessions). */
 function genreColor(genre: string): string {
@@ -49,7 +38,7 @@ function genreColor(genre: string): string {
   for (let i = 0; i < genre.length; i++) {
     hash = (hash * 31 + genre.charCodeAt(i)) | 0;
   }
-  return GENRE_PALETTE[Math.abs(hash) % GENRE_PALETTE.length];
+  return VIZ_PALETTE[Math.abs(hash) % VIZ_PALETTE.length];
 }
 
 /** Fisher-Yates shuffle (in-place, returns same array). */
@@ -340,14 +329,14 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
   },
   chevronButton: {
     padding: 4,
   },
   chipRow: {
-    gap: 10,
+    gap: 8,
   },
   chip: {
     flexDirection: 'row',
@@ -360,7 +349,7 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   chipText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
   },

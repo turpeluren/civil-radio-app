@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
+import { settingsStyles } from '../styles/settingsStyles';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { ThemedAlert } from '../components/ThemedAlert';
 import { useRefreshControlKey } from '../hooks/useRefreshControlKey';
@@ -165,7 +166,7 @@ const MetadataRow = memo(function MetadataRow({
             </Text>
           )}
           {status === 'success' && (
-            <Text style={[styles.statusText, { color: '#00BA7C' }]}>
+            <Text style={[styles.statusText, { color: colors.green }]}>
               {t('refreshedSuccessfully')}
             </Text>
           )}
@@ -320,11 +321,11 @@ export function MetadataCacheBrowserScreen() {
 
   const listHeader = useMemo(
     () => (
-      <View style={styles.filterContainer}>
-        <View style={[styles.filterPill, { backgroundColor: colors.inputBg }]}>
-          <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.filterIcon} />
+      <View style={settingsStyles.filterContainer}>
+        <View style={[settingsStyles.filterPill, { backgroundColor: colors.inputBg }]}>
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={settingsStyles.filterIcon} />
           <TextInput
-            style={[styles.filterInput, { color: colors.textPrimary }]}
+            style={[settingsStyles.filterInput, { color: colors.textPrimary }]}
             placeholder={t('filterPlaceholder')}
             placeholderTextColor={colors.textSecondary}
             value={filter}
@@ -341,7 +342,7 @@ export function MetadataCacheBrowserScreen() {
 
   return (
     <>
-    <GradientBackground style={styles.container} scrollable>
+    <GradientBackground style={settingsStyles.container} scrollable>
       <FlashList
         ref={listRef}
         data={filteredEntries}
@@ -373,27 +374,6 @@ export function MetadataCacheBrowserScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  filterContainer: {
-    paddingVertical: 8,
-  },
-  filterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    height: 38,
-    paddingHorizontal: 10,
-  },
-  filterIcon: {
-    marginRight: 6,
-  },
-  filterInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 0,
-  },
   emptyContainer: {
     flex: 1,
   },
@@ -407,7 +387,7 @@ const styles = StyleSheet.create({
   thumb: {
     width: THUMB_SIZE,
     height: THUMB_SIZE,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   thumbRound: {
     borderRadius: THUMB_SIZE / 2,
@@ -415,10 +395,10 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     marginLeft: 12,
-    gap: 1,
+    gap: 4,
   },
   name: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   typeLabel: {
@@ -426,13 +406,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   dateLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   spinner: {
     marginLeft: 12,
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
   },

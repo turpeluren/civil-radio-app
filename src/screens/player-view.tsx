@@ -1005,7 +1005,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   queueHeaderText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,

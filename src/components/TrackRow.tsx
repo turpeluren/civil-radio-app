@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 80,
-    paddingVertical: 18,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -188,13 +188,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   trackNum: {
-    fontSize: 15,
+    fontSize: 14,
     minWidth: 28,
   },
   cover: {
     width: 48,
     height: 48,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: 'rgba(128,128,128,0.12)',
     marginRight: 12,
   },
@@ -221,15 +221,15 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   albumText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   trackRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     marginLeft: 12,
   },
   trackDuration: {
-    fontSize: 15,
+    fontSize: 14,
   },
 });

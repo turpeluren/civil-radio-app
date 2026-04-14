@@ -48,6 +48,7 @@ import { useRefreshControlKey } from '../hooks/useRefreshControlKey';
 import { useTheme } from '../hooks/useTheme';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import { type ThemeColors } from '../constants/theme';
+import { VIZ_PALETTE } from '../constants/vizColors';
 import { selectionAsync } from '../utils/haptics';
 import { minDelay } from '../utils/stringHelpers';
 
@@ -67,17 +68,12 @@ function isOnline(): boolean {
   return isServerReachable;
 }
 
-const GENRE_PALETTE = [
-  '#6366F1', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6',
-  '#EC4899', '#14B8A6', '#F97316', '#3B82F6', '#84CC16',
-];
-
 function genreColor(genre: string): string {
   let hash = 0;
   for (let i = 0; i < genre.length; i++) {
     hash = (hash * 31 + genre.charCodeAt(i)) | 0;
   }
-  return GENRE_PALETTE[Math.abs(hash) % GENRE_PALETTE.length];
+  return VIZ_PALETTE[Math.abs(hash) % VIZ_PALETTE.length];
 }
 
 /* ------------------------------------------------------------------ */
@@ -1011,7 +1007,7 @@ const styles = StyleSheet.create({
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   heroIcon: {
     width: 40,
@@ -1023,15 +1019,15 @@ const styles = StyleSheet.create({
   },
   heroTextCol: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     color: '#fff',
   },
   heroSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     color: '#ffffffBB',
     lineHeight: 18,
@@ -1054,17 +1050,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mediumOuter: {
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     flex: 1,
   },
   mediumGradientWrapper: {
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     flex: 1,
   },
   mediumGradient: {
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 18,
     minHeight: 140,
@@ -1092,13 +1088,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   mediumTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
     marginBottom: 4,
   },
   mediumSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     color: '#ffffffBB',
     lineHeight: 15,
@@ -1130,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   compactTextCol: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   compactTitle: {
     fontSize: 14,
@@ -1138,7 +1134,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   compactSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     color: '#ffffffBB',
   },
@@ -1161,8 +1157,8 @@ const styles = StyleSheet.create({
   buildMixBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    borderRadius: 14,
+    gap: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
     padding: 14,
@@ -1176,19 +1172,19 @@ const styles = StyleSheet.create({
   },
   buildMixTextCol: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   buildMixTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
   buildMixSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
   },
 
   /* Jump back in */
   jumpRow: {
-    gap: 14,
+    gap: 12,
   },
   jumpItem: {
     width: JUMP_BACK_IN_IMAGE,
@@ -1210,7 +1206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   jumpTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
     marginTop: 6,
@@ -1231,7 +1227,7 @@ const styles = StyleSheet.create({
 
   /* Builder components (used inside sheet) */
   builderLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     marginBottom: 10,
   },
@@ -1247,7 +1243,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     height: 40,
     padding: 0,
   },
@@ -1266,7 +1262,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchResultText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
     flex: 1,
     marginRight: 8,
@@ -1280,7 +1276,7 @@ const styles = StyleSheet.create({
   builderChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
   },
   builderChipText: {
@@ -1293,7 +1289,7 @@ const styles = StyleSheet.create({
   decadePill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
   },
   decadePillText: {

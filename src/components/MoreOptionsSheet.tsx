@@ -72,7 +72,7 @@ import { playerStore } from '../store/playerStore';
 import { playlistDetailStore } from '../store/playlistDetailStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
 import { processingOverlayStore } from '../store/processingOverlayStore';
-import { supports } from '../services/serverCapabilityService';
+import { canUserShare, supports } from '../services/serverCapabilityService';
 import { setRatingStore } from '../store/setRatingStore';
 
 /* ------------------------------------------------------------------ */
@@ -531,7 +531,7 @@ export function MoreOptionsSheet() {
   const showPlayMoreLikeThis = !offline && canPlayMoreLikeThis(entity);
   const showDetails = hasAlbumDetails(entity);
   const showTrackDetails = hasTrackDetails(entity);
-  const showShare = !offline && canShare(entity) && supports('shares');
+  const showShare = !offline && canShare(entity) && canUserShare();
   const showDownload = canDownload(entity);
   const showDelete = !offline && canDeletePlaylist(entity);
   const isVA = entity?.type === 'artist' && isVariousArtists(entity.item.name);
@@ -1509,7 +1509,7 @@ const styles = StyleSheet.create({
   emptyOptions: {
     alignItems: 'center',
     paddingVertical: 24,
-    gap: 10,
+    gap: 12,
   },
   emptyOptionsText: {
     fontSize: 14,

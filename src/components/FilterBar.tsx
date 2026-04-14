@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   chipLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   actions: {

@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
   capsule: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
+    gap: 8,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',

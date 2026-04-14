@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 12,
     marginTop: 4,
-    borderRadius: 14,
+    borderRadius: 12,
     maxHeight: 420,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 14,
   },
   section: {
     paddingHorizontal: 12,
@@ -403,11 +403,11 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   compactPrimary: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
   },
   compactSecondary: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 1,
   },
   seeMoreButton: {
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   seeMoreText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     marginRight: 4,
   },

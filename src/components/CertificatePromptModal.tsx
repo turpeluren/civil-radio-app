@@ -63,7 +63,7 @@ export const CertificatePromptModal = memo(function CertificatePromptModal({
             <Ionicons
               name={isRotation ? 'alert-circle' : isManualAdd && !certInfo.isSelfSigned ? 'shield-checkmark-outline' : 'shield-outline'}
               size={28}
-              color={isRotation ? '#F44336' : isManualAdd && !certInfo.isSelfSigned ? colors.primary : '#FF9800'}
+              color={isRotation ? colors.red : isManualAdd && !certInfo.isSelfSigned ? colors.primary : colors.orange}
             />
             <Text style={[styles.title, { color: colors.textPrimary }]}>
               {isRotation ? t('certChangedTitle') : isManualAdd && !certInfo.isSelfSigned ? t('certDetailsTitle') : t('untrustedCertificateTitle')}
@@ -71,7 +71,7 @@ export const CertificatePromptModal = memo(function CertificatePromptModal({
           </View>
 
           {isRotation ? (
-            <Text style={[styles.warning, { color: '#F44336' }]}>
+            <Text style={[styles.warning, { color: colors.red }]}>
               {t('certChangedWarning')}
             </Text>
           ) : isManualAdd && !certInfo.isSelfSigned ? (
@@ -151,7 +151,7 @@ export const CertificatePromptModal = memo(function CertificatePromptModal({
             style={({ pressed }) => [
               styles.trustButton,
               {
-                backgroundColor: isRotation ? '#F44336' : isManualAdd && !certInfo.isSelfSigned ? colors.primary : '#FF9800',
+                backgroundColor: isRotation ? colors.red : isManualAdd && !certInfo.isSelfSigned ? colors.primary : colors.orange,
               },
               pressed && styles.buttonPressed,
             ]}
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     marginBottom: 12,
     marginTop: 8,
   },
@@ -275,13 +275,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   detailLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     width: 80,
     flexShrink: 0,
   },
   detailValue: {
-    fontSize: 13,
+    fontSize: 12,
     flex: 1,
     textAlign: 'right',
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   fingerprintLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     marginBottom: 6,
   },
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   },
   fingerprintValue: {
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 18,
   },
   trustButton: {

@@ -19,8 +19,6 @@ import { setRatingStore } from '../store/setRatingStore';
 import { minDelay } from '../utils/stringHelpers';
 
 const COVER_SIZE = 300;
-const SUCCESS_GREEN = '#34C759';
-const ERROR_RED = '#FF3B30';
 const MIN_SPINNER_MS = 600;
 const SUCCESS_DELAY_MS = 600;
 const ERROR_DELAY_MS = 2000;
@@ -129,6 +127,8 @@ export function SetRatingSheet() {
         },
         clearText: { color: colors.textPrimary },
         doneButton: { backgroundColor: colors.primary },
+        doneButtonSuccess: { backgroundColor: colors.green },
+        doneButtonError: { backgroundColor: colors.red },
       }),
     [colors],
   );
@@ -190,9 +190,9 @@ export function SetRatingSheet() {
             style={({ pressed }) => [
               styles.doneButton,
               saveState === 'success'
-                ? styles.doneButtonSuccess
+                ? dynamicStyles.doneButtonSuccess
                 : saveState === 'error'
-                  ? styles.doneButtonError
+                  ? dynamicStyles.doneButtonError
                   : dynamicStyles.doneButton,
               pressed && !isBusy && styles.buttonPressed,
             ]}
@@ -276,16 +276,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     height: 48,
   },
-  doneButtonSuccess: {
-    backgroundColor: SUCCESS_GREEN,
-  },
-  doneButtonError: {
-    backgroundColor: ERROR_RED,
-  },
   doneErrorContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   doneText: {
     color: '#fff',

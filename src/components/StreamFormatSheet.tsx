@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   customSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 2,
   },
   separator: {
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   helpText: {
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 10,
     lineHeight: 18,
   },

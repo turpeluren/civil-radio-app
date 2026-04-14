@@ -412,19 +412,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   periodLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   periodLabelActive: {
     fontWeight: '700',
   },
   statsGrid: {
-    gap: 10,
+    gap: 12,
     marginBottom: 16,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   section: {
     marginBottom: 16,
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 10,
+    gap: 8,
   },
   recentThumb: {
     width: 40,
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   },
   recentInfo: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   recentTitle: {
     fontSize: 14,
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   recentTime: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
   },
   footer: {

@@ -13,7 +13,7 @@ export function SectionTitle({ title, color }: { title: string; color: string })
 
 const styles = StyleSheet.create({
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,

@@ -15,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { listDirectoryAsync } from 'expo-async-fs';
+import { settingsStyles } from '../styles/settingsStyles';
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
 import { useTheme } from '../hooks/useTheme';
@@ -156,7 +157,7 @@ export function FileExplorerScreen() {
             {
               borderBottomColor: colors.border,
             },
-            pressed && tappable && styles.pressed,
+            pressed && tappable && settingsStyles.pressed,
           ]}
         >
           <Ionicons
@@ -196,7 +197,7 @@ export function FileExplorerScreen() {
         style={({ pressed }) => [
           styles.breadcrumbRow,
           { backgroundColor: colors.card },
-          pressed && styles.pressed,
+          pressed && settingsStyles.pressed,
         ]}
       >
         <Ionicons name="arrow-back" size={18} color={colors.primary} />
@@ -215,7 +216,7 @@ export function FileExplorerScreen() {
     return (
       <GradientBackground style={styles.container} scrollable>
         <ScrollView contentContainerStyle={{ paddingTop: headerHeight + 16 }}>
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <View style={[settingsStyles.card, { backgroundColor: colors.card }]}>
             {ROOTS.map((root, index) => (
               <Pressable
                 key={root.labelKey}
@@ -226,7 +227,7 @@ export function FileExplorerScreen() {
                     borderBottomWidth: StyleSheet.hairlineWidth,
                     borderBottomColor: colors.border,
                   },
-                  pressed && styles.pressed,
+                  pressed && settingsStyles.pressed,
                 ]}
               >
                 <Ionicons
@@ -286,10 +287,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  card: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,10 +299,10 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
   },
   size: {
-    fontSize: 13,
+    fontSize: 12,
     marginRight: 8,
   },
   rootText: {
@@ -339,8 +336,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
   },
 });

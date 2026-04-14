@@ -82,9 +82,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 10,
+    gap: 8,
   },
   rank: {
     width: 20,
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   thumbnail: {
     width: THUMBNAIL_SIZE,
     height: THUMBNAIL_SIZE,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   initialCircle: {
     width: THUMBNAIL_SIZE,
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   info: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   title: {
     fontSize: 14,

@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   albumText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   metaDuration: {
     flexShrink: 0,
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   durationText: {
-    fontSize: 13,
+    fontSize: 12,
     marginLeft: 3,
   },
 });

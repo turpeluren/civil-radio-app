@@ -39,11 +39,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   infoLabel: {
-    fontSize: 15,
+    fontSize: 16,
     flexShrink: 0,
   },
   infoValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
     marginLeft: 12,
     flex: 1,

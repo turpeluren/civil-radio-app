@@ -893,7 +893,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   queueHeaderText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearButtonText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   queueList: {

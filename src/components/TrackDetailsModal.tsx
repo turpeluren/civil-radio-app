@@ -206,13 +206,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   label: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
     flexShrink: 0,
     marginRight: 16,
   },
   value: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '400',
     textAlign: 'right',
     flex: 1,

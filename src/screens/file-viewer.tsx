@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   errorText: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
   scroll: {

@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
 });

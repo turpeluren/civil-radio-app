@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
+import { settingsStyles } from '../styles/settingsStyles';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import {
   SwipeableRow,
@@ -356,11 +357,11 @@ export function MusicCacheBrowserScreen() {
 
   const listHeader = useMemo(
     () => (
-      <View style={styles.filterContainer}>
-        <View style={[styles.filterPill, { backgroundColor: colors.inputBg }]}>
-          <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.filterIcon} />
+      <View style={settingsStyles.filterContainer}>
+        <View style={[settingsStyles.filterPill, { backgroundColor: colors.inputBg }]}>
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={settingsStyles.filterIcon} />
           <TextInput
-            style={[styles.filterInput, { color: colors.textPrimary }]}
+            style={[settingsStyles.filterInput, { color: colors.textPrimary }]}
             placeholder={t('filterPlaceholder')}
             placeholderTextColor={colors.textSecondary}
             value={filter}
@@ -377,7 +378,7 @@ export function MusicCacheBrowserScreen() {
 
   return (
     <>
-    <GradientBackground style={styles.container} scrollable>
+    <GradientBackground style={settingsStyles.container} scrollable>
       <FlashList
         data={transitionComplete ? entries : []}
         renderItem={renderItem}
@@ -404,27 +405,6 @@ export function MusicCacheBrowserScreen() {
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  filterContainer: {
-    paddingVertical: 8,
-  },
-  filterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    height: 38,
-    paddingHorizontal: 10,
-  },
-  filterIcon: {
-    marginRight: 6,
-  },
-  filterInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 0,
-  },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -446,22 +426,22 @@ const styles = StyleSheet.create({
   thumb: {
     width: 56,
     height: 56,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   rowContent: {
     flex: 1,
     marginLeft: 12,
   },
   rowTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   rowSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   rowMeta: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 3,
   },
   chevron: {
@@ -491,14 +471,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   trackMeta: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   pressed: {
     opacity: 0.6,
   },
   clearButton: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '400',
   },
 });

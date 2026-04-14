@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   cover: {
     width: 40,
     height: 40,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.06)',
   },
   info: {

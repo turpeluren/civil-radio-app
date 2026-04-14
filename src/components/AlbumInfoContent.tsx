@@ -27,19 +27,12 @@ import { hexWithAlpha } from '../utils/colors';
 import { getEffectiveFormat } from '../utils/effectiveFormat';
 import { getGenreNames } from '../utils/genreHelpers';
 import { timeAgo } from '../utils/stringHelpers';
+import { VIZ_PALETTE } from '../constants/vizColors';
 
 /* ------------------------------------------------------------------ */
 /*  Genre pill palette (matches GenreChart)                            */
 /* ------------------------------------------------------------------ */
 
-const GENRE_PALETTE = [
-  '#6366F1', // indigo
-  '#F59E0B', // amber
-  '#10B981', // emerald
-  '#EF4444', // red
-  '#8B5CF6', // violet
-  '#64748B', // slate
-];
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -214,7 +207,7 @@ export const AlbumInfoContent = memo(function AlbumInfoContent({
             {genreNames.length > 0 && (
               <View style={styles.genrePillCloud}>
                 {genreNames.map((name, i) => {
-                  const pillColor = GENRE_PALETTE[i % GENRE_PALETTE.length];
+                  const pillColor = VIZ_PALETTE[i % VIZ_PALETTE.length];
                   return (
                     <View
                       key={name}
@@ -358,7 +351,7 @@ const styles = StyleSheet.create({
   heroBlock: {
     alignItems: 'center',
     marginBottom: 20,
-    gap: 14,
+    gap: 16,
   },
   albumTitle: {
     fontSize: 16,
@@ -389,7 +382,7 @@ const styles = StyleSheet.create({
 
   /* Inline metadata strip */
   metaStrip: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 8,
@@ -431,7 +424,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   infoNotesText: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 26,
     textAlign: 'justify' as const,
   },
@@ -456,20 +449,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     marginTop: 24,
   },
   infoLinkChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
   },
   infoLinkText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
   },
   infoLinkArrow: {
@@ -497,7 +490,7 @@ const styles = StyleSheet.create({
   },
   skeletonLinksRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginTop: 32,
   },
   skeletonChip: {

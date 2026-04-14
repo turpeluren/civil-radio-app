@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 16,
   },
   listContainer: {
     flexShrink: 1,
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   rowContent: {
-    gap: 2,
+    gap: 4,
   },
   rowHeader: {
     flexDirection: 'row',
@@ -410,11 +410,11 @@ const styles = StyleSheet.create({
   },
   currentBadgeText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   disambiguation: {
-    fontSize: 13,
+    fontSize: 14,
     fontStyle: 'italic',
   },
   rowMeta: {
@@ -424,12 +424,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   mbid: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: 'monospace',
     flexShrink: 1,
   },
   metaText: {
-    fontSize: 11,
+    fontSize: 12,
   },
   centered: {
     alignItems: 'center',

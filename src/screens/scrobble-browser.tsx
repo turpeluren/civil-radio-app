@@ -192,11 +192,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   trackTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
   },
   artistName: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   timeLabel: {

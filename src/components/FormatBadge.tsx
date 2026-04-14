@@ -91,10 +91,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    gap: 5,
+    gap: 4,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   hiResPill: {
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   hiResLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.5,

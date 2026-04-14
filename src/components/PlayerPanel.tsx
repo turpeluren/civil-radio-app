@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   trackArtist: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   favoriteButton: {
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   queueActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   queueActionButton: {
     alignItems: 'center',
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearButtonText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   shuffleOverlay: {

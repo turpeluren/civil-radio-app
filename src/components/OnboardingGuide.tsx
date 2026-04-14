@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   skipText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
   },
   pressed: {
@@ -253,13 +253,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   headline: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 12,
   },
   body: {
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 22,
     textAlign: 'center',
   },
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   },
   nextButtonText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

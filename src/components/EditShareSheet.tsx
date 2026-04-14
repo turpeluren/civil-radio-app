@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,

@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   retryText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
 });

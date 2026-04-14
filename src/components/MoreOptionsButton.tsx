@@ -64,6 +64,6 @@ const styles = StyleSheet.create({
   dots: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
 });
