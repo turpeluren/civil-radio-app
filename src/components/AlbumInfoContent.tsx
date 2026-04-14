@@ -158,14 +158,25 @@ export const AlbumInfoContent = memo(function AlbumInfoContent({
       }
     >
       {(albumInfoLoading || refreshing) ? (
-        /* Skeleton placeholder */
+        /* Skeleton placeholder — mirrors the real layout */
         <View>
-          {[0.4, 0.6, 0.5, 0.35, 0.55].map((w, i) => (
-            <View key={i} style={styles.skeletonRow}>
-              <View style={[styles.skeletonBar, styles.skeletonLabel]} />
-              <View style={[styles.skeletonBar, { width: `${w * 100}%` }]} />
+          {/* Hero block */}
+          <View style={styles.heroBlock}>
+            <View style={[styles.skeletonBar, styles.skeletonAlbumTitle]} />
+            <View style={[styles.skeletonBar, styles.skeletonArtistSubtitle]} />
+            <View style={[styles.skeletonBar, styles.skeletonFormatBadge]} />
+            <View style={styles.skeletonGenrePillRow}>
+              {[72, 96, 60, 84].map((w, i) => (
+                <View key={i} style={[styles.skeletonBar, styles.skeletonGenrePill, { width: w }]} />
+              ))}
             </View>
-          ))}
+          </View>
+
+          {/* Inline metadata strip */}
+          <View style={[styles.skeletonBar, styles.skeletonMetaStrip]} />
+
+          {/* Description */}
+          <View style={[styles.divider, { backgroundColor: colors.textSecondary }]} />
           <View style={styles.descriptionSection}>
             {[1, 0.97, 1, 0.95, 0.98, 1, 0.93, 0.96, 1, 0.6].map((w, i) => (
               <View
@@ -174,8 +185,11 @@ export const AlbumInfoContent = memo(function AlbumInfoContent({
               />
             ))}
           </View>
+
+          {/* External links */}
+          <View style={[styles.divider, { backgroundColor: colors.textSecondary }]} />
           <View style={styles.skeletonLinksRow}>
-            {[75, 95, 80].map((w, i) => (
+            {[90, 110, 95].map((w, i) => (
               <View key={i} style={[styles.skeletonBar, styles.skeletonChip, { width: w }]} />
             ))}
           </View>
@@ -470,19 +484,41 @@ const styles = StyleSheet.create({
   },
 
   /* Skeleton loading */
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-  },
   skeletonBar: {
     height: 12,
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  skeletonLabel: {
-    width: 70,
+  skeletonAlbumTitle: {
+    width: '65%',
+    height: 18,
+    borderRadius: 9,
+  },
+  skeletonArtistSubtitle: {
+    width: '40%',
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonFormatBadge: {
+    width: 90,
+    height: 22,
+    borderRadius: 11,
+  },
+  skeletonGenrePillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  skeletonGenrePill: {
+    height: 24,
+    borderRadius: 12,
+  },
+  skeletonMetaStrip: {
+    alignSelf: 'center',
+    width: '70%',
+    height: 12,
+    marginBottom: 8,
   },
   skeletonTextLine: {
     height: 14,
@@ -490,11 +526,13 @@ const styles = StyleSheet.create({
   },
   skeletonLinksRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
-    marginTop: 32,
+    marginTop: 24,
   },
   skeletonChip: {
-    height: 28,
+    height: 30,
     borderRadius: 8,
   },
 
