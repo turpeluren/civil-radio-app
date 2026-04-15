@@ -15,10 +15,16 @@ import { type LyricsData } from '../../services/subsonicService';
 
 const { LyricsContent } = require('../LyricsContent');
 
+jest.mock('../SyncedLyricsView', () => {
+  const { Text } = require('react-native');
+  return { SyncedLyricsView: () => <Text>SyncedLyricsView</Text> };
+});
+
 const COLORS = {
   textPrimary: '#ffffff',
   textSecondary: '#888888',
   border: '#333333',
+  background: '#000000',
 };
 
 const SYNCED: LyricsData = {
@@ -147,8 +153,8 @@ describe('LyricsContent', () => {
     expect(getByText('beta')).toBeTruthy();
   });
 
-  it('renders lines for synced lyrics (Phase 2 stub routes to unsynced view)', () => {
-    const { getByText } = render(
+  it('routes synced lyrics to SyncedLyricsView', () => {
+    const { getByText, queryByText } = render(
       <LyricsContent
         lyricsData={SYNCED}
         lyricsLoading={false}
@@ -157,8 +163,9 @@ describe('LyricsContent', () => {
       />,
     );
 
-    expect(getByText('first line')).toBeTruthy();
-    expect(getByText('second line')).toBeTruthy();
+    expect(getByText('SyncedLyricsView')).toBeTruthy();
+    // Actual line text isn't rendered because the child is mocked.
+    expect(queryByText('first line')).toBeNull();
   });
 
   it('prefers error over loading when both are true', () => {

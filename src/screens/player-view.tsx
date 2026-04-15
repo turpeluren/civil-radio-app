@@ -895,6 +895,8 @@ const LyricsTab = memo(function LyricsTab({
   return (
     <View style={styles.lyricsContainer}>
       <LyricsContent
+        key={trackId}
+        trackId={trackId}
         lyricsData={lyricsEntry}
         lyricsLoading={lyricsLoading}
         lyricsError={lyricsError}

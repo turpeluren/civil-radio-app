@@ -3,12 +3,18 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { SyncedLyricsView } from './SyncedLyricsView';
 import { UnsyncedLyricsView } from './UnsyncedLyricsView';
 import { type LyricsData } from '../services/subsonicService';
 import { type LyricsErrorKind } from '../store/lyricsStore';
 import { hexWithAlpha } from '../utils/colors';
 
 export interface LyricsContentProps {
+  /**
+   * Key prop used by the parent to remount `SyncedLyricsView` on track change.
+   * Accepted here for documentation; the parent also passes it via `key`.
+   */
+  trackId?: string;
   lyricsData: LyricsData | null | undefined;
   lyricsLoading: boolean;
   lyricsError?: LyricsErrorKind | null;
@@ -17,6 +23,7 @@ export interface LyricsContentProps {
     textPrimary: string;
     textSecondary: string;
     border: string;
+    background: string;
   };
 }
 
@@ -92,8 +99,18 @@ export const LyricsContent = memo(function LyricsContent({
     );
   }
 
-  // Synced rendering lands in Phase 3. Until then we display all non-empty
-  // lyrics as an unsynced scrollable list so the feature is useful end-to-end.
+  if (lyricsData.synced) {
+    return (
+      <SyncedLyricsView
+        lines={lyricsData.lines}
+        offsetMs={lyricsData.offsetMs}
+        source="structured"
+        textColor={colors.textPrimary}
+        backgroundColor={colors.background}
+      />
+    );
+  }
+
   return (
     <UnsyncedLyricsView lines={lyricsData.lines} textColor={colors.textPrimary} />
   );

@@ -649,6 +649,8 @@ export function ExpandedPlayerView({
                 /* Lyrics panel */
                 <View style={styles.lyricsContainer}>
                   <LyricsContent
+                    key={trackId ?? 'no-track'}
+                    trackId={trackId ?? undefined}
                     lyricsData={lyricsEntry}
                     lyricsLoading={lyricsLoading}
                     lyricsError={lyricsError}
