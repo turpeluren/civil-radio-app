@@ -12,6 +12,7 @@ import SubsonicAPI, {
   type PlaylistWithSongs,
   type ScanStatus,
   type Share,
+  type StructuredLyrics,
 } from 'subsonic-api';
 
 import i18n from '../i18n/i18n';
@@ -20,6 +21,7 @@ import { authStore } from '../store/authStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { FORMAT_PRESETS, playbackSettingsStore, type StreamFormat, type MaxBitRate } from '../store/playbackSettingsStore';
 import type { ServerInfo } from '../store/serverInfoStore';
+import { supports } from './serverCapabilityService';
 
 const reactNativeCrypto: Crypto = {
   getRandomValues: <T extends ArrayBufferView | null>(array: T): T => {
@@ -361,6 +363,145 @@ export async function getAlbumInfo2(albumId: string): Promise<AlbumInfo | null> 
     // Some servers don't support getAlbumInfo2
     return null;
   }
+}
+
+// ------------------------------------------------------------------ //
+//  Lyrics                                                             //
+// ------------------------------------------------------------------ //
+
+export interface LyricsLine {
+  /** Milliseconds from the start of the track. Only meaningful when `synced` is true. */
+  startMs: number;
+  text: string;
+}
+
+export interface LyricsData {
+  synced: boolean;
+  lines: LyricsLine[];
+  /** Lowercase 2-letter locale if the server supplied a real value. `xxx`/`und` normalised away. */
+  lang?: string;
+  /** Spec says "assume 0" when omitted. */
+  offsetMs: number;
+  /**
+   * `structured` — from `getLyricsBySongId` (OpenSubsonic).
+   * `classic` — from `getLyrics` (classic Subsonic, plain text by artist+title).
+   * `fake` is assigned by the UI layer when fake line timings are synthesised.
+   */
+  source: 'structured' | 'classic' | 'fake';
+}
+
+const UNSPECIFIED_LANGS = new Set(['xxx', 'und']);
+
+function pickStructuredEntry(entries: StructuredLyrics[]): StructuredLyrics | null {
+  if (entries.length === 0) return null;
+  const device = (i18n.language ?? 'en').slice(0, 2).toLowerCase();
+  for (const entry of entries) {
+    const lang = entry.lang?.slice(0, 2).toLowerCase();
+    if (lang && !UNSPECIFIED_LANGS.has(lang) && lang === device) return entry;
+  }
+  return entries[0];
+}
+
+function normaliseLang(lang: string | undefined): string | undefined {
+  if (!lang) return undefined;
+  const short = lang.slice(0, 2).toLowerCase();
+  if (UNSPECIFIED_LANGS.has(lang.toLowerCase()) || UNSPECIFIED_LANGS.has(short)) return undefined;
+  return short;
+}
+
+function structuredToLyricsData(entry: StructuredLyrics): LyricsData | null {
+  if (!entry.line || entry.line.length === 0) return null;
+  const synced = !!entry.synced;
+  const lines: LyricsLine[] = entry.line.map((l) => ({
+    // Spec mandates `start` be omitted for unsynced lines. Use the `synced`
+    // flag as the source of truth — if a buggy server includes `start` on an
+    // unsynced entry, ignore it.
+    startMs: synced ? (l.start ?? 0) : 0,
+    text: l.value ?? '',
+  }));
+  if (synced) lines.sort((a, b) => a.startMs - b.startMs);
+  return {
+    synced,
+    lines,
+    lang: normaliseLang(entry.lang),
+    offsetMs: entry.offset ?? 0,
+    source: 'structured',
+  };
+}
+
+function classicValueToLyricsData(value: string): LyricsData | null {
+  const raw = value.split('\n').map((l) => l.replace(/\s+$/, ''));
+  // Drop leading/trailing fully-empty lines, keep interior empties.
+  let start = 0;
+  let end = raw.length;
+  while (start < end && raw[start].length === 0) start++;
+  while (end > start && raw[end - 1].length === 0) end--;
+  const lines = raw.slice(start, end);
+  if (lines.length === 0) return null;
+  return {
+    synced: false,
+    lines: lines.map((text) => ({ startMs: 0, text })),
+    offsetMs: 0,
+    source: 'classic',
+  };
+}
+
+/**
+ * Fetch lyrics for a track. Prefers OpenSubsonic `getLyricsBySongId` when the
+ * server supports the `songLyrics` extension; falls back to the classic
+ * `getLyrics` endpoint (by artist + title). Returns `null` when neither
+ * source produces usable data. Errors are not classified here — the caller
+ * (store) owns timeout vs error classification.
+ */
+export async function getLyricsForTrack(
+  trackId: string,
+  artist?: string,
+  title?: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _signal?: AbortSignal,
+): Promise<LyricsData | null> {
+  const api = getApi();
+  if (!api) return null;
+
+  if (supports('structuredLyrics')) {
+    try {
+      const response = await api.getLyricsBySongId({ id: trackId });
+      // Ampache deviation: `structuredLyrics` arrives as a single object
+      // (not an array) when lyrics exist. Normalise to array here so the
+      // rest of the code can assume the spec-compliant shape.
+      const raw = response.lyricsList?.structuredLyrics as
+        | StructuredLyrics[]
+        | StructuredLyrics
+        | undefined;
+      const structured: StructuredLyrics[] = Array.isArray(raw)
+        ? raw
+        : raw
+          ? [raw]
+          : [];
+      const picked = pickStructuredEntry(structured);
+      if (picked) {
+        const data = structuredToLyricsData(picked);
+        if (data) return data;
+      }
+    } catch {
+      // Fall through to classic fallback.
+    }
+  }
+
+  if (artist && title) {
+    try {
+      const response = await api.getLyrics({ artist, title });
+      const value = response.lyrics?.value;
+      if (value && value.trim().length > 0) {
+        const data = classicValueToLyricsData(value);
+        if (data) return data;
+      }
+    } catch {
+      // No classic lyrics available.
+    }
+  }
+
+  return null;
 }
 
 /**

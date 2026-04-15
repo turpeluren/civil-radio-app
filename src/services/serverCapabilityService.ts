@@ -5,14 +5,15 @@ type ServerCapability =
 	| 'scan'
 	| 'fullScan'
 	| 'albumArtistRating'
-	| 'internetRadioCrud';
+	| 'internetRadioCrud'
+	| 'structuredLyrics';
 
 // Known OpenSubsonic servers — keyed by lowercase `type` from ping response
 const KNOWN_SERVERS: Record<string, ReadonlySet<ServerCapability>> = {
-	navidrome: new Set(['shares', 'scan', 'fullScan', 'albumArtistRating', 'internetRadioCrud']),
-	gonic: new Set(['albumArtistRating']),
-	'nextcloud music': new Set(['albumArtistRating']),
-	ampache: new Set(['albumArtistRating']),
+	navidrome: new Set(['shares', 'scan', 'fullScan', 'albumArtistRating', 'internetRadioCrud', 'structuredLyrics']),
+	gonic: new Set(['albumArtistRating', 'structuredLyrics']),
+	'nextcloud music': new Set(['albumArtistRating', 'structuredLyrics']),
+	ampache: new Set(['albumArtistRating', 'structuredLyrics']),
 };
 
 // Classic Subsonic servers — full capability set at each API level.

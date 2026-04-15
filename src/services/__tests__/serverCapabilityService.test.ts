@@ -35,14 +35,16 @@ describe('supports', () => {
 			expect(supports('fullScan')).toBe(true);
 			expect(supports('albumArtistRating')).toBe(true);
 			expect(supports('internetRadioCrud')).toBe(true);
+			expect(supports('structuredLyrics')).toBe(true);
 		});
 	});
 
 	describe('Gonic', () => {
 		beforeEach(() => setServerInfo({ serverType: 'gonic' }));
 
-		it('supports albumArtistRating only', () => {
+		it('supports albumArtistRating and structuredLyrics', () => {
 			expect(supports('albumArtistRating')).toBe(true);
+			expect(supports('structuredLyrics')).toBe(true);
 		});
 
 		it('does not support shares, scan, fullScan, internetRadioCrud', () => {
@@ -164,8 +166,9 @@ describe('supports', () => {
 	describe('Nextcloud Music', () => {
 		beforeEach(() => setServerInfo({ serverType: 'nextcloud music' }));
 
-		it('supports albumArtistRating', () => {
+		it('supports albumArtistRating and structuredLyrics', () => {
 			expect(supports('albumArtistRating')).toBe(true);
+			expect(supports('structuredLyrics')).toBe(true);
 		});
 
 		it('does not support shares, scan, fullScan, internetRadioCrud', () => {
@@ -179,8 +182,9 @@ describe('supports', () => {
 	describe('Ampache', () => {
 		beforeEach(() => setServerInfo({ serverType: 'ampache' }));
 
-		it('supports albumArtistRating', () => {
+		it('supports albumArtistRating and structuredLyrics', () => {
 			expect(supports('albumArtistRating')).toBe(true);
+			expect(supports('structuredLyrics')).toBe(true);
 		});
 
 		it('does not support shares, scan, fullScan, internetRadioCrud', () => {
@@ -188,6 +192,37 @@ describe('supports', () => {
 			expect(supports('scan')).toBe(false);
 			expect(supports('fullScan')).toBe(false);
 			expect(supports('internetRadioCrud')).toBe(false);
+		});
+	});
+
+	describe('structuredLyrics capability matrix', () => {
+		it('Navidrome supports structuredLyrics', () => {
+			setServerInfo({ serverType: 'navidrome' });
+			expect(supports('structuredLyrics')).toBe(true);
+		});
+
+		it('Gonic supports structuredLyrics', () => {
+			setServerInfo({ serverType: 'gonic' });
+			expect(supports('structuredLyrics')).toBe(true);
+		});
+
+		it('Nextcloud Music supports structuredLyrics', () => {
+			setServerInfo({ serverType: 'nextcloud music' });
+			expect(supports('structuredLyrics')).toBe(true);
+		});
+
+		it('Ampache supports structuredLyrics', () => {
+			setServerInfo({ serverType: 'ampache' });
+			expect(supports('structuredLyrics')).toBe(true);
+		});
+
+		it('classic Subsonic does not support structuredLyrics', () => {
+			setServerInfo({ apiVersion: '1.16.1' });
+			expect(supports('structuredLyrics')).toBe(false);
+		});
+
+		it('no server info does not support structuredLyrics', () => {
+			expect(supports('structuredLyrics')).toBe(false);
 		});
 	});
 
