@@ -304,7 +304,6 @@ if (!type || !VALID_TYPES.includes(type)) {
 }
 
 checkPrerequisites();
-validateStoreMetadata();
 
 const appJson = readJSON(APP_JSON);
 const currentVersion = appJson.expo.version;
@@ -330,6 +329,8 @@ if (iosUpdated || androidUpdated) {
 } else {
   console.log('  ⊘ No user-facing changes for store release notes');
 }
+
+validateStoreMetadata();
 
 appJson.expo.version = newVersion;
 const currentBuildNum = parseInt(appJson.expo.ios.buildNumber, 10);
