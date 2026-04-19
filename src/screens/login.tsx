@@ -210,6 +210,7 @@ export function LoginScreen() {
 
         {/* Form */}
         <View>
+          {/* Hårdkoda denna till */}
           <TextInput
             style={styles.input}
             placeholder={t('loginServerPlaceholder')}
