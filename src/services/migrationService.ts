@@ -20,6 +20,7 @@ import {
   type CompletedScrobble,
 } from '../store/completedScrobbleStore';
 import { mbidOverrideStore, type MbidOverride } from '../store/mbidOverrideStore';
+import { type PendingScrobble } from '../store/pendingScrobbleStore';
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { localeStore } from '../store/localeStore';
 import {
@@ -37,6 +38,7 @@ import {
   type CachedSongRow,
   type DownloadQueueRow,
 } from '../store/persistence/musicCacheTables';
+import { replaceAllPendingScrobbles } from '../store/persistence/pendingScrobbleTable';
 import { replaceAllScrobbles } from '../store/persistence/scrobbleTable';
 import {
   bulkInsertCachedImages,
@@ -1053,6 +1055,55 @@ const MIGRATION_TASKS: MigrationTask[] = [
       // isn't carrying dead weight.
       await kvStorage.removeItem('substreamer-music-cache');
       log('v1 blob removed — per-row tables are the sole source of truth.');
+    },
+  },
+
+  {
+    id: 15,
+    name: 'Move pending scrobbles to per-row SQLite table',
+    run: async (log) => {
+      // pendingScrobbleStore moved off the generic `persist(createJSONStorage)`
+      // blob model onto the per-row `pending_scrobble_events` table owned by
+      // `src/store/persistence/pendingScrobbleTable.ts`. Mirrors Task 13
+      // (completed scrobbles). Transactional bulk insert — blob removal only
+      // runs after the transaction commits, so a mid-migration crash preserves
+      // the original blob for the next launch to retry.
+      const raw = await kvStorage.getItem('substreamer-scrobbles');
+      if (!raw) {
+        log('No persisted pending scrobble blob — nothing to migrate.');
+        return;
+      }
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        await kvStorage.removeItem('substreamer-scrobbles');
+        log('Failed to parse pending scrobble blob — removed.');
+        return;
+      }
+      const raws: any[] = Array.isArray(parsed?.state?.pendingScrobbles)
+        ? parsed.state.pendingScrobbles
+        : [];
+      if (raws.length === 0) {
+        await kvStorage.removeItem('substreamer-scrobbles');
+        log('Pending scrobble blob was empty — removed.');
+        return;
+      }
+      const valid: PendingScrobble[] = [];
+      const seen = new Set<string>();
+      for (const s of raws) {
+        if (!s || !s.id || !s.song?.id || !s.song?.title) continue;
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        valid.push(s as PendingScrobble);
+      }
+      replaceAllPendingScrobbles(valid);
+      await kvStorage.removeItem('substreamer-scrobbles');
+      const dropped = raws.length - valid.length;
+      log(
+        `Migrated ${valid.length} pending scrobble(s) to per-row table` +
+          (dropped > 0 ? ` (dropped ${dropped} invalid/duplicate).` : '.'),
+      );
     },
   },
 

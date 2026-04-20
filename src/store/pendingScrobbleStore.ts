@@ -1,7 +1,11 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { kvStorage } from './persistence';
+import {
+  clearPendingScrobbles,
+  deletePendingScrobble,
+  hydratePendingScrobbles,
+  insertPendingScrobble,
+} from './persistence/pendingScrobbleTable';
 
 import { type Child } from '../services/subsonicService';
 
@@ -16,40 +20,54 @@ export interface PendingScrobble {
 
 export interface PendingScrobbleState {
   pendingScrobbles: PendingScrobble[];
+  /** True after the on-start hydration from SQLite has populated the store. */
+  hasHydrated: boolean;
 
   addScrobble: (song: Child, time: number) => void;
   removeScrobble: (id: string) => void;
+  clearAll: () => void;
+  /** Called once at app start to load persisted rows into memory. */
+  hydrateFromDb: () => void;
 }
 
-const PERSIST_KEY = 'substreamer-scrobbles';
+export const pendingScrobbleStore = create<PendingScrobbleState>()((set, get) => ({
+  pendingScrobbles: [],
+  hasHydrated: false,
 
-export const pendingScrobbleStore = create<PendingScrobbleState>()(
-  persist(
-    (set) => ({
-      pendingScrobbles: [],
+  addScrobble: (song, time) => {
+    if (!song?.id || !song.title) return;
+    const row: PendingScrobble = {
+      id: `${time}-${Math.random().toString(36).slice(2, 8)}`,
+      song,
+      time,
+    };
+    // Persist first so the row is on disk before any subscriber acts on
+    // the new in-memory state.
+    insertPendingScrobble(row);
+    set({ pendingScrobbles: [...get().pendingScrobbles, row] });
+  },
 
-      addScrobble: (song, time) =>
-        set((state) => {
-          if (!song?.id || !song.title) return state;
-          return {
-            pendingScrobbles: [
-              ...state.pendingScrobbles,
-              { id: `${time}-${Math.random().toString(36).slice(2, 8)}`, song, time },
-            ],
-          };
-        }),
+  removeScrobble: (id) => {
+    if (!id) return;
+    deletePendingScrobble(id);
+    set({ pendingScrobbles: get().pendingScrobbles.filter((s) => s.id !== id) });
+  },
 
-      removeScrobble: (id) =>
-        set((state) => ({
-          pendingScrobbles: state.pendingScrobbles.filter((s) => s.id !== id),
-        })),
-    }),
-    {
-      name: PERSIST_KEY,
-      storage: createJSONStorage(() => kvStorage),
-      partialize: (state) => ({
-        pendingScrobbles: state.pendingScrobbles,
-      }),
-    }
-  )
-);
+  clearAll: () => {
+    clearPendingScrobbles();
+    set({ pendingScrobbles: [] });
+  },
+
+  hydrateFromDb: () => {
+    const restored = hydratePendingScrobbles();
+    set({ pendingScrobbles: restored, hasHydrated: true });
+  },
+}));
+
+/**
+ * Convenience wrapper that exposes the underlying table clear so
+ * `resetAllStores` can wipe disk state alongside the in-memory reset.
+ */
+export function clearPendingScrobbleTable(): void {
+  clearPendingScrobbles();
+}

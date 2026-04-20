@@ -37,6 +37,14 @@ jest.mock('../persistence/scrobbleTable', () => ({
   replaceAllScrobbles: jest.fn(),
   hydrateScrobbles: jest.fn(() => []),
 }));
+jest.mock('../persistence/pendingScrobbleTable', () => ({
+  clearPendingScrobbles: jest.fn(),
+  insertPendingScrobble: jest.fn(),
+  deletePendingScrobble: jest.fn(),
+  replaceAllPendingScrobbles: jest.fn(),
+  hydratePendingScrobbles: jest.fn(() => []),
+  countPendingScrobbles: jest.fn(() => 0),
+}));
 jest.mock('../persistence/musicCacheTables', () => ({
   clearAllMusicCacheRows: jest.fn(),
   hydrateCachedSongs: jest.fn(() => ({})),
@@ -58,6 +66,7 @@ jest.mock('../persistence/musicCacheTables', () => ({
 
 import { kvStorage, clearKvStorage } from '../persistence';
 import { clearDetailTables } from '../persistence/detailTables';
+import { clearPendingScrobbles } from '../persistence/pendingScrobbleTable';
 import { clearScrobbles } from '../persistence/scrobbleTable';
 import { clearAllMusicCacheRows } from '../persistence/musicCacheTables';
 import { authStore } from '../authStore';
@@ -73,6 +82,7 @@ beforeEach(() => {
   (clearKvStorage as jest.Mock).mockClear();
   (clearDetailTables as jest.Mock).mockClear();
   (clearScrobbles as jest.Mock).mockClear();
+  (clearPendingScrobbles as jest.Mock).mockClear();
   (clearAllMusicCacheRows as jest.Mock).mockClear();
   (kvStorage.removeItem as jest.Mock).mockClear();
 });
@@ -91,6 +101,11 @@ describe('resetAllStores', () => {
   it('truncates the scrobble_events table', () => {
     resetAllStores();
     expect(clearScrobbles).toHaveBeenCalledTimes(1);
+  });
+
+  it('truncates the pending_scrobble_events table', () => {
+    resetAllStores();
+    expect(clearPendingScrobbles).toHaveBeenCalledTimes(1);
   });
 
   it('truncates the music cache tables (cached_songs + cached_items + cached_item_songs + download_queue)', () => {

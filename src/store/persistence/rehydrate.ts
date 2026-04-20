@@ -2,6 +2,7 @@ import { albumDetailStore } from '../albumDetailStore';
 import { completedScrobbleStore } from '../completedScrobbleStore';
 import { imageCacheStore } from '../imageCacheStore';
 import { musicCacheStore } from '../musicCacheStore';
+import { pendingScrobbleStore } from '../pendingScrobbleStore';
 import { songIndexStore } from '../songIndexStore';
 
 /**
@@ -35,6 +36,7 @@ export function rehydrateAllStores(): void {
     albumDetailStore.getState().hydrateFromDb();
     songIndexStore.getState().hydrateFromDb();
     completedScrobbleStore.getState().hydrateFromDb();
+    pendingScrobbleStore.getState().hydrateFromDb();
     musicCacheStore.getState().hydrateFromDb();
     imageCacheStore.getState().hydrateFromDb();
   } catch (e) {

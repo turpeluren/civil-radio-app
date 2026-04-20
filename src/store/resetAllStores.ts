@@ -8,6 +8,7 @@
 import { kvStorage, clearKvStorage } from './persistence';
 import { clearDetailTables } from './persistence/detailTables';
 import { clearAllCachedImages } from './persistence/imageCacheTable';
+import { clearPendingScrobbles } from './persistence/pendingScrobbleTable';
 import { clearScrobbles } from './persistence/scrobbleTable';
 import { clearMusicCacheTables } from './musicCacheStore';
 import { teardownMusicCache } from '../services/musicCacheService';
@@ -133,6 +134,9 @@ export function resetAllStores(): void {
   // completedScrobbleStore also persists to a per-row table (`scrobble_events`)
   // in its own connection; truncate it here so logged-out state is clean.
   clearScrobbles();
+  // pendingScrobbleStore persists to `pending_scrobble_events`; truncate
+  // here so the offline transmit queue doesn't survive logout.
+  clearPendingScrobbles();
   // musicCacheStore persists its four v2 tables (cached_songs, cached_items,
   // cached_item_songs, download_queue) in yet another connection; truncate
   // them here and drop the settings blob too.

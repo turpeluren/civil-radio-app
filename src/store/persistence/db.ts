@@ -113,6 +113,20 @@ try {
     'CREATE INDEX IF NOT EXISTS idx_scrobble_events_time ON scrobble_events (time);',
   );
 
+  // pending_scrobble_events — the offline transmit queue. Same row shape
+  // as scrobble_events but a separate table so a completed row and its
+  // still-pending sibling (legitimately sharing `id`) don't collide.
+  db.execSync(
+    `CREATE TABLE IF NOT EXISTS pending_scrobble_events (
+       id TEXT PRIMARY KEY NOT NULL,
+       song_json TEXT NOT NULL,
+       time INTEGER NOT NULL
+     );`,
+  );
+  db.execSync(
+    'CREATE INDEX IF NOT EXISTS idx_pending_scrobble_events_time ON pending_scrobble_events (time);',
+  );
+
   // Music-cache tables — FK graph: cached_item_songs.item_id → cached_items
   // (ON DELETE CASCADE), cached_item_songs.song_id → cached_songs.
   db.execSync(

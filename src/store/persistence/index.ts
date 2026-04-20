@@ -23,6 +23,9 @@ export * from './musicCacheTables';
 // Scrobble row-table API
 export * from './scrobbleTable';
 
+// Pending-scrobble row-table API
+export * from './pendingScrobbleTable';
+
 // Detail-cache row-table API
 export * from './detailTables';
 
