@@ -469,13 +469,15 @@ export function PlaylistDetailScreen() {
     [colors.textPrimary, colors.textSecondary, t],
   );
 
-  // 3-stop gradient: extracted primary → extracted secondary (if any) →
-  // theme background at the bottom. Keeps the dark/light theme colour at
-  // the bottom of the hero area while using both extracted colours up top.
-  const gradientColors: readonly [string, string, ...string[]] = secondary
-    ? [primary ?? colors.background, secondary, colors.background]
-    : [primary ?? colors.background, colors.background];
-  const gradientLocations: readonly [number, number, ...number[]] = secondary ? [0, 0.25, 0.5] : [0, 0.5];
+  // 2-stop gradient: extracted secondary (prefer) → theme background.
+  // On smaller screens the richer 3-stop bi-tone read as too busy over
+  // the hero, so we drop the more-vibrant `primary` from the render and
+  // use `secondary` (the most-common hue distinct from primary) as the
+  // calmer top colour. `primary` still extracts and is available in the
+  // hook for future tablet/landscape layouts with more room.
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, colors.background];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.5];
 
   const gradientAnimatedStyle = useAnimatedStyle(() => ({
     opacity: gradientOpacity.value,

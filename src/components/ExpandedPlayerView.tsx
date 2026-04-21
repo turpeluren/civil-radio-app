@@ -120,14 +120,16 @@ export function ExpandedPlayerView({
   const { primary, secondary, gradientOpacity: extractedGradientOpacity } =
     useImagePalette(currentTrack?.coverArt);
 
-  // 3-stop diagonal gradient: extracted primary → extracted secondary (if any)
-  // → a slightly-darkened theme background so the moodier "expanded player"
-  // feel is preserved while the extracted colours dominate the hero area.
+  // 2-stop diagonal gradient: extracted secondary (prefer) → a
+  // slightly-darkened theme background. We drop the more-vibrant
+  // `primary` from the render and use `secondary` as the calmer top
+  // colour so the two extracted hues don't fight with each other
+  // across the large hero area. `primary` still extracts and is
+  // available in the hook for future bi-tone tablet layouts.
   const backgroundEnd = mixHexColors(colors.background, '#000000', 0.15);
-  const gradientColors: readonly [string, string, ...string[]] = secondary
-    ? [primary ?? colors.background, secondary, backgroundEnd]
-    : [primary ?? colors.background, backgroundEnd];
-  const gradientLocations: readonly [number, number, ...number[]] = secondary ? [0, 0.3, 0.6] : [0, 0.6];
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, backgroundEnd];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.6];
 
   // Right panel mode: queue (default), lyrics placeholder, or album info
   const [rightPanelMode, setRightPanelMode] = useState<'queue' | 'lyrics' | 'info'>('queue');

@@ -121,13 +121,15 @@ export function PlayerView() {
 
   const { primary, secondary, gradientOpacity } = useImagePalette(currentTrack?.coverArt);
 
-  // 3-stop gradient: extracted primary → extracted secondary (if any) →
-  // theme background. Keeps the dark/light theme background at the bottom
-  // while letting the two extracted colours colour the top portion.
-  const gradientColors: readonly [string, string, ...string[]] = secondary
-    ? [primary ?? colors.background, secondary, colors.background]
-    : [primary ?? colors.background, colors.background];
-  const gradientLocations: readonly [number, number, ...number[]] = secondary ? [0, 0.3, 0.6] : [0, 0.6];
+  // 2-stop gradient: extracted secondary (prefer) → theme background. We
+  // drop the more-vibrant `primary` from the render here because on small
+  // phone screens it reads as too busy over the hero — `secondary` (the
+  // most-common hue distinct from primary) is calmer. `primary` still
+  // extracts and is available in the hook for future tablet/landscape
+  // layouts that have more room for the richer bi-tone.
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, colors.background];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.6];
 
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 

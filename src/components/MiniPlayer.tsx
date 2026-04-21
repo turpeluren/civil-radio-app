@@ -79,15 +79,19 @@ export function MiniPlayer() {
     return `${hex}${a}`;
   };
 
-  // 3-stop vertical gradient: extracted primary at top → extracted
-  // secondary (if any) in the middle → theme background at the bottom.
-  // Preserves the previous "fade into tab bar" look while adding the
-  // secondary colour as a mid-stop for more visual depth.
-  const topColor = queueLoading ? PLACEHOLDER_BG : (primary ?? colors.card);
-  const gradientColors: readonly [string, string, ...string[]] = secondary
-    ? [withAlpha(topColor, 0.65), withAlpha(secondary, 0.65), withAlpha(colors.background, 0.65)]
-    : [withAlpha(topColor, 0.65), withAlpha(colors.background, 0.65)];
-  const gradientLocations: readonly [number, number, ...number[]] = secondary ? [0, 0.5, 1] : [0, 1];
+  // 2-stop vertical gradient: extracted secondary (prefer) → theme
+  // background. On smaller screens the richer 3-stop bi-tone read as
+  // too busy over the mini player, so we drop the more-vibrant `primary`
+  // from the render and use `secondary` (the most-common hue distinct
+  // from primary) as the calmer top colour. `primary` still extracts
+  // and is available in the hook for future tablet/landscape layouts.
+  const extractedTop = secondary ?? primary ?? colors.card;
+  const topColor = queueLoading ? PLACEHOLDER_BG : extractedTop;
+  const gradientColors: readonly [string, string, ...string[]] = [
+    withAlpha(topColor, 0.65),
+    withAlpha(colors.background, 0.65),
+  ];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 1];
 
   return (
     <View style={[styles.container, { backgroundColor: withAlpha(colors.card, 0.65) }]}>
