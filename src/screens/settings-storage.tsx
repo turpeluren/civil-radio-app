@@ -3,7 +3,7 @@ import Slider from '@react-native-community/slider';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useRouter } from 'expo-router';
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +37,7 @@ import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistDetailStore } from '../store/playlistDetailStore';
 import { storageLimitStore, type StorageLimitMode } from '../store/storageLimitStore';
 import { formatBytes } from '../utils/formatters';
+import { minDelay } from '../utils/stringHelpers';
 
 const CONCURRENT_OPTIONS: MaxConcurrentDownloads[] = [1, 3, 5];
 const IMAGE_CONCURRENT_OPTIONS: MaxConcurrentImageDownloads[] = [1, 3, 5, 10];
@@ -214,10 +215,23 @@ export function SettingsStorageScreen() {
     setImageConcurrentSheetVisible(false);
   }, []);
 
+  const [imageScanning, setImageScanning] = useState(false);
+
   const handleImageScan = useCallback(async () => {
-    await reconcileImageCacheAsync();
-    imageCacheStore.getState().recalculateFromDb();
-  }, []);
+    if (imageScanning) return;
+    setImageScanning(true);
+    // Reconcile can finish in tens of ms for a small cache — pair it with a
+    // minimum display window so the spinner is perceptible and the user sees
+    // the tap actually did something.
+    const minShown = minDelay(1500);
+    try {
+      await reconcileImageCacheAsync();
+      imageCacheStore.getState().recalculateFromDb();
+    } finally {
+      await minShown;
+      setImageScanning(false);
+    }
+  }, [imageScanning]);
 
   const handleImageRepair = useCallback(() => {
     if (offlineMode) return;
@@ -412,13 +426,19 @@ export function SettingsStorageScreen() {
           <View style={settingsStyles.actionRow}>
             <Pressable
               onPress={handleImageScan}
+              disabled={imageScanning}
               style={({ pressed }) => [
                 settingsStyles.actionRowButton,
                 { borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth },
-                pressed && settingsStyles.pressed,
+                pressed && !imageScanning && settingsStyles.pressed,
+                imageScanning && settingsStyles.disabled,
               ]}
             >
-              <Ionicons name="search-outline" size={18} color={colors.textPrimary} />
+              {imageScanning ? (
+                <ActivityIndicator size="small" color={colors.textPrimary} />
+              ) : (
+                <Ionicons name="search-outline" size={18} color={colors.textPrimary} />
+              )}
               <Text style={[settingsStyles.actionRowButtonText, { color: colors.textPrimary }]}>
                 {t('scan')}
               </Text>
