@@ -513,7 +513,10 @@ describe('clearQueue', () => {
     jest.useFakeTimers();
     try {
       const p = clearQueue();
-      // Advance past the 2000ms timeout built into clearQueue.
+      // clearQueue awaits an awaitHydration() microtask before the internal
+      // reset fires; flush it so the 2000ms timeout timer is actually set
+      // before we advance fake timers past it.
+      await Promise.resolve();
       jest.advanceTimersByTime(2500);
       await p;
     } finally {

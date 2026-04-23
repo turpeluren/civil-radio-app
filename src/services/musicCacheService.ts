@@ -219,6 +219,11 @@ export function teardownMusicCache(): void {
  * stalled downloads.
  */
 export async function deferredMusicCacheInit(): Promise<void> {
+  // Call populateTrackMapsAsync directly (not ensureTrackMapsReady's
+  // coalescing wrapper) so a reconciliation pass always refreshes the
+  // in-memory maps from the latest store state — covering the case where
+  // the maps were already warmed by a prior call from the player's
+  // hydration path.
   await populateTrackMapsAsync();
 
   // Force all musicCacheStore subscribers (e.g. useDownloadStatus) to
@@ -245,6 +250,9 @@ export async function deferredMusicCacheInit(): Promise<void> {
 
   await recoverStalledDownloadsAsync();
 }
+
+/** In-flight populate promise for coalescing concurrent callers. */
+let populatePromise: Promise<void> | null = null;
 
 /**
  * Rebuild `trackUriMap` and `trackToItems` from the hydrated SQL mirror in
@@ -281,6 +289,21 @@ async function populateTrackMapsAsync(): Promise<void> {
   syncStarredSongsDownload();
 }
 
+/**
+ * Idempotent, coalescing trigger for the populate pass. Safe to call from
+ * multiple call sites — concurrent callers all await the same in-flight
+ * promise. The player's cold-start hydration uses this to avoid blocking
+ * on the image-cache-init chain that owns the "post-splash" populate call.
+ */
+export function ensureTrackMapsReady(): Promise<void> {
+  if (trackMapsReady) return Promise.resolve();
+  if (populatePromise) return populatePromise;
+  populatePromise = populateTrackMapsAsync().finally(() => {
+    populatePromise = null;
+  });
+  return populatePromise;
+}
+
 /** Waiters queued before `trackMapsReady` flipped true. */
 const trackMapsReadyWaiters: Array<() => void> = [];
 
@@ -292,20 +315,17 @@ function flushTrackMapsReadyWaiters(): void {
 }
 
 /**
- * Resolves as soon as {@link populateTrackMapsAsync} has finished rebuilding
- * `trackUriMap`. Used by the player's resume path so `childToTrack` sees
- * local URIs for downloaded songs instead of server stream URLs — critical
- * on a cold launch in offline mode where the launch race would otherwise
- * push unreachable URLs into RNTP.
+ * Resolves as soon as the in-memory track maps are ready. Proactive —
+ * kicks off the populate itself if it hasn't started yet (coalesced with
+ * any concurrent call via {@link ensureTrackMapsReady}).
  *
- * Resolves synchronously when the maps are already populated. Does NOT
- * kick off the populate itself (that's owned by `deferredMusicCacheInit`).
+ * Used by the player's resume path so `childToTrack` sees local URIs for
+ * downloaded songs instead of server stream URLs — critical on cold launch
+ * in offline mode where the launch race would otherwise push unreachable
+ * URLs into RNTP.
  */
 export function waitForTrackMapsReady(): Promise<void> {
-  if (trackMapsReady) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    trackMapsReadyWaiters.push(resolve);
-  });
+  return ensureTrackMapsReady();
 }
 
 /**
