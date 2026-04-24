@@ -35,6 +35,7 @@ import {
 } from '../store/musicCacheStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistDetailStore } from '../store/playlistDetailStore';
+import { processingOverlayStore } from '../store/processingOverlayStore';
 import { storageLimitStore, type StorageLimitMode } from '../store/storageLimitStore';
 import { formatBytes } from '../utils/formatters';
 import { minDelay } from '../utils/stringHelpers';
@@ -233,10 +234,42 @@ export function SettingsStorageScreen() {
     }
   }, [imageScanning]);
 
-  const handleImageRepair = useCallback(() => {
-    if (offlineMode) return;
-    repairIncompleteImagesAsync();
-  }, [offlineMode]);
+  const [imageRepairing, setImageRepairing] = useState(false);
+
+  const handleImageRepair = useCallback(async () => {
+    if (offlineMode || imageRepairing) return;
+    setImageRepairing(true);
+    processingOverlayStore.getState().show(t('repairingImages'));
+    const minShown = minDelay(1500);
+    try {
+      const outcome = await repairIncompleteImagesAsync();
+      imageCacheStore.getState().recalculateFromDb();
+
+      if (outcome.queued === 0 && outcome.removed === 0) {
+        processingOverlayStore.getState().showSuccess(t('imageRepairNothingToDo'));
+      } else if (outcome.failed > 0) {
+        processingOverlayStore.getState().showSuccess(
+          t('imageRepairCompleteWithFailures', {
+            repaired: outcome.repaired,
+            removed: outcome.removed,
+            failed: outcome.failed,
+          }),
+        );
+      } else {
+        processingOverlayStore.getState().showSuccess(
+          t('imageRepairComplete', {
+            repaired: outcome.repaired,
+            removed: outcome.removed,
+          }),
+        );
+      }
+    } catch {
+      processingOverlayStore.getState().showError(t('imageRepairFailed'));
+    } finally {
+      await minShown;
+      setImageRepairing(false);
+    }
+  }, [offlineMode, imageRepairing, t]);
 
   const dynamicStyles = useMemo(
     () =>
@@ -446,15 +479,19 @@ export function SettingsStorageScreen() {
             {incompleteCount > 0 && (
               <Pressable
                 onPress={handleImageRepair}
-                disabled={offlineMode}
+                disabled={offlineMode || imageRepairing}
                 style={({ pressed }) => [
                   settingsStyles.actionRowButton,
                   { backgroundColor: colors.primary },
-                  pressed && !offlineMode && settingsStyles.pressed,
-                  offlineMode && settingsStyles.disabled,
+                  pressed && !offlineMode && !imageRepairing && settingsStyles.pressed,
+                  (offlineMode || imageRepairing) && settingsStyles.disabled,
                 ]}
               >
-                <Ionicons name="build-outline" size={18} color="#fff" />
+                {imageRepairing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="build-outline" size={18} color="#fff" />
+                )}
                 <Text style={[settingsStyles.actionRowButtonText, { color: '#fff' }]}>
                   {t('repair')}
                 </Text>

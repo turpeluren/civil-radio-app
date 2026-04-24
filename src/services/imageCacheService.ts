@@ -28,7 +28,11 @@ import { fetch } from 'expo/fetch';
 
 import { listDirectoryAsync } from 'expo-async-fs';
 import { resizeImageToFileAsync } from 'expo-image-resize';
-import { imageCacheStore } from '../store/imageCacheStore';
+import {
+  getLastReconcileMs,
+  imageCacheStore,
+  markReconcileRan,
+} from '../store/imageCacheStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { fireAndForget } from '../utils/fireAndForget';
 import {
@@ -44,7 +48,28 @@ import {
   upsertCachedImage,
   type CacheBrowserFilter,
 } from '../store/persistence/imageCacheTable';
-import { ensureCoverArtAuth, getCoverArtUrl, stripCoverArtSuffix } from './subsonicService';
+import {
+  ensureCoverArtAuth,
+  getCoverArtUrl,
+  stripCoverArtSuffix,
+} from './subsonicService';
+
+// Sentinel cover-art IDs rendered from bundled assets via
+// `CachedImage.tsx`, never downloaded. Inlined here (not imported)
+// because the canonical `STARRED_COVER_ART_ID` lives in
+// `musicCacheService.ts` which already imports from this module
+// (cycle), and `VARIOUS_ARTISTS_COVER_ART_ID` from `subsonicService`
+// is auto-nulled by jest.mock in the test file. Drift risk is low:
+// these strings are baked into multiple layers (backup format, UI
+// code, tests).
+const SENTINEL_COVER_ART_IDS: ReadonlySet<string> = new Set([
+  '__starred_cover__',
+  '__various_artists_cover__',
+]);
+
+function isSentinelCoverArtId(coverArtId: string): boolean {
+  return SENTINEL_COVER_ART_IDS.has(coverArtId);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -101,6 +126,68 @@ const uriCache = new Map<string, string | null>();
 
 function uriCacheKey(coverArtId: string, size: number): string {
   return `${coverArtId}:${size}`;
+}
+
+/**
+ * Per-session consecutive failure counts for source-image (600px)
+ * downloads. After MAX_SOURCE_FAILURES in a row we purge the rows + files
+ * for that coverArtId so the "incomplete" count actually reaches zero
+ * rather than re-queuing forever. Reset on success; cleared on app
+ * restart so transient issues self-heal on the next launch.
+ */
+const sourceFailureCount = new Map<string, number>();
+const MAX_SOURCE_FAILURES = 3;
+
+/**
+ * Delete every on-disk variant and DB row for a coverArtId, and evict
+ * its URI-cache entries. Used by the sentinel sweep and the source-
+ * download circuit breaker (404 or N× failure).
+ */
+function purgeCoverArtRows(coverArtId: string): { files: number } {
+  const result = deleteCachedImagesForCoverArt(coverArtId);
+  try {
+    const subDir = new Directory(ensureCacheDir(), coverArtId);
+    if (subDir.exists) {
+      for (const size of IMAGE_SIZES) {
+        for (const ext of EXTENSIONS) {
+          const file = new File(subDir, `${size}${ext}`);
+          if (file.exists) {
+            try { file.delete(); } catch { /* best-effort */ }
+          }
+        }
+      }
+    }
+  } catch {
+    /* best-effort — DB is the source of truth */
+  }
+  for (const s of IMAGE_SIZES) uriCache.delete(uriCacheKey(coverArtId, s));
+  sourceFailureCount.delete(coverArtId);
+  return { files: result.count };
+}
+
+/**
+ * Remove any cached_images rows + on-disk files for the sentinel cover
+ * IDs (`__starred_cover__`, `__various_artists_cover__`). Their images
+ * are bundled with the app — CachedImage renders them from the asset
+ * resolver, never from the disk cache — so any rows here are stale from
+ * a prior app version and will otherwise show up as permanently
+ * "Incomplete" because getCoverArtUrl returns null for them.
+ *
+ * Returns the number of sentinel coverArtIds that had rows (0–2). Safe
+ * to call multiple times — idempotent after the first run.
+ */
+function sweepSentinelRows(): number {
+  let cleared = 0;
+  let totalFiles = 0;
+  for (const id of SENTINEL_COVER_ART_IDS) {
+    const { files } = purgeCoverArtRows(id);
+    if (files > 0) cleared++;
+    totalFiles += files;
+  }
+  if (totalFiles > 0) {
+    imageCacheStore.getState().recalculateFromDb();
+  }
+  return cleared;
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,14 +258,51 @@ export function teardownImageCache(): void {
  *
  * All filesystem work runs via expo-async-fs, keeping the JS thread free.
  */
-export async function deferredImageCacheInit(): Promise<void> {
-  await reconcileImageCacheAsync();
-  // Skip repair when offline — queuing downloads against a network we
-  // can't reach would just churn until each retry exhausts. The
-  // offline→online subscriber below picks it up when we reconnect.
-  if (!offlineModeStore.getState().offlineMode) {
-    await repairIncompleteImagesAsync();
-  }
+/** Reconcile only runs once per this interval in the deferred-init path.
+ *  Manual triggers from Settings always run regardless of this throttle. */
+const RECONCILE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * True when the last successful reconcile is missing or older than
+ * RECONCILE_INTERVAL_MS. Only consulted by the deferred-init path —
+ * user-initiated scans from Settings call `reconcileImageCacheAsync`
+ * directly and bypass this check entirely.
+ */
+function shouldRunReconcile(): boolean {
+  const last = getLastReconcileMs();
+  if (last == null) return true;
+  return Date.now() - last >= RECONCILE_INTERVAL_MS;
+}
+
+export function deferredImageCacheInit(): Promise<void> {
+  // Defer to an idle window so the reconcile/repair FS passes never
+  // compete with first-render or initial animations. requestIdleCallback
+  // is polyfilled by RN (used elsewhere in dataSyncService, useTransitionComplete).
+  return new Promise((resolve) => {
+    requestIdleCallback(async () => {
+      try {
+        // Always sweep sentinel rows, even offline — it's a pure SQL +
+        // local-file cleanup and prevents the Settings "Incomplete"
+        // count from permanently including rows the download pipeline
+        // can never service.
+        sweepSentinelRows();
+
+        if (shouldRunReconcile()) {
+          await reconcileImageCacheAsync();
+        }
+        // Skip repair when offline — queuing downloads against a network
+        // we can't reach would just churn until each retry exhausts. The
+        // offline→online subscriber below picks it up when we reconnect.
+        if (!offlineModeStore.getState().offlineMode) {
+          await repairIncompleteImagesAsync();
+        }
+      } finally {
+        // Always resolve — this is a best-effort init, same contract as
+        // the previous direct-await implementation.
+        resolve();
+      }
+    });
+  });
 }
 
 // Auto-resume repair when the user toggles back online. An in-flight
@@ -316,6 +440,12 @@ export async function reconcileImageCacheAsync(): Promise<void> {
     if (droppedCount > 0 || newRows.length > 0) {
       imageCacheStore.getState().recalculateFromDb();
     }
+
+    // Timestamp the successful pass so the deferred-init throttle can
+    // skip this work on the next launch. Only written when the safety
+    // gate did NOT trip — otherwise we'd lock in a 7-day skip on a
+    // transient filesystem issue.
+    markReconcileRan(Date.now());
   }
 }
 
@@ -343,12 +473,30 @@ function ensureCacheDir(): Directory {
  * image-cache browser row badge); also fires automatically at launch
  * post-splash and on resume-from-background via AppState.
  */
-export async function repairIncompleteImagesAsync(): Promise<void> {
-  // No `isProcessing` guard: a queue already being drained by CachedImage
-  // mounts would make this a no-op exactly when the user wants it to run
-  // (startup auto-repair, Settings "Repair All"). Pushing to `downloadQueue`
-  // while workers are active is safe — they pick up new items as they drain.
-  // `processQueue()` below has its own re-entry guard.
+/**
+ * Outcome counts from a repair pass. The Settings UI surfaces this as
+ * a toast; tests assert on the individual counts.
+ */
+export interface RepairOutcome {
+  /** Incomplete coverArtIds found when the pass started (post-sentinel-sweep). */
+  queued: number;
+  /** Covers whose 4 variants are all present on disk after the pass. */
+  repaired: number;
+  /** Covers still missing one or more variants (transient errors, etc.). */
+  failed: number;
+  /** Covers whose rows were deleted — sentinel sweep + 404 + 3×-failure. */
+  removed: number;
+}
+
+export async function repairIncompleteImagesAsync(): Promise<RepairOutcome> {
+  // 1. Sentinel sweep first — these should never have rows. Their count
+  //    does NOT enter `queued` (which only covers the user-actionable
+  //    incomplete set) but it does add to `removed` so the toast can
+  //    report "2 sentinels removed".
+  const sentinelCoversCleared = sweepSentinelRows();
+
+  // 2. .tmp sweep — clean up abandoned half-writes from previous sessions
+  //    or crashes before re-queuing anything.
   const dir = ensureCacheDir();
   let subDirNames: string[];
   try {
@@ -356,8 +504,6 @@ export async function repairIncompleteImagesAsync(): Promise<void> {
   } catch {
     subDirNames = [];
   }
-
-  // --- Pass 1: sweep abandoned .tmp files ---
   for (const coverArtId of subDirNames) {
     if (!coverArtId) continue;
     const subDir = new Directory(dir, coverArtId);
@@ -374,19 +520,57 @@ export async function repairIncompleteImagesAsync(): Promise<void> {
     }
   }
 
-  // --- Pass 2: re-queue incomplete covers via SQL ---
-  const incomplete = findIncompleteCovers();
-  for (const coverArtId of incomplete) {
-    if (downloading.has(coverArtId) || downloadQueue.includes(coverArtId)) continue;
-    for (const s of IMAGE_SIZES) {
-      uriCache.delete(uriCacheKey(coverArtId, s));
-    }
-    downloadQueue.push(coverArtId);
+  // 3. Re-queue and AWAIT completion for each incomplete cover. We use
+  //    cacheAllSizes() rather than poking downloadQueue + processQueue()
+  //    directly: cacheAllSizes returns a per-coverArtId promise that
+  //    resolves in processNext's finally block via resolveWaiters(), so
+  //    Promise.all below gives us a real "repair-done" signal that the
+  //    Settings overlay can hook into.
+  const snapshot = findIncompleteCovers().filter(
+    (id) => !isSentinelCoverArtId(id),  // sentinels already handled in step 1
+  );
+  const queued = snapshot.length;
+
+  if (queued === 0) {
+    return {
+      queued: 0,
+      repaired: 0,
+      failed: 0,
+      removed: sentinelCoversCleared,
+    };
   }
 
-  if (downloadQueue.length > 0) {
-    processQueue();
+  await Promise.all(
+    snapshot.map((id) =>
+      cacheAllSizes(id).catch(() => { /* per-cover failure reported below */ }),
+    ),
+  );
+
+  // 4. Classify each original coverArtId by its post-pass state in SQL.
+  const afterIncomplete = new Set(findIncompleteCovers());
+  let repaired = 0;
+  let failed = 0;
+  let removedDuringRepair = 0;
+  for (const id of snapshot) {
+    if (afterIncomplete.has(id)) {
+      // Still incomplete — transient failure (offline mid-repair, single
+      // 5xx below the 3× threshold, etc.). Will retry on next launch.
+      failed++;
+    } else {
+      // Either all 4 variants present → repaired, or all rows gone →
+      // purged by the 404/3×-failure circuit breaker.
+      const has600 = dbHasCachedImage(id, SOURCE_SIZE);
+      if (has600) repaired++;
+      else removedDuringRepair++;
+    }
   }
+
+  return {
+    queued,
+    repaired,
+    failed,
+    removed: sentinelCoversCleared + removedDuringRepair,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -483,6 +667,10 @@ function resolveAllWaiters(): void {
  */
 export function cacheAllSizes(coverArtId: string): Promise<void> {
   if (!coverArtId) return Promise.resolve();
+  // Sentinels render from bundled assets via CachedImage — never queue
+  // them for download. Belt-and-braces guard; CachedImage already maps
+  // their coverArtId to `undefined` before calling here.
+  if (isSentinelCoverArtId(coverArtId)) return Promise.resolve();
   coverArtId = stripCoverArtSuffix(coverArtId);
 
   const allCached = IMAGE_SIZES.every(
@@ -571,6 +759,12 @@ async function processNext(): Promise<void> {
  * and generate the 300, 150, and 50px variants locally.
  */
 async function downloadAndCacheImage(coverArtId: string): Promise<void> {
+  // Defensive — sentinels should never reach the pipeline. Callers
+  // already filter via isSentinelCoverArtId() / CachedImage's mapping,
+  // but an external `repairIncompleteImagesAsync` could still hand us
+  // a stale row that slipped through.
+  if (isSentinelCoverArtId(coverArtId)) return;
+
   const subDir = new Directory(ensureCacheDir(), coverArtId);
   if (!subDir.exists) subDir.create();
 
@@ -597,12 +791,38 @@ async function downloadSourceImage(
 ): Promise<string | null> {
   await ensureCoverArtAuth();
   const url = getCoverArtUrl(coverArtId, SOURCE_SIZE);
-  if (!url) return null;
+  if (!url) {
+    // Null URL means offline, missing auth, or a sentinel slipped past
+    // the upstream guards. Don't count this against the failure budget:
+    // offline/auth issues are transient by nature and should recover
+    // when the user comes back online.
+    return null;
+  }
 
   let tmpName: string | null = null;
   try {
     const response = await fetch(url);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Definitive server signal that this cover doesn't exist
+        // (album removed, re-indexed with a new ID, etc.). Re-requesting
+        // the same URL every launch is pure churn — purge immediately
+        // so the "incomplete" count actually reaches zero. The cover
+        // will re-populate naturally if the user navigates to the
+        // album again and CachedImage calls cacheAllSizes.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[imageCacheService] 404 for coverArt=${coverArtId} — purging cache rows`,
+        );
+        purgeCoverArtRows(coverArtId);
+        return null;
+      }
+      // Other non-OK statuses (5xx, 403, etc.) count toward the failure
+      // budget. Transient issues (one 503, single timeout) don't cost
+      // anything; persistent ones eventually purge.
+      bumpSourceFailure(coverArtId);
+      return null;
+    }
 
     const contentType = response.headers.get('content-type') ?? '';
     const ext = MIME_TO_EXT[contentType.split(';')[0].trim()] ?? '.jpg';
@@ -631,6 +851,9 @@ async function downloadSourceImage(
     });
     uriCache.set(uriCacheKey(coverArtId, SOURCE_SIZE), dest.uri);
 
+    // Success — wipe any accumulated failure count.
+    sourceFailureCount.delete(coverArtId);
+
     return dest.uri;
   } catch {
     if (tmpName) {
@@ -639,7 +862,27 @@ async function downloadSourceImage(
         try { tmp.delete(); } catch { /* best-effort */ }
       }
     }
+    // Network error, JSON parse, etc. — transient; count it.
+    bumpSourceFailure(coverArtId);
     return null;
+  }
+}
+
+/**
+ * Increment the per-coverArt in-session failure counter and purge the
+ * rows if we've hit {@link MAX_SOURCE_FAILURES}. Keeps the "incomplete"
+ * count from stagnating on covers the server repeatedly refuses to
+ * serve (403, 5xx, sustained timeouts).
+ */
+function bumpSourceFailure(coverArtId: string): void {
+  const next = (sourceFailureCount.get(coverArtId) ?? 0) + 1;
+  sourceFailureCount.set(coverArtId, next);
+  if (next >= MAX_SOURCE_FAILURES) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[imageCacheService] ${next} consecutive failures for coverArt=${coverArtId} — purging cache rows`,
+    );
+    purgeCoverArtRows(coverArtId);
   }
 }
 

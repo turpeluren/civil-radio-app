@@ -264,7 +264,16 @@ export function ImageCacheBrowserScreen() {
           setItemStatus(coverArtId, 'success');
           setTimeout(() => setItemStatus(coverArtId, 'idle'), 3000);
         })
-        .catch(() => {
+        .catch((err: unknown) => {
+          // Surface the underlying reason so support can trace why a
+          // row stays stuck. The row circuit-breaker in imageCacheService
+          // will purge 404s and 3× failures; anything surviving to here
+          // is a genuine transient problem the user can retry.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[image-cache-browser] refresh failed for ${coverArtId}:`,
+            err,
+          );
           setItemStatus(coverArtId, 'error');
           setTimeout(() => setItemStatus(coverArtId, 'idle'), 3000);
         });

@@ -1,3 +1,9 @@
+// `deferredImageCacheInit` wraps its body in requestIdleCallback, which
+// Node/Jest doesn't polyfill. Fire the callback synchronously so awaiting
+// the returned Promise resolves when the wrapped work completes.
+(globalThis as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback =
+  (cb: () => void) => { cb(); };
+
 // `persistence/db.ts` imports `expo-sqlite` at module load; stub it so the
 // import doesn't hit the native bridge during tests.
 jest.mock('expo-sqlite', () => ({
@@ -107,6 +113,16 @@ jest.mock('react-native', () => ({
 
 const mockReset = jest.fn();
 const mockRecalculateFromDb = jest.fn();
+const mockGetLastReconcileMs = jest.fn(() => undefined as number | undefined);
+const mockMarkReconcileRan = jest.fn();
+
+const mockOfflineMode = { offlineMode: false };
+jest.mock('../../store/offlineModeStore', () => ({
+  offlineModeStore: {
+    getState: jest.fn(() => mockOfflineMode),
+    subscribe: jest.fn(() => () => {}), // no-op unsubscribe
+  },
+}));
 
 jest.mock('../../store/imageCacheStore', () => ({
   imageCacheStore: {
@@ -116,6 +132,8 @@ jest.mock('../../store/imageCacheStore', () => ({
       reset: mockReset,
     })),
   },
+  getLastReconcileMs: () => mockGetLastReconcileMs(),
+  markReconcileRan: (ts: number) => mockMarkReconcileRan(ts),
 }));
 
 // The service now reads stats + browser listings from `cached_images` via
@@ -216,6 +234,7 @@ import {
   deleteCachedImage,
   refreshCachedImage,
   reconcileImageCacheAsync,
+  repairIncompleteImagesAsync,
 } from '../imageCacheService';
 
 const { fetch: mockFetch } = jest.requireMock('expo/fetch') as { fetch: jest.Mock };
@@ -262,6 +281,9 @@ beforeEach(() => {
   mockBulkInsertCachedImages.mockClear();
   mockRecalculateFromDb.mockClear();
   mockReset.mockClear();
+  mockGetLastReconcileMs.mockReset();
+  mockGetLastReconcileMs.mockReturnValue(undefined);
+  mockMarkReconcileRan.mockClear();
   mockFetch.mockClear();
   mockResizeImageToFileAsync.mockClear();
   // Default: success. Target file appears in the mock FS existence map.
@@ -1071,5 +1093,421 @@ describe('deleteCachedVariant', () => {
     deleteCachedVariant('', 600);
     expect(mockDeleteCachedImageVariant).not.toHaveBeenCalled();
     expect(mockFileDeleteCalls.size).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  deferredImageCacheInit — 7-day reconcile throttle + idle deferral */
+/* ------------------------------------------------------------------ */
+
+describe('deferredImageCacheInit — throttle + idle deferral', () => {
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    // Offline flag controls whether repair runs; default is online for
+    // these tests so we can observe the repair tmp-sweep call pattern.
+    mockOfflineMode.offlineMode = false;
+  });
+
+  it('runs the reconcile pass when no previous timestamp exists', async () => {
+    mockGetLastReconcileMs.mockReturnValue(undefined);
+    mockListDirectoryAsync.mockImplementation(async (uri: string) => {
+      if (uri.endsWith('image-cache')) return ['album1'];
+      if (uri.endsWith('album1')) return [];
+      return [];
+    });
+
+    await deferredImageCacheInit();
+
+    // Reconcile walked the top-level directory (Pass 1 listing).
+    const listedUris = mockListDirectoryAsync.mock.calls.map((c) => c[0]);
+    expect(listedUris.some((uri) => uri.endsWith('image-cache'))).toBe(true);
+  });
+
+  it('skips the reconcile pass when the last run is less than 7 days ago', async () => {
+    mockGetLastReconcileMs.mockReturnValue(Date.now() - (SEVEN_DAYS_MS - 60_000));
+
+    await deferredImageCacheInit();
+
+    // Reconcile was skipped — no listings of the top-level cache dir
+    // initiated by the reconcile path. Repair still ran (single sweep),
+    // so accept at most one listing of the image-cache dir from repair.
+    const topLevelListings = mockListDirectoryAsync.mock.calls
+      .map((c) => c[0])
+      .filter((uri) => uri.endsWith('image-cache'));
+    expect(topLevelListings.length).toBeLessThanOrEqual(1);
+    // And the safety-gate short-circuit was never reached because Pass 1
+    // never ran — bulk insert was not attempted.
+    expect(mockBulkInsertCachedImages).not.toHaveBeenCalled();
+  });
+
+  it('runs the reconcile pass when the last run is 7 or more days ago', async () => {
+    mockGetLastReconcileMs.mockReturnValue(Date.now() - (SEVEN_DAYS_MS + 1));
+    mockListDirectoryAsync.mockImplementation(async (uri: string) => {
+      if (uri.endsWith('image-cache')) return ['album1'];
+      if (uri.endsWith('album1')) return ['600.jpg'];
+      return [];
+    });
+    mockFileExistsMap.set(fileMockName('album1', '600.jpg'), true);
+    mockFileSizeMap.set(fileMockName('album1', '600.jpg'), 1000);
+
+    await deferredImageCacheInit();
+
+    // Reconcile ran — the bulk insert for the observed variant fired.
+    expect(mockBulkInsertCachedImages).toHaveBeenCalled();
+  });
+
+  it('runs the repair pass regardless of whether reconcile was throttled', async () => {
+    mockGetLastReconcileMs.mockReturnValue(Date.now() - 1000); // <7d → reconcile skipped
+    mockOfflineMode.offlineMode = false;
+    mockFindIncompleteCovers.mockReturnValueOnce(['album-needs-repair']);
+
+    await deferredImageCacheInit();
+
+    // Repair's SQL query fired even though reconcile was throttled.
+    expect(mockFindIncompleteCovers).toHaveBeenCalled();
+  });
+
+  it('skips repair when offline (unchanged legacy behaviour)', async () => {
+    mockGetLastReconcileMs.mockReturnValue(Date.now() - 1000);
+    mockOfflineMode.offlineMode = true;
+
+    await deferredImageCacheInit();
+
+    expect(mockFindIncompleteCovers).not.toHaveBeenCalled();
+  });
+
+  it('writes the timestamp on a successful reconcile via deferred init', async () => {
+    mockGetLastReconcileMs.mockReturnValue(undefined);
+    mockListDirectoryAsync.mockImplementation(async (uri: string) => {
+      if (uri.endsWith('image-cache')) return [];
+      return [];
+    });
+
+    await deferredImageCacheInit();
+
+    expect(mockMarkReconcileRan).toHaveBeenCalledTimes(1);
+    const writtenTs = mockMarkReconcileRan.mock.calls[0][0] as number;
+    expect(typeof writtenTs).toBe('number');
+    expect(writtenTs).toBeGreaterThan(0);
+  });
+
+  it('always runs reconcile and writes the timestamp on direct (user-initiated) calls', async () => {
+    // Simulate "last run was just now" — the deferred path would skip.
+    // A direct call must run anyway, matching the Settings "Scan" button
+    // contract.
+    mockGetLastReconcileMs.mockReturnValue(Date.now() - 1000);
+    mockListDirectoryAsync.mockImplementation(async (uri: string) => {
+      if (uri.endsWith('image-cache')) return ['album1'];
+      if (uri.endsWith('album1')) return ['600.jpg'];
+      return [];
+    });
+    mockFileExistsMap.set(fileMockName('album1', '600.jpg'), true);
+    mockFileSizeMap.set(fileMockName('album1', '600.jpg'), 1000);
+
+    await reconcileImageCacheAsync();
+
+    expect(mockBulkInsertCachedImages).toHaveBeenCalled();
+    expect(mockMarkReconcileRan).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT write the timestamp when the safety gate trips', async () => {
+    mockGetLastReconcileMs.mockReturnValue(undefined);
+    // Safety gate fires when newRows.length > 100 AND preAggregate.fileCount > 50.
+    // Seed >50 pre-existing DB rows, then produce >100 new on-disk files.
+    mockHydrateImageCacheAggregates.mockReturnValue({
+      totalBytes: 1000,
+      fileCount: 60,
+      imageCount: 30,
+      incompleteCount: 0,
+    });
+    const albumIds: string[] = [];
+    for (let i = 0; i < 105; i++) albumIds.push(`album${i}`);
+
+    mockListDirectoryAsync.mockImplementation(async (uri: string) => {
+      if (uri.endsWith('image-cache')) return albumIds;
+      const match = albumIds.find((id) => uri.endsWith(id));
+      if (match) return ['600.jpg'];
+      return [];
+    });
+    for (const id of albumIds) {
+      mockFileExistsMap.set(fileMockName(id, '600.jpg'), true);
+      mockFileSizeMap.set(fileMockName(id, '600.jpg'), 1000);
+    }
+    // Silence the safety-gate warn.
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await reconcileImageCacheAsync();
+
+    // Bulk insert was NOT called (safety gate skipped it).
+    expect(mockBulkInsertCachedImages).not.toHaveBeenCalled();
+    // Timestamp was NOT written — we want the next launch to retry.
+    expect(mockMarkReconcileRan).not.toHaveBeenCalled();
+  });
+
+  it('is resilient when requestIdleCallback never fires (promise just never resolves)', async () => {
+    // Replace the test-file polyfill for this one case with a no-op so the
+    // promise should never resolve. Use Promise.race against a short timeout
+    // to confirm the behaviour.
+    const originalRIC = (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
+    (globalThis as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback =
+      () => { /* never fires */ };
+    try {
+      const result = await Promise.race([
+        deferredImageCacheInit().then(() => 'resolved'),
+        new Promise<string>((r) => setTimeout(() => r('pending'), 50)),
+      ]);
+      expect(result).toBe('pending');
+      // Reconcile was not touched because the idle callback never fired.
+      expect(mockBulkInsertCachedImages).not.toHaveBeenCalled();
+      expect(mockMarkReconcileRan).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = originalRIC;
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Sentinel sweep + guards                                            */
+/* ------------------------------------------------------------------ */
+
+describe('sentinel cover-art IDs — sweep + guards', () => {
+  const STARRED = '__starred_cover__';
+  const VARIOUS = '__various_artists_cover__';
+
+  /** Seed all 4 sentinel variants so they look "complete" in SQL. */
+  function seedSentinelComplete(id: string): void {
+    for (const size of [50, 150, 300, 600]) {
+      seedDbRow({ coverArtId: id, size });
+    }
+  }
+
+  it('deferredImageCacheInit sweeps both sentinel IDs even offline', async () => {
+    mockOfflineMode.offlineMode = true;
+    seedSentinelComplete(STARRED);
+    seedSentinelComplete(VARIOUS);
+    expect(mockDbRows.size).toBe(8);
+
+    await deferredImageCacheInit();
+
+    // Both sentinels purged via deleteCachedImagesForCoverArt; no rows left.
+    const remaining = [...mockDbRows.values()].map((r) => r.coverArtId);
+    expect(remaining).not.toContain(STARRED);
+    expect(remaining).not.toContain(VARIOUS);
+    mockOfflineMode.offlineMode = false;
+  });
+
+  it('repairIncompleteImagesAsync sweeps sentinels before classifying outcomes', async () => {
+    // 2 sentinel rows (incomplete) + 1 real incomplete that will fail to fetch.
+    seedDbRow({ coverArtId: STARRED, size: 600 });
+    seedDbRow({ coverArtId: VARIOUS, size: 600 });
+    // A real album row — mock fetch returns 500 so the download fails
+    // (no 3× yet — just one attempt in this pass).
+    seedDbRow({ coverArtId: 'al-realbum', size: 600 });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    const outcome = await repairIncompleteImagesAsync();
+
+    // Sentinels don't show up in `queued` (they're swept before the snapshot).
+    expect(outcome.queued).toBe(1);
+    // The real album failed to fetch → still incomplete → failed.
+    expect(outcome.failed).toBe(1);
+    // Both sentinel coverArtIds removed (each had 1 file → 1 coverArtId each).
+    expect(outcome.removed).toBe(2);
+    expect(outcome.repaired).toBe(0);
+  });
+
+  it('cacheAllSizes is a no-op for sentinel IDs — no queue push, no fetch', async () => {
+    await cacheAllSizes(STARRED);
+    await cacheAllSizes(VARIOUS);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockUpsertCachedImage).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Source-download circuit breaker                                    */
+/* ------------------------------------------------------------------ */
+
+describe('downloadSourceImage — 404 and 3× failure circuit breaker', () => {
+  function fileName(coverArtId: string, size: number, ext = 'jpg'): string {
+    return fileMockName(coverArtId, `${size}.${ext}`);
+  }
+
+  it('purges cache rows immediately when the server returns 404', async () => {
+    seedDbRow({ coverArtId: 'dead-album', size: 600 });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    await cacheAllSizes('dead-album');
+
+    expect(mockDeleteCachedImagesForCoverArt).toHaveBeenCalledWith('dead-album');
+    expect(mockDbRows.has(mockDbKey('dead-album', 600))).toBe(false);
+  });
+
+  it('purges cache rows after 3 consecutive non-404 failures', async () => {
+    seedDbRow({ coverArtId: 'flaky-album', size: 600 });
+
+    // Three 500 responses — the 3rd trips the breaker.
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    await cacheAllSizes('flaky-album');
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('flaky-album');
+    await cacheAllSizes('flaky-album');
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('flaky-album');
+    await cacheAllSizes('flaky-album');
+    expect(mockDeleteCachedImagesForCoverArt).toHaveBeenCalledWith('flaky-album');
+  });
+
+  it('resets the failure counter after a successful download', async () => {
+    seedDbRow({ coverArtId: 'sometimes-album', size: 600 });
+
+    /**
+     * Before each cacheAllSizes call, purge any on-disk variants so
+     * getCachedImageUri returns null for all 4 sizes → cacheAllSizes
+     * always takes the download path (not the all-cached short-circuit).
+     */
+    const purgeFs = () => {
+      for (const size of [50, 150, 300, 600]) {
+        for (const ext of ['jpg', 'png', 'webp']) {
+          mockFileExistsMap.delete(fileName('sometimes-album', size, ext));
+        }
+        evictUriCacheEntry('sometimes-album', size);
+      }
+    };
+
+    // Have the success step's fetch return bytes, and the successful
+    // resize step write out the variant files. Any call to fetch after
+    // the one success (below) falls into the persistent 500 default.
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    mockResizeImageToFileAsync.mockImplementation(async (_src: string, targetUri: string) => {
+      mockFileExistsMap.set(targetUri.replace(/^file:\/\//, ''), true);
+    });
+
+    purgeFs();
+    await cacheAllSizes('sometimes-album');  // fail 1 (counter → 1)
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('sometimes-album');
+
+    purgeFs();
+    await cacheAllSizes('sometimes-album');  // fail 2 (counter → 2)
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('sometimes-album');
+
+    // One-shot success: consumes the next fetch only.
+    purgeFs();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(128),
+    });
+    await cacheAllSizes('sometimes-album');  // success (counter reset to 0)
+
+    // Back to the persistent 500 default for the next 3 tries.
+    purgeFs();
+    await cacheAllSizes('sometimes-album');  // fail 1 of fresh run (counter → 1, not 3)
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('sometimes-album');
+
+    purgeFs();
+    await cacheAllSizes('sometimes-album');  // fail 2 (counter → 2)
+    expect(mockDeleteCachedImagesForCoverArt).not.toHaveBeenCalledWith('sometimes-album');
+
+    purgeFs();
+    await cacheAllSizes('sometimes-album');  // fail 3 → breaker trips
+    expect(mockDeleteCachedImagesForCoverArt).toHaveBeenCalledWith('sometimes-album');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  repairIncompleteImagesAsync — outcome classification                */
+/* ------------------------------------------------------------------ */
+
+describe('repairIncompleteImagesAsync — outcome counts', () => {
+  function fileName(coverArtId: string, size: number, ext = 'jpg'): string {
+    return fileMockName(coverArtId, `${size}.${ext}`);
+  }
+
+  it('returns {0,0,0,0} for an empty incomplete set', async () => {
+    const outcome = await repairIncompleteImagesAsync();
+    expect(outcome).toEqual({ queued: 0, repaired: 0, failed: 0, removed: 0 });
+  });
+
+  it('counts a successful repair as repaired, not failed', async () => {
+    // Seed a row so the cover appears incomplete (1 of 4).
+    seedDbRow({ coverArtId: 'album-ok', size: 600 });
+
+    // Mock a successful fetch — the download pipeline upserts the 4
+    // variants and the in-memory DB gets the full set.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(128),
+    });
+    // After the fetch, the 600 source is written; variants (300/150/50)
+    // are generated by expo-image-resize (mocked to succeed). The mock
+    // resize adds file-existence entries, and the upsertCachedImage
+    // calls during the resize loop add SQL rows.
+    mockResizeImageToFileAsync.mockImplementation(async (_src: string, targetUri: string) => {
+      mockFileExistsMap.set(targetUri.replace(/^file:\/\//, ''), true);
+      mockFileSizeMap.set(targetUri.replace(/^file:\/\//, ''), 64);
+    });
+
+    const outcome = await repairIncompleteImagesAsync();
+
+    expect(outcome.queued).toBe(1);
+    expect(outcome.repaired).toBe(1);
+    expect(outcome.failed).toBe(0);
+    expect(outcome.removed).toBe(0);
+  });
+
+  it('counts a 404 as removed, not failed', async () => {
+    seedDbRow({ coverArtId: 'album-404', size: 600 });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    const outcome = await repairIncompleteImagesAsync();
+
+    expect(outcome.queued).toBe(1);
+    expect(outcome.removed).toBe(1);
+    expect(outcome.repaired).toBe(0);
+    expect(outcome.failed).toBe(0);
+  });
+
+  it('counts a single transient failure as failed (below the 3× threshold)', async () => {
+    seedDbRow({ coverArtId: 'album-flaky', size: 600 });
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+
+    const outcome = await repairIncompleteImagesAsync();
+
+    expect(outcome.queued).toBe(1);
+    expect(outcome.failed).toBe(1);
+    expect(outcome.removed).toBe(0);
+    expect(outcome.repaired).toBe(0);
   });
 });

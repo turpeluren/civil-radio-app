@@ -23,7 +23,11 @@ jest.mock('expo-sqlite', () => ({
 }));
 
 import { kvStorage } from '../persistence/__mocks__/kvStorage';
-import { imageCacheStore } from '../imageCacheStore';
+import {
+  getLastReconcileMs,
+  imageCacheStore,
+  markReconcileRan,
+} from '../imageCacheStore';
 
 beforeEach(() => {
   mockAggregates = { totalBytes: 0, fileCount: 0, imageCount: 0, incompleteCount: 0 };
@@ -135,5 +139,65 @@ describe('imageCacheStore — setMaxConcurrentImageDownloads', () => {
     expect(kvStorage.getItem('substreamer-image-cache-settings')).toBe(
       JSON.stringify({ maxConcurrentImageDownloads: 1 }),
     );
+  });
+
+  it('preserves lastReconcileMs when the concurrency limit is changed', () => {
+    markReconcileRan(1700000000000);
+    imageCacheStore.getState().setMaxConcurrentImageDownloads(3);
+
+    expect(getLastReconcileMs()).toBe(1700000000000);
+    const persisted = JSON.parse(
+      kvStorage.getItem('substreamer-image-cache-settings') as string,
+    );
+    expect(persisted).toEqual({
+      maxConcurrentImageDownloads: 3,
+      lastReconcileMs: 1700000000000,
+    });
+  });
+});
+
+describe('imageCacheStore — reconcile timestamp helpers', () => {
+  it('returns undefined when no reconcile has ever run', () => {
+    expect(getLastReconcileMs()).toBeUndefined();
+  });
+
+  it('persists and reads back a reconcile timestamp', () => {
+    markReconcileRan(1700000000000);
+    expect(getLastReconcileMs()).toBe(1700000000000);
+  });
+
+  it('updates the timestamp on subsequent calls', () => {
+    markReconcileRan(1700000000000);
+    markReconcileRan(1700000123456);
+    expect(getLastReconcileMs()).toBe(1700000123456);
+  });
+
+  it('preserves an existing maxConcurrentImageDownloads setting', () => {
+    imageCacheStore.getState().setMaxConcurrentImageDownloads(10);
+    markReconcileRan(1700000000000);
+
+    const persisted = JSON.parse(
+      kvStorage.getItem('substreamer-image-cache-settings') as string,
+    );
+    expect(persisted).toEqual({
+      maxConcurrentImageDownloads: 10,
+      lastReconcileMs: 1700000000000,
+    });
+  });
+
+  it('ignores malformed timestamp values in the persisted blob', () => {
+    kvStorage.setItem(
+      'substreamer-image-cache-settings',
+      JSON.stringify({ maxConcurrentImageDownloads: 5, lastReconcileMs: 'not-a-number' }),
+    );
+    expect(getLastReconcileMs()).toBeUndefined();
+  });
+
+  it('ignores non-positive timestamps', () => {
+    kvStorage.setItem(
+      'substreamer-image-cache-settings',
+      JSON.stringify({ maxConcurrentImageDownloads: 5, lastReconcileMs: 0 }),
+    );
+    expect(getLastReconcileMs()).toBeUndefined();
   });
 });

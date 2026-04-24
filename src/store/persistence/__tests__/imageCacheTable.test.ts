@@ -335,6 +335,21 @@ describe('imageCacheTable — listCachedImagesForBrowser', () => {
     const entries = listCachedImagesForBrowser('incomplete');
     expect(entries.map((e) => e.coverArtId)).toEqual(['partial']);
   });
+
+  it('hides sentinel coverArtIds from all filters even if rows are present', () => {
+    // Simulate stale rows from an older app version where the sentinel
+    // IDs were (incorrectly) routed through the disk cache.
+    upsertCachedImage(seedRow({ coverArtId: '__starred_cover__', size: 600 }));
+    upsertCachedImage(seedRow({ coverArtId: '__various_artists_cover__', size: 600 }));
+
+    const all = listCachedImagesForBrowser('all').map((e) => e.coverArtId);
+    expect(all).not.toContain('__starred_cover__');
+    expect(all).not.toContain('__various_artists_cover__');
+
+    const incomplete = listCachedImagesForBrowser('incomplete').map((e) => e.coverArtId);
+    expect(incomplete).not.toContain('__starred_cover__');
+    expect(incomplete).not.toContain('__various_artists_cover__');
+  });
 });
 
 describe('imageCacheTable — bulkInsertCachedImages', () => {
