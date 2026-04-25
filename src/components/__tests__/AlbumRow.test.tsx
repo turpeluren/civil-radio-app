@@ -56,8 +56,11 @@ jest.mock('../DownloadedIcon', () => {
 });
 
 jest.mock('../StarRating', () => {
-  const { View } = require('react-native');
-  return { StarRatingDisplay: () => <View /> };
+  const { Text, View } = require('react-native');
+  return {
+    StarRatingDisplay: () => <View />,
+    CompactRatingBadge: ({ rating }: { rating: number }) => <Text>★{rating}</Text>,
+  };
 });
 
 jest.mock('../SwipeableRow', () => {

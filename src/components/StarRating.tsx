@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { memo, useCallback, useEffect, useRef } from 'react';
-import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -48,6 +48,47 @@ export const StarRatingDisplay = memo(function StarRatingDisplay({
     );
   }
   return <View style={styles.displayRow}>{stars}</View>;
+});
+
+/* ------------------------------------------------------------------ */
+/*  CompactRatingBadge – single star + integer for narrow contexts     */
+/* ------------------------------------------------------------------ */
+
+interface CompactRatingBadgeProps {
+  rating: number;
+  /** Font size for both the icon and the digit. Defaults to 12. */
+  size?: number;
+  /** Star icon colour. Defaults to the caller-provided primary. */
+  iconColor: string;
+  /** Digit colour. Defaults to `iconColor` if omitted. */
+  textColor?: string;
+}
+
+/**
+ * Compact `★ N` rating glyph for list rows and grid card overlays.
+ * Matches the IMDB / Goodreads / Plexamp / foobar2000 convention. Detail
+ * surfaces (`SetRatingSheet`, `MoreOptionsSheet`, etc.) keep the full
+ * 5-star strip via `StarRatingDisplay`.
+ */
+export const CompactRatingBadge = memo(function CompactRatingBadge({
+  rating,
+  size = 12,
+  iconColor,
+  textColor,
+}: CompactRatingBadgeProps) {
+  return (
+    <View style={styles.badgeRow}>
+      <Ionicons name="star" size={size} color={iconColor} />
+      <Text
+        style={[
+          styles.badgeText,
+          { fontSize: size, color: textColor ?? iconColor },
+        ]}
+      >
+        {rating}
+      </Text>
+    </View>
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -197,6 +238,14 @@ const styles = StyleSheet.create({
   },
   displayStar: {
     marginRight: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  badgeText: {
+    marginLeft: 3,
+    fontVariant: ['tabular-nums'],
   },
   inputContainer: {
     alignSelf: 'center',

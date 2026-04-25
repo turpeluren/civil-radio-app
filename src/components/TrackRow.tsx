@@ -14,8 +14,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { DownloadedIcon } from './DownloadedIcon';
-import { StarRatingDisplay } from './StarRating';
+import { RowMetaLine } from './RowMetaLine';
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
@@ -48,7 +47,7 @@ export const TrackRow = memo(function TrackRow({ track, trackNumber, colors, onP
   const { t } = useTranslation();
   const duration = track.duration != null ? formatTrackDuration(track.duration) : '—';
   const starred = useIsStarred('song', track.id);
-  const downloaded = useDownloadStatus('song', track.id) === 'complete';
+  const downloadStatus = useDownloadStatus('song', track.id);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const rating = useRating(track.id, track.userRating);
 
@@ -148,23 +147,18 @@ export const TrackRow = memo(function TrackRow({ track, trackNumber, colors, onP
           </View>
         </View>
         <View style={styles.trackRight}>
-          {rating > 0 && (
-            <StarRatingDisplay
-              rating={rating}
-              size={12}
-              color={colors.primary}
-              emptyColor={colors.primary}
-            />
-          )}
-          {downloaded && (
-            <DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" />
-          )}
-          {starred && (
-            <Ionicons name="heart" size={14} color={colors.red} />
-          )}
-          <Text style={[styles.trackDuration, { color: colors.textSecondary }]}>
-            {duration}
-          </Text>
+          <RowMetaLine
+            slots={['rating', 'download', 'heart', 'duration']}
+            rating={rating}
+            starred={starred}
+            downloadStatus={
+              downloadStatus === 'complete' || downloadStatus === 'partial'
+                ? downloadStatus
+                : 'none'
+            }
+            durationText={duration}
+            durationFontSize={14}
+          />
         </View>
       </View>
     </SwipeableRow>
@@ -224,12 +218,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   trackRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginLeft: 12,
-  },
-  trackDuration: {
-    fontSize: 14,
   },
 });

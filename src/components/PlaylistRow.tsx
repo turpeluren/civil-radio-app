@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { DownloadedIcon } from './DownloadedIcon';
+import { RowMetaLine } from './RowMetaLine';
 import { closeOpenRow, SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { ThemedAlert } from './ThemedAlert';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
@@ -28,7 +28,7 @@ export const PlaylistRow = memo(function PlaylistRow({ playlist }: { playlist: P
   const { t } = useTranslation();
   const router = useRouter();
   const { alert, alertProps } = useThemedAlert();
-  const downloaded = useDownloadStatus('playlist', playlist.id) === 'complete';
+  const downloadStatus = useDownloadStatus('playlist', playlist.id);
 
   const onPress = useCallback(() => {
     router.push(`/playlist/${playlist.id}`);
@@ -110,19 +110,26 @@ export const PlaylistRow = memo(function PlaylistRow({ playlist }: { playlist: P
               {playlist.name}
             </Text>
             <View style={styles.meta}>
-              <View style={styles.metaLeft}>
-                <Ionicons name="musical-notes-outline" size={14} color={colors.primary} />
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  {t('trackCount', { count: playlist.songCount })}
-                </Text>
-              </View>
-              {downloaded && <View style={styles.indicator}><DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" /></View>}
-              <View style={styles.metaRight}>
-                <Ionicons name="time-outline" size={14} color={colors.primary} />
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  {formatCompactDuration(playlist.duration)}
-                </Text>
-              </View>
+              <RowMetaLine
+                leading={
+                  <>
+                    <Ionicons name="musical-notes-outline" size={14} color={colors.primary} />
+                    <Text
+                      style={[styles.metaText, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {t('trackCount', { count: playlist.songCount })}
+                    </Text>
+                  </>
+                }
+                slots={['download', 'heart', 'duration']}
+                downloadStatus={
+                  downloadStatus === 'complete' || downloadStatus === 'partial'
+                    ? downloadStatus
+                    : 'none'
+                }
+                durationText={formatCompactDuration(playlist.duration)}
+              />
             </View>
           </View>
         </View>
@@ -152,25 +159,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  indicator: {
-    marginLeft: 6,
-  },
   meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginTop: 10,
-  },
-  metaLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 0,
-  },
-  metaRight: {
-    flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
   },
   metaText: {
     fontSize: 12,

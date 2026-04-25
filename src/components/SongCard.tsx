@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { CachedImage } from './CachedImage';
 import { DownloadedIcon } from './DownloadedIcon';
 import { LongPressable } from './LongPressable';
-import { StarRatingDisplay } from './StarRating';
+import { CompactRatingBadge } from './StarRating';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useRating } from '../hooks/useRating';
@@ -53,7 +53,7 @@ export const SongCard = memo(function SongCard({
           )}
           {rating > 0 && (
             <View style={styles.ratingOverlay}>
-              <StarRatingDisplay rating={rating} size={11} color={colors.primary} emptyColor={colors.primary} />
+              <CompactRatingBadge rating={rating} size={11} iconColor={colors.primary} />
             </View>
           )}
         </View>
