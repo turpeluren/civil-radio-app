@@ -1,5 +1,22 @@
 # Changelog
 
+## [8.0.56] - 2026-04-25
+
+- docs(rules): consolidate project rules into AGENTS.md
+- fix(android): MIUI/Redmi notification controls (re #87)
+- fix(perf): cache Intl.Collator/DateTimeFormat to avoid Hermes #867 ANR
+- android: edge-to-edge safe area handling improvement
+- feat(library): article-stripped sort with server-supplied article list
+- fix(chrome): hard-mount banner only when queue has work; don't cache null URIs
+- feat(rows): standardise list-row trailing meta into fixed-width slots
+- fix(home): auto-scale listening time to days so heavy totals fit the column
+- feat(downloads): unified BottomChrome; remove routine playback toasts
+- fix(downloads): hide banner when queue has only ghost-status rows
+- feat(music-cache): preserve full Subsonic envelope; backfill partial albums
+- fix(image-cache): guarantee placeholder, simplify CachedImage, sanitise disc IDs
+- fix(image-cache): unstick incomplete rows and surface repair feedback
+- fix(player): bulletproof queue resume on cold start
+- ci: update coverage badge [skip ci]
 ## [8.0.55] - 2026-04-22
 
 - ci: update coverage badge [skip ci]
