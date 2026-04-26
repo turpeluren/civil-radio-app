@@ -13,6 +13,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { listDirectoryAsync } from 'expo-async-fs';
 import { Platform } from 'react-native';
 
+import { defaultCollator } from '../utils/intl';
+
 import { migrateV3BackupMetas } from './backupService';
 import { getAllSongAlbumIds } from '../store/persistence/detailTables';
 import {
@@ -20,13 +22,17 @@ import {
   type CompletedScrobble,
 } from '../store/completedScrobbleStore';
 import { mbidOverrideStore, type MbidOverride } from '../store/mbidOverrideStore';
+import { type PendingScrobble } from '../store/pendingScrobbleStore';
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { localeStore } from '../store/localeStore';
 import {
+  hydrateAlbumDetails,
   upsertAlbumDetail,
   upsertSongsForAlbum,
 } from '../store/persistence/detailTables';
+import { getDb } from '../store/persistence/db';
 import {
+  addColumnIfMissing,
   bulkReplace as bulkReplaceMusicCache,
   countCachedItems as countCachedItemsRow,
   countCachedItemSongs as countCachedItemSongsRow,
@@ -37,6 +43,7 @@ import {
   type CachedSongRow,
   type DownloadQueueRow,
 } from '../store/persistence/musicCacheTables';
+import { replaceAllPendingScrobbles } from '../store/persistence/pendingScrobbleTable';
 import { replaceAllScrobbles } from '../store/persistence/scrobbleTable';
 import {
   bulkInsertCachedImages,
@@ -535,6 +542,513 @@ async function stampV3BackupsFromStoredAuth(
   } else {
     log('No v3 backup files found — skipping.');
   }
+}
+
+/**
+ * Migration 18 body. Scans every `cached_songs` row with a NULL `raw_json`
+ * and fills it from the richest local source available, in this priority:
+ *
+ *   1. `album_details` table (Migration 12) — full `AlbumWithSongsID3.song[]`.
+ *   2. `substreamer-playlist-details` blob — `PlaylistWithSongs.entry[]`.
+ *   3. `substreamer-favorites` blob — starred `Child[]`.
+ *
+ * Songs without a local source remain NULL. A future network-refresh
+ * migration can target them.
+ *
+ * All UPDATEs run inside a single `withTransactionSync` for atomicity.
+ */
+async function backfillCachedSongEnvelopes(
+  log: (message: string) => void,
+): Promise<void> {
+  const db = getDb();
+  if (!db) {
+    log('DB unavailable — skipping song-envelope backfill.');
+    return;
+  }
+
+  // Fast path: if no rows need backfilling, we don't have to read any blobs.
+  const pending = db.getAllSync<{ song_id: string }>(
+    'SELECT song_id FROM cached_songs WHERE raw_json IS NULL;',
+  );
+  if (pending.length === 0) {
+    log('All cached_songs rows already carry an envelope — nothing to backfill.');
+    return;
+  }
+
+  const pendingIds = new Set(pending.map((r) => r.song_id));
+
+  // Build a lookup map: songId -> full Child. We only populate entries for
+  // songs that are pending — no point holding envelopes we won't use.
+  const lookup = new Map<string, { child: unknown; source: 'album' | 'playlist' | 'favorites' }>();
+
+  // Source 1: album_details rows.
+  try {
+    const albums = hydrateAlbumDetails();
+    for (const entry of Object.values(albums)) {
+      const songs = entry?.album?.song;
+      if (!Array.isArray(songs)) continue;
+      for (const s of songs) {
+        if (!s?.id || lookup.has(s.id) || !pendingIds.has(s.id)) continue;
+        lookup.set(s.id, { child: s, source: 'album' });
+      }
+    }
+  } catch (e) {
+    log(`[diag] album-details source threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Source 2: substreamer-playlist-details blob.
+  try {
+    const raw = await kvStorage.getItem('substreamer-playlist-details');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const playlists = parsed?.state?.playlists ?? {};
+      for (const entry of Object.values(playlists)) {
+        const pl = (entry as any)?.playlist;
+        const songs: any[] = Array.isArray(pl?.entry) ? pl.entry : [];
+        for (const s of songs) {
+          if (!s?.id || lookup.has(s.id) || !pendingIds.has(s.id)) continue;
+          lookup.set(s.id, { child: s, source: 'playlist' });
+        }
+      }
+    }
+  } catch (e) {
+    log(`[diag] playlist-details source threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Source 3: substreamer-favorites blob.
+  try {
+    const raw = await kvStorage.getItem('substreamer-favorites');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const songs: any[] = Array.isArray(parsed?.state?.songs) ? parsed.state.songs : [];
+      for (const s of songs) {
+        if (!s?.id || lookup.has(s.id) || !pendingIds.has(s.id)) continue;
+        lookup.set(s.id, { child: s, source: 'favorites' });
+      }
+    }
+  } catch (e) {
+    log(`[diag] favorites source threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  let viaAlbum = 0;
+  let viaPlaylist = 0;
+  let viaFavorites = 0;
+  try {
+    db.withTransactionSync(() => {
+      for (const [songId, { child, source }] of lookup) {
+        const json = JSON.stringify(child);
+        db.runSync(
+          'UPDATE cached_songs SET raw_json = ? WHERE song_id = ? AND raw_json IS NULL;',
+          [json, songId],
+        );
+        if (source === 'album') viaAlbum++;
+        else if (source === 'playlist') viaPlaylist++;
+        else viaFavorites++;
+      }
+    });
+  } catch (e) {
+    log(`[diag] UPDATE transaction threw: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+
+  const totalBackfilled = viaAlbum + viaPlaylist + viaFavorites;
+  const stillNull = pending.length - totalBackfilled;
+  log(
+    `Backfilled ${totalBackfilled} of ${pending.length} cached_songs envelope(s) ` +
+      `(${viaAlbum} via album_details, ${viaPlaylist} via playlist-details, ` +
+      `${viaFavorites} via favorites). ${stillNull} row(s) remain without an envelope.`,
+  );
+}
+
+/**
+ * Migration 19 — Pass A. Fill `cached_items.raw_json` for every `album` and
+ * `playlist` item whose envelope is NULL, using the same local caches
+ * Migration 18 used: the `album_details` SQL table for albums, the
+ * `substreamer-playlist-details` blob for playlists. Songs live in
+ * `cached_songs.raw_json` so we strip `.song[]` / `.entry[]` from the
+ * envelope before writing.
+ *
+ * `favorites` (__starred__) and `song` items have no natural envelope
+ * and are skipped.
+ */
+async function backfillCachedItemEnvelopes(
+  log: (message: string) => void,
+): Promise<void> {
+  const db = getDb();
+  if (!db) {
+    log('DB unavailable — skipping item-envelope backfill.');
+    return;
+  }
+
+  const pending = db.getAllSync<{ item_id: string; type: string }>(
+    "SELECT item_id, type FROM cached_items WHERE raw_json IS NULL AND type IN ('album', 'playlist');",
+  );
+  if (pending.length === 0) {
+    log('All cached_items rows already carry an envelope — nothing to backfill.');
+    return;
+  }
+
+  // Pre-build lookups once so we don't re-parse the playlist blob per row.
+  let albumDetails: Record<string, { album: unknown; retrievedAt: number }> = {};
+  try {
+    albumDetails = hydrateAlbumDetails();
+  } catch (e) {
+    log(`[diag] album_details hydrate threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  let playlistBlob: Record<string, { playlist: unknown }> = {};
+  try {
+    const raw = await kvStorage.getItem('substreamer-playlist-details');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const source = parsed?.state?.playlists;
+      if (source && typeof source === 'object') {
+        playlistBlob = source as Record<string, { playlist: unknown }>;
+      }
+    }
+  } catch (e) {
+    log(`[diag] playlist-details blob read threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  let albumsDone = 0;
+  let playlistsDone = 0;
+  let skipped = 0;
+
+  try {
+    db.withTransactionSync(() => {
+      for (const row of pending) {
+        let envelope: string | null = null;
+        if (row.type === 'album') {
+          const album = albumDetails[row.item_id]?.album as any;
+          if (album) {
+            const { song: _s, ...meta } = album;
+            envelope = JSON.stringify(meta);
+          }
+        } else if (row.type === 'playlist') {
+          const pl = playlistBlob[row.item_id]?.playlist as any;
+          if (pl) {
+            const { entry: _e, ...meta } = pl;
+            envelope = JSON.stringify(meta);
+          }
+        }
+        if (envelope !== null) {
+          db.runSync(
+            'UPDATE cached_items SET raw_json = ? WHERE item_id = ? AND raw_json IS NULL;',
+            [envelope, row.item_id],
+          );
+          if (row.type === 'album') albumsDone++;
+          else playlistsDone++;
+        } else {
+          skipped++;
+        }
+      }
+    });
+  } catch (e) {
+    log(`[diag] UPDATE transaction threw: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+
+  log(
+    `Backfilled ${albumsDone} album + ${playlistsDone} playlist envelope(s); ` +
+      `${skipped} row(s) had no local source and remain NULL.`,
+  );
+}
+
+/**
+ * Migration 19 — Pass B. The Migration 14 path wrote the v1 7-field `track`
+ * shape into `download_queue.songs_json`. Replace those lean entries with
+ * the full Subsonic `Child` from `cached_songs.raw_json` wherever we can.
+ *
+ * A queue row whose entries already look full (cheapest sentinel: any
+ * entry has `isDir`, a required field on the API type) is skipped — those
+ * came from a post-bfe1886 runtime write and are already correct.
+ */
+async function repairDownloadQueueSongsJson(
+  log: (message: string) => void,
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+
+  const rows = db.getAllSync<{ queue_id: string; songs_json: string }>(
+    'SELECT queue_id, songs_json FROM download_queue;',
+  );
+  if (rows.length === 0) {
+    log('download_queue empty — no repair needed.');
+    return;
+  }
+
+  // Preload cached_songs.raw_json keyed by id so each queue row's scan is O(n).
+  const songEnvelopes = new Map<string, unknown>();
+  try {
+    const songRows = db.getAllSync<{ song_id: string; raw_json: string | null }>(
+      'SELECT song_id, raw_json FROM cached_songs WHERE raw_json IS NOT NULL;',
+    );
+    for (const r of songRows) {
+      if (!r.raw_json) continue;
+      try {
+        songEnvelopes.set(r.song_id, JSON.parse(r.raw_json));
+      } catch {
+        /* skip malformed */
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  let repaired = 0;
+  let alreadyFull = 0;
+  let malformed = 0;
+
+  try {
+    db.withTransactionSync(() => {
+      for (const row of rows) {
+        let entries: any[];
+        try {
+          entries = JSON.parse(row.songs_json);
+        } catch {
+          malformed++;
+          continue;
+        }
+        if (!Array.isArray(entries) || entries.length === 0) continue;
+        if (entries.every((e) => e && typeof e.isDir === 'boolean')) {
+          // Every entry already has the API-required `isDir` flag — this is
+          // a post-migration-14 write with full envelopes. Leave alone.
+          alreadyFull++;
+          continue;
+        }
+
+        let changed = false;
+        const repairedEntries = entries.map((e) => {
+          if (!e?.id) return e;
+          if (typeof e.isDir === 'boolean') return e; // already full
+          const full = songEnvelopes.get(e.id);
+          if (full) {
+            changed = true;
+            return full;
+          }
+          return e;
+        });
+
+        if (changed) {
+          db.runSync(
+            'UPDATE download_queue SET songs_json = ? WHERE queue_id = ?;',
+            [JSON.stringify(repairedEntries), row.queue_id],
+          );
+          repaired++;
+        }
+      }
+    });
+  } catch (e) {
+    log(`[diag] UPDATE transaction threw: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+
+  log(
+    `download_queue repair: ${repaired} row(s) rewritten, ` +
+      `${alreadyFull} already full, ${malformed} malformed.`,
+  );
+}
+
+/**
+ * Migration 20 body. Scans `cached_songs` for every distinct `album_id`
+ * (skipping the `_unknown` sentinel), and for each one that does NOT have
+ * a corresponding `type='album'` `cached_items` row creates one with all
+ * edges pointing at the downloaded songs for that album.
+ *
+ * Metadata preference, richest first:
+ *   1. `album_details` — authoritative `AlbumID3` envelope (full metadata
+ *      + `songCount`).
+ *   2. First cached_song's `raw_json` (Child envelope) — gives us `.album`
+ *      name, `.artist`, `.coverArt`, and (indirectly) a per-track number.
+ *   3. Hot columns on `cached_songs` — `album`, `artist`, `coverArt`.
+ *
+ * Edges are inserted in album track order: `discNumber` ASC, `track` ASC,
+ * `id` ASC (stable tiebreak). Track/disc data is read from each song's
+ * `raw_json` Child envelope, populated by Migration 18.
+ */
+async function backfillMissingPartialAlbums(
+  log: (message: string) => void,
+): Promise<void> {
+  const db = getDb();
+  if (!db) {
+    log('DB unavailable — skipping partial-album backfill.');
+    return;
+  }
+
+  // Step 1: gather all cached_songs grouped by albumId.
+  const rows = db.getAllSync<{
+    song_id: string;
+    album_id: string;
+    album: string | null;
+    artist: string | null;
+    cover_art: string | null;
+    title: string | null;
+    raw_json: string | null;
+  }>(
+    `SELECT song_id, album_id, album, artist, cover_art, title, raw_json
+       FROM cached_songs
+       WHERE album_id IS NOT NULL AND album_id != '_unknown';`,
+  );
+  if (rows.length === 0) {
+    log('No cached_songs rows — nothing to backfill.');
+    return;
+  }
+
+  // Step 2: existing album items (any type). We only skip when an
+  // existing row has `type='album'`; a `playlist`/`favorites` row with
+  // the same id is impossible (item_id is the album id, and playlist ids
+  // don't collide with album ids in practice — if they do, we still want
+  // the album row created so leave it to the UPSERT; the existing row
+  // would have a different type).
+  const existingAlbumItems = new Set(
+    db
+      .getAllSync<{ item_id: string }>(
+        "SELECT item_id FROM cached_items WHERE type = 'album';",
+      )
+      .map((r) => r.item_id),
+  );
+
+  const byAlbum = new Map<
+    string,
+    Array<{
+      songId: string;
+      album: string | null;
+      artist: string | null;
+      coverArt: string | null;
+      title: string | null;
+      rawJson: string | null;
+    }>
+  >();
+  for (const r of rows) {
+    if (existingAlbumItems.has(r.album_id)) continue;
+    let list = byAlbum.get(r.album_id);
+    if (!list) {
+      list = [];
+      byAlbum.set(r.album_id, list);
+    }
+    list.push({
+      songId: r.song_id,
+      album: r.album,
+      artist: r.artist,
+      coverArt: r.cover_art,
+      title: r.title,
+      rawJson: r.raw_json,
+    });
+  }
+  if (byAlbum.size === 0) {
+    log('Every album_id already has a cached_items row — nothing to backfill.');
+    return;
+  }
+
+  // Step 3: preload album_details once so we can enrich every group.
+  let albumDetails: Record<string, { album: any; retrievedAt: number }> = {};
+  try {
+    albumDetails = hydrateAlbumDetails();
+  } catch (e) {
+    log(`[diag] album_details hydrate threw: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  let created = 0;
+  let edgesInserted = 0;
+  const now = Date.now();
+
+  try {
+    db.withTransactionSync(() => {
+      for (const [albumId, members] of byAlbum) {
+        const detail = albumDetails[albumId]?.album;
+        const firstRaw = members.find((m) => m.rawJson)?.rawJson ?? null;
+        let firstChild: any = null;
+        if (firstRaw) {
+          try {
+            firstChild = JSON.parse(firstRaw);
+          } catch {
+            /* ignore malformed */
+          }
+        }
+
+        const firstMember = members[0];
+        const name: string =
+          (typeof detail?.name === 'string' && detail.name) ||
+          (typeof firstChild?.album === 'string' && firstChild.album) ||
+          firstMember.album ||
+          'Unknown';
+        const artist: string | null =
+          (typeof detail?.artist === 'string' && detail.artist) ||
+          (typeof firstChild?.artist === 'string' && firstChild.artist) ||
+          firstMember.artist ||
+          null;
+        const coverArt: string | null =
+          (typeof detail?.coverArt === 'string' && detail.coverArt) ||
+          (typeof firstChild?.coverArt === 'string' && firstChild.coverArt) ||
+          firstMember.coverArt ||
+          null;
+        const expectedSongCount =
+          typeof detail?.songCount === 'number'
+            ? detail.songCount
+            : Array.isArray(detail?.song)
+              ? detail.song.length
+              : Math.max(members.length, 1);
+        let envelope: string | null = null;
+        if (detail) {
+          const { song: _songs, ...meta } = detail;
+          envelope = JSON.stringify(meta);
+        }
+
+        // Sort members in album order using Child envelope fields.
+        const withOrder = members.map((m) => {
+          let disc = Number.MAX_SAFE_INTEGER;
+          let track = Number.MAX_SAFE_INTEGER;
+          if (m.rawJson) {
+            try {
+              const child = JSON.parse(m.rawJson);
+              if (typeof child?.discNumber === 'number') disc = child.discNumber;
+              if (typeof child?.track === 'number') track = child.track;
+            } catch {
+              /* ignore malformed */
+            }
+          }
+          return { ...m, disc, track };
+        });
+        withOrder.sort((a, b) => {
+          if (a.disc !== b.disc) return a.disc - b.disc;
+          if (a.track !== b.track) return a.track - b.track;
+          return defaultCollator.compare(a.songId, b.songId);
+        });
+
+        // Insert album row.
+        db.runSync(
+          `INSERT INTO cached_items
+             (item_id, type, name, artist, cover_art_id, expected_song_count,
+              parent_album_id, last_sync_at, downloaded_at, raw_json)
+             VALUES (?, 'album', ?, ?, ?, ?, NULL, ?, ?, ?)
+             ON CONFLICT(item_id) DO NOTHING;`,
+          [albumId, name, artist, coverArt, expectedSongCount, now, now, envelope],
+        );
+        created++;
+
+        // Insert edges — `INSERT OR IGNORE` against the unique
+        // `(item_id, song_id)` index so an accidental double-run doesn't
+        // create duplicates. Positions start at 1 in album order.
+        let position = 1;
+        for (const m of withOrder) {
+          db.runSync(
+            'INSERT OR IGNORE INTO cached_item_songs (item_id, position, song_id) VALUES (?, ?, ?);',
+            [albumId, position, m.songId],
+          );
+          edgesInserted++;
+          position++;
+        }
+      }
+    });
+  } catch (e) {
+    log(`[diag] backfill transaction threw: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+
+  log(
+    `Created ${created} partial-album row(s) with ${edgesInserted} edge(s) ` +
+      `across ${byAlbum.size} album_id(s).`,
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -1057,6 +1571,55 @@ const MIGRATION_TASKS: MigrationTask[] = [
   },
 
   {
+    id: 15,
+    name: 'Move pending scrobbles to per-row SQLite table',
+    run: async (log) => {
+      // pendingScrobbleStore moved off the generic `persist(createJSONStorage)`
+      // blob model onto the per-row `pending_scrobble_events` table owned by
+      // `src/store/persistence/pendingScrobbleTable.ts`. Mirrors Task 13
+      // (completed scrobbles). Transactional bulk insert — blob removal only
+      // runs after the transaction commits, so a mid-migration crash preserves
+      // the original blob for the next launch to retry.
+      const raw = await kvStorage.getItem('substreamer-scrobbles');
+      if (!raw) {
+        log('No persisted pending scrobble blob — nothing to migrate.');
+        return;
+      }
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        await kvStorage.removeItem('substreamer-scrobbles');
+        log('Failed to parse pending scrobble blob — removed.');
+        return;
+      }
+      const raws: any[] = Array.isArray(parsed?.state?.pendingScrobbles)
+        ? parsed.state.pendingScrobbles
+        : [];
+      if (raws.length === 0) {
+        await kvStorage.removeItem('substreamer-scrobbles');
+        log('Pending scrobble blob was empty — removed.');
+        return;
+      }
+      const valid: PendingScrobble[] = [];
+      const seen = new Set<string>();
+      for (const s of raws) {
+        if (!s || !s.id || !s.song?.id || !s.song?.title) continue;
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        valid.push(s as PendingScrobble);
+      }
+      replaceAllPendingScrobbles(valid);
+      await kvStorage.removeItem('substreamer-scrobbles');
+      const dropped = raws.length - valid.length;
+      log(
+        `Migrated ${valid.length} pending scrobble(s) to per-row table` +
+          (dropped > 0 ? ` (dropped ${dropped} invalid/duplicate).` : '.'),
+      );
+    },
+  },
+
+  {
     id: 16,
     name: 'Index on-disk image cache into per-row SQLite table',
     run: async (log) => {
@@ -1147,6 +1710,101 @@ const MIGRATION_TASKS: MigrationTask[] = [
       await kvStorage.removeItem('substreamer-image-cache-stats');
     },
   },
+  {
+    id: 17,
+    name: 'Add raw_json envelope columns to cached_songs and cached_items',
+    run: async (log) => {
+      // Schema-only migration. The base `CREATE TABLE` in db.ts includes
+      // `raw_json TEXT` for fresh installs; this task adds the column to
+      // databases created by an earlier release. Migration 18 backfills
+      // values from local caches (album_details.json, playlist-details
+      // blob, favorites blob). Separate migration so a failure during
+      // backfill doesn't roll back the schema change.
+      //
+      // Idempotent via `PRAGMA table_info`: no-op on a fresh install or
+      // on a re-run.
+      const songsAdded = addColumnIfMissing('cached_songs', 'raw_json', 'TEXT');
+      const itemsAdded = addColumnIfMissing('cached_items', 'raw_json', 'TEXT');
+      log(
+        `raw_json column: cached_songs ${songsAdded ? 'added' : 'already present'}, ` +
+          `cached_items ${itemsAdded ? 'added' : 'already present'}.`,
+      );
+    },
+  },
+
+  {
+    id: 18,
+    name: 'Backfill cached_songs.raw_json from local caches',
+    run: async (log) => {
+      // Recovery for songs whose full Subsonic `Child` envelope was
+      // silently dropped by Migration 14 (v1 tracks had only 7 fields) and
+      // by the pre-v8.0.56 runtime writes in `downloadSong`. Every
+      // cached_songs row should ultimately carry the full envelope — see
+      // CLAUDE.md / memory "Preserve full API envelope in row caches".
+      //
+      // Priority order per song:
+      //   1. album_details table (full AlbumWithSongsID3 JSON)
+      //   2. substreamer-playlist-details blob (PlaylistWithSongs.entry[])
+      //   3. substreamer-favorites blob (Child[])
+      //
+      // Songs with no local source stay NULL — a future online refresh
+      // (Migration 21, deferred) can fetch them from the server. The
+      // runtime is tolerant of null `raw_json`; only Migration 20 would
+      // observe degraded behaviour for those rows (which it handles with
+      // the song-envelope fallback in `cached_songs` column data).
+      await backfillCachedSongEnvelopes(log);
+    },
+  },
+
+  {
+    id: 19,
+    name: 'Backfill cached_items.raw_json and repair download_queue.songs_json',
+    run: async (log) => {
+      // Two passes in one task because both depend on the same set of
+      // local caches (album_details table + playlist-details blob) and
+      // we want the accounting in one log line.
+      //
+      // Pass A — item envelopes: every `cached_items` row with `type='album'`
+      // or `'playlist'` that has a NULL `raw_json` gets its full envelope
+      // filled from the corresponding local cache. `favorites` / `song`
+      // intents have no natural envelope and stay NULL.
+      //
+      // Pass B — download_queue repair: rows created by Migration 14's
+      // `songsJson: JSON.stringify(tracks)` carry the v1 7-field shape,
+      // missing every optional field. Walk each queue row; for each entry
+      // look up the backfilled `cached_songs.raw_json` from Migration 18
+      // and substitute when available. A row whose every entry already
+      // looks full (has `isDir`, the cheapest sentinel) is skipped.
+      await backfillCachedItemEnvelopes(log);
+      await repairDownloadQueueSongsJson(log);
+    },
+  },
+
+  {
+    id: 20,
+    name: 'Create missing partial-album cached_items rows',
+    run: async (log) => {
+      // Every downloaded song has an `album_id` in `cached_songs`, but
+      // songs that came in via a playlist/favorites/song intent have
+      // historically never had a corresponding `type='album'` row in
+      // `cached_items`. The row-based UI (`useDownloadStatus`,
+      // `albumPassesDownloadedFilter`, the music-cache-browser partial
+      // tab, `DownloadButton`) derives "partial album" state from the
+      // existence of that row, so those albums render as "not
+      // downloaded" even though their files are on disk.
+      //
+      // This migration creates the missing rows. Metadata comes from
+      // `album_details` (authoritative `AlbumID3` envelope + song count)
+      // when available, or from the first `cached_songs.raw_json` for
+      // the album otherwise, or finally from the hot columns on
+      // `cached_songs`. Edges are inserted in album track order
+      // (`discNumber` asc, `track` asc, `id` asc) so the cache browser
+      // and any listing UI sees tracks in their intended sequence —
+      // data now preserved thanks to Migration 18's `raw_json` backfill.
+      await backfillMissingPartialAlbums(log);
+    },
+  },
+
   // -------------------------------------------------------------------
   // TEMPLATE – How to add a new migration task:
   //

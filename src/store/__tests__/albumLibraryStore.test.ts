@@ -66,6 +66,57 @@ describe('albumLibraryStore', () => {
       expect(albumLibraryStore.getState().albums[1].name).toBe('Zebra');
     });
 
+    it('strips a leading "The " article when sorting by title', async () => {
+      layoutPreferencesStore.setState({ albumSortOrder: 'title' });
+      const albums = [
+        makeAlbum('a1', 'The Wall', 'X'),
+        makeAlbum('a2', 'Best Of', 'X'),
+        makeAlbum('a3', 'Vampire Weekend', 'X'),
+      ];
+      mockSearchAllAlbums.mockResolvedValue(albums);
+
+      await albumLibraryStore.getState().fetchAllAlbums();
+
+      // "The Wall" sorts as "Wall" → between "Vampire Weekend" and end.
+      const names = albumLibraryStore.getState().albums.map((a) => a.name);
+      expect(names).toEqual(['Best Of', 'Vampire Weekend', 'The Wall']);
+    });
+
+    it('strips a leading "The " article when sorting by artist', async () => {
+      const albums = [
+        makeAlbum('a1', 'Album A', 'The Beatles'),
+        makeAlbum('a2', 'Album B', 'Best Coast'),
+        makeAlbum('a3', 'Album C', 'Vampire Weekend'),
+      ];
+      mockSearchAllAlbums.mockResolvedValue(albums);
+
+      await albumLibraryStore.getState().fetchAllAlbums();
+
+      // "The Beatles" sorts as "Beatles" — first.
+      const artists = albumLibraryStore.getState().albums.map((a) => a.artist);
+      expect(artists).toEqual(['The Beatles', 'Best Coast', 'Vampire Weekend']);
+    });
+
+    it('respects server-supplied sortName when it differs from name', async () => {
+      layoutPreferencesStore.setState({ albumSortOrder: 'title' });
+      const { serverInfoStore } = require('../serverInfoStore');
+      serverInfoStore.getState().setIgnoredArticles(['the']);
+      const albums = [
+        // sortName = "Beatles" (server stripped "The "); should sort under B.
+        { id: 'a1', name: 'The Beatles', sortName: 'Beatles', artist: 'X' } as any,
+        // sortName = comma-suffix form — should be ignored, fall back to client-strip.
+        { id: 'a2', name: 'The Wall', sortName: 'Wall, The', artist: 'X' } as any,
+        makeAlbum('a3', 'Best Of', 'X'),
+      ];
+      mockSearchAllAlbums.mockResolvedValue(albums);
+
+      await albumLibraryStore.getState().fetchAllAlbums();
+
+      const names = albumLibraryStore.getState().albums.map((a) => a.name);
+      // All three sort-keys: 'beatles', 'best of', 'wall'. → B, B, W.
+      expect(names).toEqual(['The Beatles', 'Best Of', 'The Wall']);
+    });
+
     it('handles null artist/name during sort', async () => {
       const albums = [
         { id: 'a1', name: 'Alpha', artist: null } as any,
@@ -196,6 +247,58 @@ describe('albumLibraryStore', () => {
       expect(state.loading).toBe(false);
       expect(state.error).toBeNull();
       expect(state.lastFetchedAt).toBeNull();
+    });
+  });
+
+  describe('applyLocalPlay', () => {
+    const now = '2026-04-22T10:00:00.000Z';
+
+    it('bumps playCount + played on the matching album', () => {
+      albumLibraryStore.setState({
+        albums: [
+          { ...makeAlbum('a1', 'X', 'Y'), playCount: 3 } as any,
+          makeAlbum('a2', 'Z', 'W'),
+        ],
+      });
+
+      albumLibraryStore.getState().applyLocalPlay('a1', now);
+
+      const updated = albumLibraryStore.getState().albums[0] as any;
+      expect(updated.playCount).toBe(4);
+      expect(updated.played).toBe(now);
+      expect((albumLibraryStore.getState().albums[1] as any).playCount).toBeUndefined();
+    });
+
+    it('treats undefined playCount as 0 before incrementing', () => {
+      albumLibraryStore.setState({
+        albums: [makeAlbum('a1', 'X', 'Y')],
+      });
+
+      albumLibraryStore.getState().applyLocalPlay('a1', now);
+
+      const updated = albumLibraryStore.getState().albums[0] as any;
+      expect(updated.playCount).toBe(1);
+      expect(updated.played).toBe(now);
+    });
+
+    it('is a no-op when albumId is undefined', () => {
+      const albums = [makeAlbum('a1', 'X', 'Y')];
+      albumLibraryStore.setState({ albums });
+      const before = albumLibraryStore.getState().albums;
+
+      albumLibraryStore.getState().applyLocalPlay(undefined, now);
+
+      expect(albumLibraryStore.getState().albums).toBe(before);
+    });
+
+    it('is a no-op when the album is not in the library', () => {
+      const albums = [makeAlbum('a1', 'X', 'Y')];
+      albumLibraryStore.setState({ albums });
+      const before = albumLibraryStore.getState().albums;
+
+      albumLibraryStore.getState().applyLocalPlay('unknown', now);
+
+      expect(albumLibraryStore.getState().albums).toBe(before);
     });
   });
 });

@@ -51,7 +51,7 @@ import { SleepTimerCapsule } from './SleepTimerCapsule';
 import { ThemedAlert } from './ThemedAlert';
 import { closeOpenRow } from './SwipeableRow';
 import { useCanSkip } from '../hooks/useCanSkip';
-import { useColorExtraction } from '../hooks/useColorExtraction';
+import { useImagePalette } from '../hooks/useImagePalette';
 import { mixHexColors } from '../utils/colors';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useTheme } from '../hooks/useTheme';
@@ -114,15 +114,22 @@ export function ExpandedPlayerView({
   const isBuffering =
     playbackState === 'buffering' || playbackState === 'loading';
 
-  // Own color extraction for gradient background
-  const { coverBackgroundColor, gradientOpacity: extractedGradientOpacity } =
-    useColorExtraction(currentTrack?.coverArt, colors.background);
+  // Own palette extraction for gradient background. Primary is already
+  // lightness-clamped for the active theme so the previous manual
+  // darkening call is no longer necessary — we just use the hook output.
+  const { primary, secondary, gradientOpacity: extractedGradientOpacity } =
+    useImagePalette(currentTrack?.coverArt);
 
-  // Darken the extracted color for a richer, moodier full-screen background
-  const gradientStart = coverBackgroundColor
-    ? mixHexColors(coverBackgroundColor, '#000000', 0.4)
-    : colors.background;
-  const gradientEnd = mixHexColors(colors.background, '#000000', 0.15);
+  // 2-stop diagonal gradient: extracted secondary (prefer) → a
+  // slightly-darkened theme background. We drop the more-vibrant
+  // `primary` from the render and use `secondary` as the calmer top
+  // colour so the two extracted hues don't fight with each other
+  // across the large hero area. `primary` still extracts and is
+  // available in the hook for future bi-tone tablet layouts.
+  const backgroundEnd = mixHexColors(colors.background, '#000000', 0.15);
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, backgroundEnd];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.6];
 
   // Right panel mode: queue (default), lyrics placeholder, or album info
   const [rightPanelMode, setRightPanelMode] = useState<'queue' | 'lyrics' | 'info'>('queue');
@@ -392,7 +399,8 @@ export function ExpandedPlayerView({
           pointerEvents="none"
         >
           <LinearGradient
-            colors={[gradientStart, gradientEnd]}
+            colors={gradientColors}
+            locations={gradientLocations}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0.6 }}
             style={StyleSheet.absoluteFillObject}
@@ -661,24 +669,23 @@ export function ExpandedPlayerView({
                 </View>
               )}
 
-              {/* Bottom toggle: lyrics / info / queue */}
+              {/* Bottom toggle: queue / info / lyrics — ordering matches the
+                  portrait PlayerTabBar so muscle memory transfers. */}
               <View style={styles.toggleRow}>
                 <View style={styles.toggleButtons}>
-                  {!offlineMode && (
-                    <Pressable
-                      onPress={() => setRightPanelMode('lyrics')}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('showLyrics')}
-                      style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
-                    >
-                      <MaterialCommunityIcons
-                        name="comment-quote-outline"
-                        size={22}
-                        color={rightPanelMode === 'lyrics' ? colors.primary : colors.textSecondary}
-                      />
-                    </Pressable>
-                  )}
+                  <Pressable
+                    onPress={() => setRightPanelMode('queue')}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('showQueue')}
+                    style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
+                  >
+                    <MaterialCommunityIcons
+                      name="playlist-music"
+                      size={22}
+                      color={rightPanelMode === 'queue' ? colors.primary : colors.textSecondary}
+                    />
+                  </Pressable>
                   {!offlineMode && (
                     <Pressable
                       onPress={() => setRightPanelMode('info')}
@@ -694,19 +701,21 @@ export function ExpandedPlayerView({
                       />
                     </Pressable>
                   )}
-                  <Pressable
-                    onPress={() => setRightPanelMode('queue')}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('showQueue')}
-                    style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
-                  >
-                    <MaterialCommunityIcons
-                      name="playlist-music"
-                      size={22}
-                      color={rightPanelMode === 'queue' ? colors.primary : colors.textSecondary}
-                    />
-                  </Pressable>
+                  {!offlineMode && (
+                    <Pressable
+                      onPress={() => setRightPanelMode('lyrics')}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('showLyrics')}
+                      style={({ pressed }) => [styles.toggleButton, pressed && styles.pressed]}
+                    >
+                      <MaterialCommunityIcons
+                        name="comment-quote-outline"
+                        size={22}
+                        color={rightPanelMode === 'lyrics' ? colors.primary : colors.textSecondary}
+                      />
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </Animated.View>

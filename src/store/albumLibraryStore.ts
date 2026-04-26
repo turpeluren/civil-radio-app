@@ -11,8 +11,11 @@ import {
   searchAllAlbums,
   type AlbumID3,
 } from '../services/subsonicService';
+import { baseCollator } from '../utils/intl';
+import { getSortKey } from '../utils/sortHelpers';
 import { layoutPreferencesStore } from './layoutPreferencesStore';
 import { ratingStore } from './ratingStore';
+import { serverInfoStore } from './serverInfoStore';
 
 /**
  * Hook invoked after `fetchAllAlbums` has successfully replaced the library.
@@ -26,6 +29,26 @@ export function registerAlbumLibraryReconcileHook(
   hook: ((oldIds: readonly string[], newIds: readonly string[]) => void) | null,
 ): void {
   reconcileHook = hook;
+}
+
+/**
+ * Sort an album array by the current sort preference using
+ * article-stripped, accent-folded keys. Schwartzian transform — sort
+ * keys are computed once per item, not twice per comparison, which
+ * matters on large libraries (10k albums × n log n vs 2× n log n).
+ */
+function sortAlbumsByPreference(albums: AlbumID3[]): AlbumID3[] {
+  const sortOrder = layoutPreferencesStore.getState().albumSortOrder;
+  const articles = serverInfoStore.getState().ignoredArticles ?? undefined;
+  const decorated = albums.map((a): [string, AlbumID3] => {
+    const key =
+      sortOrder === 'title'
+        ? getSortKey(a.name ?? '', a.sortName, articles)
+        : getSortKey(a.artist ?? '', undefined, articles);
+    return [key, a];
+  });
+  decorated.sort(([ka], [kb]) => baseCollator.compare(ka, kb));
+  return decorated.map(([, a]) => a);
 }
 
 export interface AlbumLibraryState {
@@ -53,6 +76,9 @@ export interface AlbumLibraryState {
    * refetch.
    */
   upsertAlbums: (albums: AlbumID3[]) => void;
+  /** Eagerly bump local play stats on the matching album in the library list.
+   *  No-op when the album isn't present or `albumId` is undefined. */
+  applyLocalPlay: (albumId: string | undefined, now: string) => void;
   /** Clear all album data */
   clearAlbums: () => void;
 }
@@ -101,20 +127,15 @@ export const albumLibraryStore = create<AlbumLibraryState>()(
             return;
           }
 
-          // Sort albums according to the user's preferred sort order
-          const sortOrder = layoutPreferencesStore.getState().albumSortOrder;
-          const sortKey = sortOrder === 'title' ? 'name' : 'artist';
-          albums.sort((a, b) =>
-            (a[sortKey] ?? '').localeCompare(b[sortKey] ?? '', undefined, {
-              sensitivity: 'base',
-            })
-          );
+          // Sort albums according to the user's preferred sort order,
+          // using article-stripped + accent-folded sort keys.
+          const sortedAlbums = sortAlbumsByPreference(albums);
 
           ratingStore.getState().reconcileRatings(
-            albums.map((a) => ({ id: a.id, serverRating: a.userRating ?? 0 }))
+            sortedAlbums.map((a) => ({ id: a.id, serverRating: a.userRating ?? 0 }))
           );
           set({
-            albums,
+            albums: sortedAlbums,
             loading: false,
             lastFetchedAt: Date.now(),
           });
@@ -124,7 +145,7 @@ export const albumLibraryStore = create<AlbumLibraryState>()(
           // asynchronously from the caller's perspective.
           if (reconcileHook) {
             try {
-              reconcileHook(oldIds, albums.map((a) => a.id));
+              reconcileHook(oldIds, sortedAlbums.map((a) => a.id));
             } catch {
               /* non-critical — reconcile is best-effort */
             }
@@ -140,14 +161,7 @@ export const albumLibraryStore = create<AlbumLibraryState>()(
       resortAlbums: () => {
         const current = get().albums;
         if (current.length === 0) return;
-        const sortOrder = layoutPreferencesStore.getState().albumSortOrder;
-        const sortKey = sortOrder === 'title' ? 'name' : 'artist';
-        const sorted = [...current].sort((a, b) =>
-          (a[sortKey] ?? '').localeCompare(b[sortKey] ?? '', undefined, {
-            sensitivity: 'base',
-          })
-        );
-        set({ albums: sorted });
+        set({ albums: sortAlbumsByPreference(current) });
       },
 
       upsertAlbums: (albums: AlbumID3[]) => {
@@ -156,17 +170,26 @@ export const albumLibraryStore = create<AlbumLibraryState>()(
         const merged: Record<string, AlbumID3> = {};
         for (const a of current) merged[a.id] = a;
         for (const a of albums) merged[a.id] = a;
-        const sortOrder = layoutPreferencesStore.getState().albumSortOrder;
-        const sortKey = sortOrder === 'title' ? 'name' : 'artist';
-        const next = Object.values(merged).sort((a, b) =>
-          (a[sortKey] ?? '').localeCompare(b[sortKey] ?? '', undefined, {
-            sensitivity: 'base',
-          })
-        );
+        const next = sortAlbumsByPreference(Object.values(merged));
         ratingStore.getState().reconcileRatings(
           albums.map((a) => ({ id: a.id, serverRating: a.userRating ?? 0 })),
         );
         set({ albums: next });
+      },
+
+      applyLocalPlay: (albumId, now) => {
+        if (!albumId) return;
+        const current = get().albums;
+        const idx = current.findIndex((a) => a.id === albumId);
+        if (idx === -1) return;
+        const oldAlbum = current[idx];
+        const nextAlbum: AlbumID3 = {
+          ...oldAlbum,
+          playCount: (oldAlbum.playCount ?? 0) + 1,
+          played: now,
+        };
+        const nextAlbums = current.map((a, i) => (i === idx ? nextAlbum : a));
+        set({ albums: nextAlbums });
       },
 
       clearAlbums: () =>
@@ -184,6 +207,16 @@ export const albumLibraryStore = create<AlbumLibraryState>()(
         albums: state.albums,
         lastFetchedAt: state.lastFetchedAt,
       }),
+      // After rehydrate, re-sort using the current article-stripped
+      // logic. The persisted array was sorted by whatever rules were in
+      // effect when it was stored; without this, an upgrade from a
+      // previous build leaves the library in the OLD order until the
+      // next fetch or sort-toggle.
+      onRehydrateStorage: () => (state) => {
+        if (state && state.albums.length > 0) {
+          state.albums = sortAlbumsByPreference(state.albums);
+        }
+      },
     }
   )
 );

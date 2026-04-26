@@ -14,6 +14,8 @@ import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { CircularProgress } from './CircularProgress';
 import { DownloadedIcon } from './DownloadedIcon';
+import { ThemedAlert } from './ThemedAlert';
+import { useConfirmAlbumRemoval } from '../hooks/useConfirmAlbumRemoval';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useTheme } from '../hooks/useTheme';
 import {
@@ -43,6 +45,7 @@ export const DownloadButton = memo(function DownloadButton({
 }: DownloadButtonProps) {
   const { colors } = useTheme();
   const downloadStatus = useDownloadStatus(type, itemId);
+  const { confirmRemove, alertProps } = useConfirmAlbumRemoval();
 
   const downloadProgress = musicCacheStore((s) => {
     if (!itemId) return 0;
@@ -72,6 +75,7 @@ export const DownloadButton = memo(function DownloadButton({
     if (!itemId) return;
     if (downloadStatus === 'complete') {
       if (onDelete) onDelete();
+      else if (type === 'album') confirmRemove(itemId);
       else deleteCachedItem(itemId);
     } else if (downloadStatus === 'queued' || downloadStatus === 'downloading') {
       const queueItem = musicCacheStore.getState().downloadQueue.find(
@@ -79,11 +83,14 @@ export const DownloadButton = memo(function DownloadButton({
       );
       if (queueItem) cancelDownload(queueItem.queueId);
     } else {
+      // 'none' or 'partial' both trigger a fresh enqueue; the service's
+      // top-up branch handles the partial case by downloading only missing
+      // songs.
       if (onDownload) onDownload();
       else if (type === 'album') enqueueAlbumDownload(itemId);
       else enqueuePlaylistDownload(itemId);
     }
-  }, [itemId, type, downloadStatus, onDownload, onDelete]);
+  }, [itemId, type, downloadStatus, onDownload, onDelete, confirmRemove]);
 
   const showCircular = downloadStatus === 'downloading' || (downloadStatus === 'complete' && showingRing);
   const progressSize = Math.round(size * 0.9);
@@ -94,32 +101,37 @@ export const DownloadButton = memo(function DownloadButton({
   const effectiveProgress = (downloadStatus === 'complete' && showingRing) ? 1 : downloadProgress;
 
   return (
-    <Pressable
-      onPress={handlePress}
-      hitSlop={8}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-    >
-      {showCircular ? (
-        <CircularProgress
-          progress={effectiveProgress}
-          size={progressSize}
-          strokeWidth={2.5}
-          color={colors.primary}
-          trackColor={colors.textSecondary}
-          onComplete={handleRingComplete}
-        />
-      ) : downloadStatus === 'complete' ? (
-        <DownloadedIcon size={size} circleColor={colors.primary} arrowColor="#fff" />
-      ) : downloadStatus === 'queued' ? (
-        <ActivityIndicator size={size} color={colors.primary} />
-      ) : (
-        <Ionicons
-          name="arrow-down-circle-outline"
-          size={size}
-          color={colors.textPrimary}
-        />
-      )}
-    </Pressable>
+    <>
+      <Pressable
+        onPress={handlePress}
+        hitSlop={8}
+        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      >
+        {showCircular ? (
+          <CircularProgress
+            progress={effectiveProgress}
+            size={progressSize}
+            strokeWidth={2.5}
+            color={colors.primary}
+            trackColor={colors.textSecondary}
+            onComplete={handleRingComplete}
+          />
+        ) : downloadStatus === 'complete' ? (
+          <DownloadedIcon size={size} circleColor={colors.primary} arrowColor="#fff" />
+        ) : downloadStatus === 'partial' ? (
+          <DownloadedIcon size={size} circleColor={colors.orange} arrowColor="#fff" />
+        ) : downloadStatus === 'queued' ? (
+          <ActivityIndicator size={size} color={colors.primary} />
+        ) : (
+          <Ionicons
+            name="arrow-down-circle-outline"
+            size={size}
+            color={colors.textPrimary}
+          />
+        )}
+      </Pressable>
+      <ThemedAlert {...alertProps} />
+    </>
   );
 });
 

@@ -137,28 +137,42 @@ function fireLastCallback() {
 }
 
 /**
- * Trigger BootSplash's animate(), which registers a withTiming callback
- * for the logo scale-in. Then fire that callback to simulate the 300ms
- * scale animation completing.
+ * Trigger BootSplash's animate(), which registers:
+ *   (1) synchronously, the logo scale-in withTiming callback, and
+ *   (2) after React flushes the `setWaveformPlay(true)` state update, the
+ *       waveform's fireComplete callback (because AnimatedWaveformLogo's
+ *       ripple sequence only arms when `play` flips to true).
+ *
+ * This helper fires ONLY the scale-in callback and removes it from the
+ * pending list — the waveform callback stays queued for the test to fire
+ * separately (mirroring the original two-flag rendezvous).
  */
 function completeAnimate() {
   expect(capturedAnimate).not.toBeNull();
   const callbacksBefore = pendingCallbacks.length;
   capturedAnimate!();
-  // animate() registers a withTiming for the logo scale-in
   const newCallbacks = pendingCallbacks.slice(callbacksBefore);
-  // Fire the scale-in callback (onAnimateComplete)
-  if (newCallbacks.length > 0) newCallbacks[0](true);
+  if (newCallbacks.length > 0) {
+    const scaleInCb = newCallbacks[0];
+    scaleInCb(true);
+    const idx = pendingCallbacks.indexOf(scaleInCb);
+    if (idx >= 0) pendingCallbacks.splice(idx, 1);
+  }
 }
 
 /**
- * Complete both the animate and waveform steps to trigger handleRippleComplete.
+ * Complete both the animate and waveform steps to trigger
+ * handleRippleComplete. The waveform callback is registered during
+ * animate() (via the `play` prop flip), so we fire it here right after.
  */
 function completeBothFlags() {
-  const waveformCallbacks = [...pendingCallbacks];
-  pendingCallbacks.length = 0;
+  const before = pendingCallbacks.length;
   completeAnimate();
-  waveformCallbacks.forEach((cb) => cb(true));
+  // Anything after the pre-animate snapshot is a waveform-side callback.
+  while (pendingCallbacks.length > before) {
+    const cb = pendingCallbacks.splice(before, 1)[0];
+    cb?.(true);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -182,9 +196,21 @@ describe('AnimatedSplashScreen', () => {
       const onFinish = jest.fn();
       render(<AnimatedSplashScreen onFinish={onFinish} />);
 
+      // The waveform animation only arms after animate() flips `play` to
+      // true, so we need to run animate() to register its completion
+      // callback — but then fire only that callback, not the scale-in one.
       act(() => {
-        pendingCallbacks.forEach((cb) => cb(true));
-        pendingCallbacks.length = 0;
+        capturedAnimate!();
+      });
+
+      // Two callbacks are now queued: [0] logo scale-in, [1] waveform.
+      // Fire only the waveform callback.
+      act(() => {
+        const waveformCb = pendingCallbacks[1];
+        if (waveformCb) {
+          pendingCallbacks.splice(1, 1);
+          waveformCb(true);
+        }
       });
 
       expect(onFinish).not.toHaveBeenCalled();
@@ -194,20 +220,22 @@ describe('AnimatedSplashScreen', () => {
       const onFinish = jest.fn();
       render(<AnimatedSplashScreen onFinish={onFinish} />);
 
-      const waveformCallbacks = [...pendingCallbacks];
-      pendingCallbacks.length = 0;
-
-      // Simulate normal timing: animate completes early
+      // Simulate normal timing: animate completes early (fires scale-in
+      // synchronously; waveform fireComplete is queued but not yet fired).
       act(() => {
         completeAnimate();
       });
 
       expect(onFinish).not.toHaveBeenCalled();
 
-      // Waveform completes ~1.5s later (well past MIN_VISIBLE_MS)
+      // Waveform completes ~1.5s later (well past MIN_VISIBLE_MS).
       act(() => {
         jest.advanceTimersByTime(2_000);
-        waveformCallbacks.forEach((cb) => cb(true));
+        // Fire every remaining queued callback (the waveform fireComplete).
+        while (pendingCallbacks.length > 0) {
+          const cb = pendingCallbacks.shift();
+          cb?.(true);
+        }
       });
 
       // fadeOut fires immediately (min visible time already elapsed)
@@ -223,18 +251,29 @@ describe('AnimatedSplashScreen', () => {
       const onFinish = jest.fn();
       render(<AnimatedSplashScreen onFinish={onFinish} />);
 
-      // Waveform completes instantly (reduce motion)
+      // Reduce-motion equivalent: in the new gating model the waveform
+      // only arms once animate() runs. We still exercise the "waveform
+      // callback fires BEFORE the scale-in callback" ordering by having
+      // animate() register both callbacks, firing the waveform one
+      // first, then the scale-in one.
       act(() => {
-        pendingCallbacks.forEach((cb) => cb(true));
-        pendingCallbacks.length = 0;
+        capturedAnimate!();
+      });
+
+      // Fire the waveform callback first (index 1 in the queue).
+      act(() => {
+        const waveformCb = pendingCallbacks.splice(1, 1)[0];
+        waveformCb?.(true);
       });
 
       expect(onFinish).not.toHaveBeenCalled();
 
-      // animate() completes — both flags set, handleRippleComplete fires,
-      // but fadeOut defers because MIN_VISIBLE_MS hasn't elapsed
+      // Now fire the scale-in callback. Both flags set →
+      // handleRippleComplete fires → fadeOut defers because
+      // MIN_VISIBLE_MS hasn't elapsed.
       act(() => {
-        completeAnimate();
+        const scaleInCb = pendingCallbacks.shift();
+        scaleInCb?.(true);
       });
 
       expect(onFinish).not.toHaveBeenCalled();
@@ -625,10 +664,9 @@ describe('AnimatedSplashScreen', () => {
       const onFinish = jest.fn();
       render(<AnimatedSplashScreen onFinish={onFinish} />);
 
-      const waveformCallbacks = [...pendingCallbacks];
-      pendingCallbacks.length = 0;
-
-      // animate() fires, stamping visibleSince
+      // animate() fires, stamping visibleSince, and queues the waveform
+      // completion callback (play flips to true during animate()).
+      // completeAnimate fires the scale-in cb; waveform cb stays queued.
       act(() => {
         completeAnimate();
       });
@@ -640,7 +678,10 @@ describe('AnimatedSplashScreen', () => {
 
       // Waveform completes — handleRippleComplete → fadeOut runs immediately
       act(() => {
-        waveformCallbacks.forEach((cb) => cb(true));
+        while (pendingCallbacks.length > 0) {
+          const cb = pendingCallbacks.shift();
+          cb?.(true);
+        }
       });
 
       // doFadeOut fires right away (no setTimeout), fire its callback

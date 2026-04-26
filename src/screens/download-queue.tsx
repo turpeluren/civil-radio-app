@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReorderableList, {
   useReorderableDrag,
   type ReorderableListReorderEvent,
@@ -33,6 +34,7 @@ import {
   musicCacheStore,
   type DownloadQueueItem,
 } from '../store/musicCacheStore';
+import { computeQueueItemProgress } from '../store/persistence/cachedItemHelpers';
 import { formatSpeed } from '../utils/formatters';
 
 const ANIMATE_MS = 400;
@@ -130,9 +132,11 @@ const QueueRow = memo(function QueueRow({
   const isQueued = item.status === 'queued';
   const isError = item.status === 'error';
 
-  const progress = item.totalSongs > 0
-    ? item.completedSongs / item.totalSongs
-    : 0;
+  const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const { completed: displayCompleted, total: displayTotal } =
+    computeQueueItemProgress(item, cachedItems);
+
+  const progress = displayTotal > 0 ? displayCompleted / displayTotal : 0;
 
   const fillFrac = useSharedValue(progress);
   const freeFrac = useSharedValue(1 - progress);
@@ -184,7 +188,7 @@ const QueueRow = memo(function QueueRow({
             {isDownloading && (
               <View style={styles.progressSection}>
                 <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-                  {t('downloadProgress', { completed: item.completedSongs, total: item.totalSongs })}
+                  {t('downloadProgress', { completed: displayCompleted, total: displayTotal })}
                 </Text>
                 <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
                   {progress > 0 && (
@@ -243,6 +247,7 @@ export function DownloadQueueScreen() {
   const { alert, alertProps } = useThemedAlert();
   const navigation = useNavigation();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const insets = useSafeAreaInsets();
   const downloadQueue = musicCacheStore((s) => s.downloadQueue);
 
   /* ---- Sorted display list: downloading → queued → error ---- */
@@ -409,9 +414,9 @@ export function DownloadQueueScreen() {
     () => ({
       flexGrow: 1 as const,
       paddingTop: headerHeight,
-      paddingBottom: 32,
+      paddingBottom: insets.bottom + 32,
     }),
-    [headerHeight],
+    [headerHeight, insets.bottom],
   );
 
   return (

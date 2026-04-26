@@ -3,15 +3,29 @@
  */
 
 /**
- * Format a duration in seconds to a compact human-readable string.
- * Examples: "46m", "1h30m", "2h".
+ * Format a duration in seconds to a compact human-readable string. Auto-scales
+ * to the largest meaningful unit so the value always fits within a bounded
+ * column width:
+ *
+ *   < 1h   → "Xm"           (e.g. "5m", "59m")
+ *   < 24h  → "Xh Ym"        (e.g. "1h 30m", "23h 59m")
+ *   ≥ 24h  → "Xd Yh"        (e.g. "1d 0h", "4d 11h", "33d 8h")
+ *
+ * Matches the listening-time format on the home screen "My Listening" card.
+ * Max output length is 7 characters ("23h 59m"), which `RowMetaLine` relies
+ * on to size the duration slot.
  */
 export function formatCompactDuration(seconds: number): string {
-  const totalMinutes = Math.round(seconds / 60);
+  const totalMinutes = Math.floor(seconds / 60);
   if (totalMinutes < 60) return `${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
-  return mins > 0 ? `${hours}h${mins}m` : `${hours}h`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const mins = totalMinutes - totalHours * 60;
+    return `${totalHours}h ${mins}m`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours - days * 24;
+  return `${days}d ${hours}h`;
 }
 
 /**

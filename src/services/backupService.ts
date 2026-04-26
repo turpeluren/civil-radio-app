@@ -3,6 +3,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { listDirectoryAsync } from 'expo-async-fs';
 import { compressToFile, decompressFromFile } from 'expo-gzip';
 
+import { defaultCollator } from '../utils/intl';
 import { authStore } from '../store/authStore';
 import { backupStore } from '../store/backupStore';
 import { completedScrobbleStore } from '../store/completedScrobbleStore';
@@ -285,7 +286,7 @@ export async function listBackups(
     }
   }
 
-  all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  all.sort((a, b) => defaultCollator.compare(b.createdAt, a.createdAt));
 
   if (!filter) {
     return { current: all, other: [] };
@@ -399,7 +400,7 @@ export async function pruneBackups(keep = MAX_BACKUPS): Promise<void> {
   // Get all backups for the current username (across all server URLs)
   const { current, other } = await listBackups({ serverUrl, username });
   const allForUser = [...current, ...other];
-  allForUser.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  allForUser.sort((a, b) => defaultCollator.compare(b.createdAt, a.createdAt));
 
   if (allForUser.length <= keep) return;
 

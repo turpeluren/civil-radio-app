@@ -95,3 +95,71 @@ describe('fetchStarred', () => {
     expect(favoritesStore.getState().overrides['album-1']).toBe(true);
   });
 });
+
+describe('applyLocalPlay', () => {
+  const now = '2026-04-22T10:00:00.000Z';
+
+  it('bumps starred song + starred album when both are present', () => {
+    favoritesStore.setState({
+      songs: [{ id: 's1', title: 'S1', playCount: 2 }] as any,
+      albums: [{ id: 'a1', name: 'A1', playCount: 5 }] as any,
+      artists: [],
+    });
+
+    favoritesStore.getState().applyLocalPlay('s1', 'a1', now);
+
+    const after = favoritesStore.getState();
+    expect((after.songs[0] as any).playCount).toBe(3);
+    expect((after.songs[0] as any).played).toBe(now);
+    expect((after.albums[0] as any).playCount).toBe(6);
+    expect((after.albums[0] as any).played).toBe(now);
+  });
+
+  it('bumps only the song when the album is not starred', () => {
+    favoritesStore.setState({
+      songs: [{ id: 's1', title: 'S1' }] as any,
+      albums: [],
+      artists: [],
+    });
+
+    favoritesStore.getState().applyLocalPlay('s1', 'unknown-album', now);
+
+    expect((favoritesStore.getState().songs[0] as any).playCount).toBe(1);
+  });
+
+  it('bumps only the album when the song is not starred', () => {
+    favoritesStore.setState({
+      songs: [],
+      albums: [{ id: 'a1', name: 'A1' }] as any,
+      artists: [],
+    });
+
+    favoritesStore.getState().applyLocalPlay('s1', 'a1', now);
+
+    expect((favoritesStore.getState().albums[0] as any).playCount).toBe(1);
+  });
+
+  it('is a no-op when neither song nor album is starred', () => {
+    favoritesStore.setState({ songs: [], albums: [], artists: [] });
+    const before = favoritesStore.getState();
+
+    favoritesStore.getState().applyLocalPlay('s1', 'a1', now);
+
+    expect(favoritesStore.getState().songs).toBe(before.songs);
+    expect(favoritesStore.getState().albums).toBe(before.albums);
+  });
+
+  it('skips the album side when albumId is undefined', () => {
+    favoritesStore.setState({
+      songs: [{ id: 's1', title: 'S1' }] as any,
+      albums: [{ id: 'a1', name: 'A1' }] as any,
+      artists: [],
+    });
+    const beforeAlbums = favoritesStore.getState().albums;
+
+    favoritesStore.getState().applyLocalPlay('s1', undefined, now);
+
+    expect((favoritesStore.getState().songs[0] as any).playCount).toBe(1);
+    expect(favoritesStore.getState().albums).toBe(beforeAlbums);
+  });
+});

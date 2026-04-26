@@ -24,7 +24,7 @@ import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
@@ -413,6 +413,14 @@ export function SettingsLibraryDataScreen() {
               </Pressable>
             )}
           </View>
+          {offlineMode && (
+            <View style={styles.offlineNotice}>
+              <Ionicons name="cloud-offline-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.offlineNoticeText, { color: colors.textSecondary }]}>
+                {t('syncLibraryOfflineNotice')}
+              </Text>
+            </View>
+          )}
           <Text style={[settingsStyles.sectionHint, { color: colors.textSecondary }]}>
             {t('syncLibraryDescription')}
           </Text>
@@ -453,22 +461,6 @@ export function SettingsLibraryDataScreen() {
               <Ionicons name="list-outline" size={18} color={colors.textPrimary} />
               <Text style={[settingsStyles.navRowText, { color: colors.textPrimary }]}>
                 {t('browseScrobbles')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/my-listening')}
-            style={({ pressed }) => [
-              settingsStyles.navRow,
-              { borderTopColor: colors.border },
-              pressed && settingsStyles.pressed,
-            ]}
-          >
-            <View style={settingsStyles.navRowLeft}>
-              <Ionicons name="analytics-outline" size={18} color={colors.textPrimary} />
-              <Text style={[settingsStyles.navRowText, { color: colors.textPrimary }]}>
-                {t('myListening')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
@@ -640,7 +632,7 @@ export function SettingsLibraryDataScreen() {
         </View>
       )}
     </ScrollView>
-    <MiniPlayerFooter />
+    <BottomChrome withSafeAreaPadding />
     </GradientBackground>
 
     {/* Restore Backup Modal */}
@@ -892,6 +884,18 @@ export function SettingsLibraryDataScreen() {
 }
 
 const styles = StyleSheet.create({
+  offlineNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  offlineNoticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
+  },
   backupButtonRow: {
     flexDirection: 'row',
     gap: 8,

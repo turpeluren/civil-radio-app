@@ -30,6 +30,13 @@ export interface CachedSongRow {
   samplingRate?: number;
   formatCapturedAt: number;
   downloadedAt: number;
+  /**
+   * Serialised full Subsonic `Child` envelope. Populated by every runtime
+   * write and backfilled for legacy rows by Migration 18. Optional in the
+   * row type because pre-Migration-18 rows may still be null; callers that
+   * need the complete metadata should go through `getSongEnvelope()`.
+   */
+  rawJson?: string;
 }
 
 export interface CachedItemRow {
@@ -44,6 +51,12 @@ export interface CachedItemRow {
   downloadedAt: number;
   /** Joined from cached_item_songs on hydrate, in position order. */
   songIds: string[];
+  /**
+   * Serialised full Subsonic `AlbumID3` (for album items) or `Playlist`
+   * (for playlist items). NULL for `favorites` / `song` intents which have
+   * no natural envelope.
+   */
+  rawJson?: string;
 }
 
 export interface DownloadQueueRow {
@@ -82,6 +95,7 @@ interface RawSongRow {
   sampling_rate: number | null;
   format_captured_at: number;
   downloaded_at: number;
+  raw_json: string | null;
 }
 
 interface RawItemRow {
@@ -94,6 +108,7 @@ interface RawItemRow {
   parent_album_id: string | null;
   last_sync_at: number;
   downloaded_at: number;
+  raw_json: string | null;
 }
 
 interface RawQueueRow {
@@ -129,6 +144,7 @@ function mapSongRow(row: RawSongRow): CachedSongRow {
   if (row.bit_rate !== null) out.bitRate = row.bit_rate;
   if (row.bit_depth !== null) out.bitDepth = row.bit_depth;
   if (row.sampling_rate !== null) out.samplingRate = row.sampling_rate;
+  if (row.raw_json !== null) out.rawJson = row.raw_json;
   return out;
 }
 
@@ -145,6 +161,7 @@ function mapItemRow(row: RawItemRow, songIds: string[]): CachedItemRow {
   if (row.artist !== null) out.artist = row.artist;
   if (row.cover_art_id !== null) out.coverArtId = row.cover_art_id;
   if (row.parent_album_id !== null) out.parentAlbumId = row.parent_album_id;
+  if (row.raw_json !== null) out.rawJson = row.raw_json;
   return out;
 }
 
@@ -167,6 +184,36 @@ function mapQueueRow(row: RawQueueRow): DownloadQueueRow {
   return out;
 }
 
+/**
+ * Idempotent `ALTER TABLE ... ADD COLUMN` for older databases that predate a
+ * column. The base schema in `db.ts` already includes the column for fresh
+ * installs; this helper is for existing users whose DB was created by an
+ * earlier release. Used by Migration 17.
+ *
+ * Uses `PRAGMA table_info(<table>)` to check whether the column is present
+ * rather than relying on the "duplicate column" error string, which is
+ * awkward to match across SQLite releases.
+ *
+ * Returns `true` when the column was added, `false` when it already existed
+ * or the operation was skipped (DB unavailable / malformed).
+ */
+export function addColumnIfMissing(
+  table: string,
+  column: string,
+  sqlType: string,
+): boolean {
+  const db = getDb();
+  if (db === null) return false;
+  try {
+    const cols = db.getAllSync<{ name: string }>(`PRAGMA table_info(${table});`);
+    if (cols.some((c) => c.name === column)) return false;
+    db.execSync(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqlType};`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Hydrate                                                            */
 /* ------------------------------------------------------------------ */
@@ -182,7 +229,7 @@ export function hydrateCachedSongs(): Record<string, CachedSongRow> {
     const rows = db.getAllSync<RawSongRow>(
       `SELECT song_id, title, artist, album, album_id, cover_art, bytes,
               duration, suffix, bit_rate, bit_depth, sampling_rate,
-              format_captured_at, downloaded_at
+              format_captured_at, downloaded_at, raw_json
          FROM cached_songs;`,
     );
     const out: Record<string, CachedSongRow> = {};
@@ -206,7 +253,7 @@ export function hydrateCachedItems(): Record<string, CachedItemRow> {
   try {
     const items = db.getAllSync<RawItemRow>(
       `SELECT item_id, type, name, artist, cover_art_id, expected_song_count,
-              parent_album_id, last_sync_at, downloaded_at
+              parent_album_id, last_sync_at, downloaded_at, raw_json
          FROM cached_items;`,
     );
     const edges = db.getAllSync<{ item_id: string; song_id: string }>(
@@ -348,12 +395,19 @@ function upsertCachedSongInternal(db: InternalDb, song: CachedSongRow): void {
   // UPSERT rather than `INSERT OR REPLACE` — see `upsertCachedItemInternal`
   // for the rationale. Applies the same pattern here for consistency so
   // nobody can accidentally reintroduce the cascade-delete footgun.
+  //
+  // `raw_json` is written unconditionally; callers that do not have the full
+  // envelope pass `undefined` and the column is set NULL. The ON CONFLICT
+  // branch only overwrites `raw_json` when a non-null value is supplied so
+  // a runtime top-up that fails to include the envelope cannot clobber a
+  // row that has one — the `COALESCE(excluded.raw_json, raw_json)` pattern
+  // keeps the richer version.
   db.runSync(
     `INSERT INTO cached_songs
        (song_id, title, artist, album, album_id, cover_art, bytes, duration,
         suffix, bit_rate, bit_depth, sampling_rate, format_captured_at,
-        downloaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        downloaded_at, raw_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(song_id) DO UPDATE SET
          title = excluded.title,
          artist = excluded.artist,
@@ -367,7 +421,8 @@ function upsertCachedSongInternal(db: InternalDb, song: CachedSongRow): void {
          bit_depth = excluded.bit_depth,
          sampling_rate = excluded.sampling_rate,
          format_captured_at = excluded.format_captured_at,
-         downloaded_at = excluded.downloaded_at;`,
+         downloaded_at = excluded.downloaded_at,
+         raw_json = COALESCE(excluded.raw_json, raw_json);`,
     [
       song.id,
       song.title,
@@ -383,6 +438,7 @@ function upsertCachedSongInternal(db: InternalDb, song: CachedSongRow): void {
       song.samplingRate ?? null,
       song.formatCapturedAt,
       song.downloadedAt,
+      song.rawJson ?? null,
     ],
   );
 }
@@ -438,11 +494,14 @@ function upsertCachedItemInternal(db: InternalDb, item: Omit<CachedItemRow, 'son
   // children. This is the root-cause fix for the music-downloads-v2
   // durability bug where offline playlists evaporated after the first
   // downstream write touched the parent item.
+  //
+  // `raw_json` uses the same COALESCE-on-conflict shape as cached_songs —
+  // see that helper for the rationale.
   db.runSync(
     `INSERT INTO cached_items
        (item_id, type, name, artist, cover_art_id, expected_song_count,
-        parent_album_id, last_sync_at, downloaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parent_album_id, last_sync_at, downloaded_at, raw_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(item_id) DO UPDATE SET
          type = excluded.type,
          name = excluded.name,
@@ -451,7 +510,8 @@ function upsertCachedItemInternal(db: InternalDb, item: Omit<CachedItemRow, 'son
          expected_song_count = excluded.expected_song_count,
          parent_album_id = excluded.parent_album_id,
          last_sync_at = excluded.last_sync_at,
-         downloaded_at = excluded.downloaded_at;`,
+         downloaded_at = excluded.downloaded_at,
+         raw_json = COALESCE(excluded.raw_json, raw_json);`,
     [
       item.itemId,
       item.type,
@@ -462,6 +522,7 @@ function upsertCachedItemInternal(db: InternalDb, item: Omit<CachedItemRow, 'son
       item.parentAlbumId ?? null,
       item.lastSyncAt,
       item.downloadedAt,
+      item.rawJson ?? null,
     ],
   );
 }
@@ -778,12 +839,23 @@ export function markDownloadComplete(
         if (!song.id || !song.albumId) continue;
         upsertCachedSongInternal(db, song);
       }
-      for (const edge of edges) {
+      // Reassign edge positions starting from MAX(position)+1 for this item
+      // so a top-up merging into an existing row doesn't collide with the
+      // existing 1..K edges (the caller's positions are 1-based within the
+      // queue item's `songsJson`, not the cached row).
+      const maxRow = db.getFirstSync<{ max_pos: number | null }>(
+        'SELECT MAX(position) AS max_pos FROM cached_item_songs WHERE item_id = ?;',
+        [item.itemId],
+      );
+      let nextPosition = (maxRow?.max_pos ?? 0) + 1;
+      const sortedEdges = [...edges].sort((a, b) => a.position - b.position);
+      for (const edge of sortedEdges) {
         if (!edge.songId) continue;
         db.runSync(
           'INSERT OR IGNORE INTO cached_item_songs (item_id, position, song_id) VALUES (?, ?, ?);',
-          [item.itemId, edge.position, edge.songId],
+          [item.itemId, nextPosition, edge.songId],
         );
+        nextPosition++;
       }
     });
   } catch {

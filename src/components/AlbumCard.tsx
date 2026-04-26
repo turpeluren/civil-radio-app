@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { CachedImage } from './CachedImage';
 import { DownloadedIcon } from './DownloadedIcon';
 import { LongPressable } from './LongPressable';
-import { StarRatingDisplay } from './StarRating';
+import { CompactRatingBadge } from './StarRating';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useRating } from '../hooks/useRating';
@@ -28,7 +28,9 @@ export const AlbumCard = memo(function AlbumCard({
   const { t } = useTranslation();
   const router = useRouter();
   const starred = useIsStarred('album', album.id);
-  const downloaded = useDownloadStatus('album', album.id) === 'complete';
+  const downloadStatus = useDownloadStatus('album', album.id);
+  const downloaded = downloadStatus === 'complete';
+  const partial = downloadStatus === 'partial';
   const rating = useRating(album.id, album.userRating);
 
   const onPress = useCallback(() => {
@@ -49,15 +51,16 @@ export const AlbumCard = memo(function AlbumCard({
             style={styles.cover}
             resizeMode="cover"
           />
-          {(downloaded || starred) && (
+          {(downloaded || partial || starred) && (
             <View style={styles.indicators}>
               {downloaded && <DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" />}
+              {partial && <DownloadedIcon size={14} circleColor={colors.orange} arrowColor="#fff" />}
               {starred && <Ionicons name="heart" size={14} color={colors.red} />}
             </View>
           )}
           {rating > 0 && (
             <View style={styles.ratingOverlay}>
-              <StarRatingDisplay rating={rating} size={11} color={colors.primary} emptyColor={colors.primary} />
+              <CompactRatingBadge rating={rating} size={11} iconColor={colors.primary} />
             </View>
           )}
         </View>

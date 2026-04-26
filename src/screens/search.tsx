@@ -23,7 +23,9 @@ import {
 } from '../services/subsonicService';
 import { favoritesStore } from '../store/favoritesStore';
 import { filterBarStore } from '../store/filterBarStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { albumPassesDownloadedFilter } from '../store/persistence/cachedItemHelpers';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { searchStore } from '../store/searchStore';
 
@@ -69,6 +71,7 @@ export function SearchScreen() {
   const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
   const favoritesOnly = filterBarStore((s) => s.favoritesOnly);
   const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const includePartial = layoutPreferencesStore((s) => s.includePartialInDownloadedFilter);
   const starredSongs = favoritesStore((s) => s.songs);
   const starredAlbums = favoritesStore((s) => s.albums);
   const starredArtists = favoritesStore((s) => s.artists);
@@ -79,7 +82,7 @@ export function SearchScreen() {
     let songs = results.songs;
 
     if (downloadedOnly) {
-      albums = albums.filter((a) => a.id in cachedItems);
+      albums = albums.filter((a) => albumPassesDownloadedFilter(a, cachedItems, includePartial));
       songs = songs.filter((s) => getLocalTrackUri(s.id) !== null);
       const downloadedArtistIds = new Set<string>();
       for (const album of albums) {
@@ -103,6 +106,7 @@ export function SearchScreen() {
     downloadedOnly,
     favoritesOnly,
     cachedItems,
+    includePartial,
     starredSongs,
     starredAlbums,
     starredArtists,

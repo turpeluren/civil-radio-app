@@ -29,6 +29,17 @@ jest.mock('../../store/persistence/scrobbleTable', () => ({
   hydrateScrobbles: jest.fn(() => []),
 }));
 
+// Task #15 mirrors task 13 for pending scrobbles. Mock the helper module so
+// the migration test can assert wiring without a real SQLite handle.
+jest.mock('../../store/persistence/pendingScrobbleTable', () => ({
+  replaceAllPendingScrobbles: jest.fn(),
+  insertPendingScrobble: jest.fn(),
+  deletePendingScrobble: jest.fn(),
+  clearPendingScrobbles: jest.fn(),
+  hydratePendingScrobbles: jest.fn(() => []),
+  countPendingScrobbles: jest.fn(() => 0),
+}));
+
 // Task #14 calls bulkReplace to write the v2 rows. Mock the whole module so
 // tests don't need a real SQLite handle; assertions are on the mock calls.
 jest.mock('../../store/persistence/musicCacheTables', () => ({
@@ -47,6 +58,8 @@ jest.mock('../../store/persistence/musicCacheTables', () => ({
   readPragma: jest.fn(() => '1'),
   insertCachedItemSong: jest.fn(),
   upsertCachedItem: jest.fn(),
+  // Task 17 schema helper.
+  addColumnIfMissing: jest.fn(() => false),
 }));
 
 // Task #14 consults albumDetailStore for albumId resolution when a playlist
@@ -118,10 +131,12 @@ import { mbidOverrideStore } from '../../store/mbidOverrideStore';
 import { musicCacheStore } from '../../store/musicCacheStore';
 import { playbackSettingsStore } from '../../store/playbackSettingsStore';
 import { bulkReplace } from '../../store/persistence/musicCacheTables';
+import { replaceAllPendingScrobbles } from '../../store/persistence/pendingScrobbleTable';
 import { replaceAllScrobbles } from '../../store/persistence/scrobbleTable';
 import { kvStorage } from '../../store/persistence';
 
 const mockReplaceAllScrobbles = replaceAllScrobbles as jest.Mock;
+const mockReplaceAllPendingScrobbles = replaceAllPendingScrobbles as jest.Mock;
 const mockBulkReplace = bulkReplace as jest.Mock;
 
 function seedAuthInSqlite(serverUrl: string | null, username: string | null) {
@@ -157,11 +172,13 @@ beforeEach(() => {
   kvStorage.removeItem('substreamer-music-cache');
   kvStorage.removeItem('substreamer-music-cache-settings');
   kvStorage.removeItem('substreamer-completed-scrobbles');
+  kvStorage.removeItem('substreamer-scrobbles');
   kvStorage.removeItem('substreamer-playlist-details');
   kvStorage.removeItem('substreamer-favorites');
   mbidOverrideStore.setState({ overrides: {} } as any);
   musicCacheStore.setState({ cachedSongs: {}, cachedItems: {} } as any);
   mockReplaceAllScrobbles.mockClear();
+  mockReplaceAllPendingScrobbles.mockClear();
   mockBulkReplace.mockClear();
   // Reset mocks used by Task 14's diagnostic logging between tests.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1561,6 +1578,109 @@ describe('Task 14 – Move music cache to per-row SQLite tables and album-rooted
       // The filesystem-migration log line is absent when the branch is skipped.
       expect(logContent).not.toContain('Filesystem migration:');
     });
+  });
+});
+
+describe('Task 15 – Move pending scrobbles to per-row SQLite table', () => {
+  function seedBlob(scrobbles: any[]) {
+    kvStorage.setItem(
+      'substreamer-scrobbles',
+      JSON.stringify({ state: { pendingScrobbles: scrobbles } }),
+    );
+  }
+
+  it('skips when no persisted blob exists', async () => {
+    kvStorage.removeItem('substreamer-scrobbles');
+    await runMigrations(14);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('No persisted pending scrobble blob');
+    expect(mockReplaceAllPendingScrobbles).not.toHaveBeenCalled();
+  });
+
+  it('removes corrupt blob and skips', async () => {
+    kvStorage.setItem('substreamer-scrobbles', '{bad json');
+    await runMigrations(14);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Failed to parse pending scrobble blob');
+    expect(kvStorage.getItem('substreamer-scrobbles')).toBeNull();
+    expect(mockReplaceAllPendingScrobbles).not.toHaveBeenCalled();
+  });
+
+  it('removes blob and skips when pending array is empty', async () => {
+    seedBlob([]);
+    await runMigrations(14);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Pending scrobble blob was empty');
+    expect(kvStorage.getItem('substreamer-scrobbles')).toBeNull();
+    expect(mockReplaceAllPendingScrobbles).not.toHaveBeenCalled();
+  });
+
+  it('removes blob and skips when pending field is missing/non-array', async () => {
+    kvStorage.setItem(
+      'substreamer-scrobbles',
+      JSON.stringify({ state: { pendingScrobbles: 'not-an-array' } }),
+    );
+    await runMigrations(14);
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Pending scrobble blob was empty');
+    expect(kvStorage.getItem('substreamer-scrobbles')).toBeNull();
+    expect(mockReplaceAllPendingScrobbles).not.toHaveBeenCalled();
+  });
+
+  it('migrates valid pending scrobbles into the table and deletes the blob', async () => {
+    const scrobbles = [
+      { id: 'a', song: { id: 's1', title: 'A', artist: 'Art', duration: 100 }, time: 1 },
+      { id: 'b', song: { id: 's2', title: 'B', artist: 'Art', duration: 200 }, time: 2 },
+    ];
+    seedBlob(scrobbles);
+
+    await runMigrations(14);
+
+    expect(mockReplaceAllPendingScrobbles).toHaveBeenCalledTimes(1);
+    const [passed] = mockReplaceAllPendingScrobbles.mock.calls[0];
+    expect(passed).toHaveLength(2);
+    expect(passed.map((s: any) => s.id)).toEqual(['a', 'b']);
+    expect(kvStorage.getItem('substreamer-scrobbles')).toBeNull();
+
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Migrated 2 pending scrobble(s) to per-row table');
+    expect(logContent).not.toContain('dropped');
+  });
+
+  it('drops invalid records and duplicates before migrating', async () => {
+    const scrobbles = [
+      { id: 'ok', song: { id: 's1', title: 'A', artist: 'Art', duration: 100 }, time: 1 },
+      { id: 'ok', song: { id: 's1', title: 'A', artist: 'Art', duration: 100 }, time: 2 }, // dup
+      { id: '', song: { id: 's2', title: 'x' }, time: 3 }, // missing id
+      { id: 'bad-song', song: { id: '', title: 'x' }, time: 4 }, // missing song.id
+      { id: 'no-title', song: { id: 's3', title: '' }, time: 5 }, // missing title
+      { id: 'null-song', song: null, time: 6 }, // null song
+      null, // bad entry
+      { id: 'keep', song: { id: 's9', title: 'Z', artist: 'Art' }, time: 7 },
+    ];
+    seedBlob(scrobbles);
+
+    await runMigrations(14);
+
+    expect(mockReplaceAllPendingScrobbles).toHaveBeenCalledTimes(1);
+    const [passed] = mockReplaceAllPendingScrobbles.mock.calls[0];
+    expect(passed.map((s: any) => s.id).sort()).toEqual(['keep', 'ok']);
+
+    const logContent = mockFileWrite.mock.calls[0][0] as string;
+    expect(logContent).toContain('Migrated 2 pending scrobble(s) to per-row table');
+    expect(logContent).toContain('dropped 6 invalid/duplicate');
+  });
+
+  it('is idempotent — second run is a no-op once the blob is gone', async () => {
+    seedBlob([{ id: 'a', song: { id: 's1', title: 'A', artist: 'Art', duration: 100 }, time: 1 }]);
+
+    await runMigrations(14);
+    expect(mockReplaceAllPendingScrobbles).toHaveBeenCalledTimes(1);
+    expect(kvStorage.getItem('substreamer-scrobbles')).toBeNull();
+
+    mockReplaceAllPendingScrobbles.mockClear();
+    await runMigrations(14);
+    expect(mockReplaceAllPendingScrobbles).not.toHaveBeenCalled();
   });
 });
 

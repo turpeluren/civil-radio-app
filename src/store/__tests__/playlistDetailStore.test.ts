@@ -190,3 +190,82 @@ describe('removePlaylist', () => {
     expect(Object.keys(playlistDetailStore.getState().playlists)).toHaveLength(0);
   });
 });
+
+describe('applyLocalPlay', () => {
+  const now = '2026-04-22T10:00:00.000Z';
+
+  it('bumps playCount + played on the matching entry', () => {
+    const pl = {
+      playlist: {
+        id: 'pl-1',
+        name: 'Playlist',
+        songCount: 2,
+        duration: 360,
+        changed: new Date(),
+        created: new Date(),
+        entry: [
+          { id: 's1', title: 'A', isDir: false as const, playCount: 3, played: 'old' },
+          { id: 's2', title: 'B', isDir: false as const },
+        ],
+      },
+      retrievedAt: Date.now(),
+    };
+    playlistDetailStore.setState({ playlists: { 'pl-1': pl } });
+
+    playlistDetailStore.getState().applyLocalPlay('s1', now);
+
+    const updated = playlistDetailStore.getState().playlists['pl-1']!.playlist;
+    expect((updated.entry![0] as any).playCount).toBe(4);
+    expect((updated.entry![0] as any).played).toBe(now);
+    expect((updated.entry![1] as any).playCount).toBeUndefined();
+  });
+
+  it('updates every playlist that contains the song', () => {
+    const pl1 = {
+      playlist: {
+        id: 'pl-1', name: 'P1', songCount: 1, duration: 180,
+        changed: new Date(), created: new Date(),
+        entry: [{ id: 's1', title: 'A', isDir: false as const }],
+      },
+      retrievedAt: Date.now(),
+    };
+    const pl2 = {
+      playlist: {
+        id: 'pl-2', name: 'P2', songCount: 2, duration: 360,
+        changed: new Date(), created: new Date(),
+        entry: [
+          { id: 's0', title: 'Z', isDir: false as const },
+          { id: 's1', title: 'A', isDir: false as const, playCount: 10 },
+        ],
+      },
+      retrievedAt: Date.now(),
+    };
+    playlistDetailStore.setState({ playlists: { 'pl-1': pl1, 'pl-2': pl2 } });
+
+    playlistDetailStore.getState().applyLocalPlay('s1', now);
+
+    const after1 = playlistDetailStore.getState().playlists['pl-1']!.playlist.entry![0] as any;
+    const after2 = playlistDetailStore.getState().playlists['pl-2']!.playlist.entry![1] as any;
+    expect(after1.playCount).toBe(1);
+    expect(after2.playCount).toBe(11);
+  });
+
+  it('is a no-op when no playlist contains the song (identity preserved)', () => {
+    const pl = makeEntry(1, 180, [{ id: 's1' }]);
+    playlistDetailStore.setState({ playlists: { 'pl-1': pl } });
+    const before = playlistDetailStore.getState().playlists;
+
+    playlistDetailStore.getState().applyLocalPlay('unknown', now);
+
+    // No set() call means selectors see the same reference.
+    expect(playlistDetailStore.getState().playlists).toBe(before);
+  });
+
+  it('is a no-op when there are no playlists at all', () => {
+    playlistDetailStore.setState({ playlists: {} });
+    expect(() =>
+      playlistDetailStore.getState().applyLocalPlay('s1', now),
+    ).not.toThrow();
+    expect(playlistDetailStore.getState().playlists).toEqual({});
+  });
+});

@@ -83,7 +83,12 @@ export const LyricsLineRow = memo(function LyricsLineRow({
   }));
 
   return (
-    <Pressable onPress={handlePress} onLayout={handleLayout} disabled={disabled}>
+    <Pressable
+      onPress={handlePress}
+      onLayout={handleLayout}
+      disabled={disabled}
+      style={styles.pressable}
+    >
       <Animated.View style={[styles.row, containerStyle]}>
         <View style={styles.textStack}>
           <Animated.Text
@@ -114,12 +119,25 @@ export const LyricsLineRow = memo(function LyricsLineRow({
 });
 
 const styles = StyleSheet.create({
+  pressable: {
+    // Pressable wraps the row and must itself stretch so the row's
+    // own alignSelf:stretch has a full-width parent to stretch into.
+    alignSelf: 'stretch',
+  },
   row: {
+    // Stretch to fill the ScrollView's content width so the Text layers
+    // below wrap at the viewport edge instead of overflowing. Without this
+    // the row sizes to its intrinsic content width and long lines render
+    // as a single off-screen string.
+    alignSelf: 'stretch',
     marginVertical: 14,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     transformOrigin: '0% 50%',
   },
   textStack: {
+    // Mirrors the row's stretch so the overlay (absoluteFillObject) layer
+    // matches the inactive layer's wrapped height across all screen widths.
+    alignSelf: 'stretch',
     position: 'relative',
   },
   text: {

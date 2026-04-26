@@ -73,4 +73,15 @@ describe('layoutPreferencesStore', () => {
       expect(layoutPreferencesStore.getState().listLength).toBe(value);
     }
   });
+
+  it('includePartialInDownloadedFilter defaults to false', () => {
+    expect(layoutPreferencesStore.getState().includePartialInDownloadedFilter).toBe(false);
+  });
+
+  it('setIncludePartialInDownloadedFilter toggles the flag', () => {
+    layoutPreferencesStore.getState().setIncludePartialInDownloadedFilter(true);
+    expect(layoutPreferencesStore.getState().includePartialInDownloadedFilter).toBe(true);
+    layoutPreferencesStore.getState().setIncludePartialInDownloadedFilter(false);
+    expect(layoutPreferencesStore.getState().includePartialInDownloadedFilter).toBe(false);
+  });
 });

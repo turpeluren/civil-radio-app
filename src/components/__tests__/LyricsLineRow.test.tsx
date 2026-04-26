@@ -74,4 +74,33 @@ describe('LyricsLineRow', () => {
     });
     expect(onLayout).toHaveBeenCalledWith(3, 123, 40);
   });
+
+  it('stretches to fill the parent width so long lines wrap', () => {
+    // Guard against regressing the "long lyric line overflows off-screen"
+    // bug. The row, textStack, and Pressable must all stretch cross-axis
+    // so the Text inside has a bounded width to wrap into.
+    const { toJSON } = setup({ index: 0, activeIndex: 0 });
+    const tree = toJSON();
+    const flatStyles: Array<Record<string, unknown>> = [];
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== 'object') return;
+      const n = node as {
+        props?: { style?: unknown };
+        children?: unknown[];
+      };
+      if (n.props?.style) {
+        const styles = Array.isArray(n.props.style) ? n.props.style : [n.props.style];
+        for (const s of styles) {
+          if (s && typeof s === 'object') flatStyles.push(s as Record<string, unknown>);
+        }
+      }
+      if (Array.isArray(n.children)) n.children.forEach(walk);
+    };
+    walk(tree);
+    const stretchCount = flatStyles.filter(
+      (s) => s.alignSelf === 'stretch',
+    ).length;
+    // Pressable + row + textStack — three layers must stretch.
+    expect(stretchCount).toBeGreaterThanOrEqual(3);
+  });
 });

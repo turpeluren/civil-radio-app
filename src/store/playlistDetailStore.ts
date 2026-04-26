@@ -20,12 +20,20 @@ export interface PlaylistDetailEntry {
 export interface PlaylistDetailState {
   /** Playlist details indexed by playlist ID. */
   playlists: Record<string, PlaylistDetailEntry>;
-  /** Fetch playlist from API, store it, and return it. Returns null on failure. */
-  fetchPlaylist: (id: string) => Promise<PlaylistWithSongs | null>;
+  /** Fetch playlist from API, store it, and return it. Returns null on failure.
+   *  Pass `{ prefetchCovers: false }` to skip the eager cover-art cache —
+   *  used by the background library sync so bulk prefetches don't kick off
+   *  hundreds of image downloads. User-facing fetches omit the flag so art
+   *  still pre-caches. */
+  fetchPlaylist: (id: string, opts?: { prefetchCovers?: boolean }) => Promise<PlaylistWithSongs | null>;
   /** Reorder a track within the cached playlist entry. */
   reorderTracks: (id: string, fromIndex: number, toIndex: number) => void;
   /** Remove a track from the cached playlist entry by index. */
   removeTrack: (id: string, trackIndex: number) => void;
+  /** Eagerly bump local play stats for a just-scrobbled song across every
+   *  cached playlist that contains it (a song can appear in multiple
+   *  playlists). No-op for playlists that don't reference the song. */
+  applyLocalPlay: (songId: string, now: string) => void;
   /** Remove a playlist entry from the cache entirely. */
   removePlaylist: (id: string) => void;
   /** Clear all cached playlist details. */
@@ -39,7 +47,8 @@ export const playlistDetailStore = create<PlaylistDetailState>()(
     (set, get) => ({
       playlists: {},
 
-      fetchPlaylist: async (id: string) => {
+      fetchPlaylist: async (id: string, opts?: { prefetchCovers?: boolean }) => {
+        const prefetchCovers = opts?.prefetchCovers ?? true;
         await ensureCoverArtAuth();
         const data = await getPlaylist(id);
         if (data) {
@@ -55,9 +64,12 @@ export const playlistDetailStore = create<PlaylistDetailState>()(
             },
           });
 
-          // Proactively cache cover art for new IDs so they survive offline
-          if (data.coverArt) cacheAllSizes(data.coverArt).catch(() => { /* non-critical */ });
-          if (data.entry?.length) cacheEntityCoverArt(data.entry);
+          // Proactively cache cover art for new IDs so they survive offline.
+          // Skipped during bulk sync — see prefetchCovers contract above.
+          if (prefetchCovers) {
+            if (data.coverArt) cacheAllSizes(data.coverArt).catch(() => { /* non-critical */ });
+            if (data.entry?.length) cacheEntityCoverArt(data.entry);
+          }
         }
         return data;
       },
@@ -106,6 +118,35 @@ export const playlistDetailStore = create<PlaylistDetailState>()(
             },
           },
         });
+      },
+
+      applyLocalPlay: (songId, now) => {
+        const current = get().playlists;
+        let touched = false;
+        const next: Record<string, PlaylistDetailEntry> = {};
+        for (const [id, entry] of Object.entries(current)) {
+          const entries = entry.playlist.entry ?? [];
+          let matched = false;
+          const updatedEntries = entries.map((track) => {
+            if (track.id !== songId) return track;
+            matched = true;
+            return {
+              ...track,
+              playCount: (track.playCount ?? 0) + 1,
+              played: now,
+            };
+          });
+          if (matched) {
+            touched = true;
+            next[id] = {
+              ...entry,
+              playlist: { ...entry.playlist, entry: updatedEntries },
+            };
+          } else {
+            next[id] = entry;
+          }
+        }
+        if (touched) set({ playlists: next });
       },
 
       removePlaylist: (id) => {

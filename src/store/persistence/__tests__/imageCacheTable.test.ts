@@ -11,6 +11,7 @@ jest.mock('expo-sqlite', () => ({
   }),
 }));
 
+import { defaultCollator } from '../../../utils/intl';
 import { __setDbForTests } from '../db';
 import {
   bulkInsertCachedImages,
@@ -154,7 +155,7 @@ function makeFakeDb() {
     ) {
       return [...rows.values()].sort(
         (a, b) =>
-          a.cover_art_id.localeCompare(b.cover_art_id) || a.size - b.size,
+          defaultCollator.compare(a.cover_art_id, b.cover_art_id) || a.size - b.size,
       ) as T[];
     }
     if (
@@ -334,6 +335,21 @@ describe('imageCacheTable — listCachedImagesForBrowser', () => {
   it('filter=incomplete returns only partials', () => {
     const entries = listCachedImagesForBrowser('incomplete');
     expect(entries.map((e) => e.coverArtId)).toEqual(['partial']);
+  });
+
+  it('hides sentinel coverArtIds from all filters even if rows are present', () => {
+    // Simulate stale rows from an older app version where the sentinel
+    // IDs were (incorrectly) routed through the disk cache.
+    upsertCachedImage(seedRow({ coverArtId: '__starred_cover__', size: 600 }));
+    upsertCachedImage(seedRow({ coverArtId: '__various_artists_cover__', size: 600 }));
+
+    const all = listCachedImagesForBrowser('all').map((e) => e.coverArtId);
+    expect(all).not.toContain('__starred_cover__');
+    expect(all).not.toContain('__various_artists_cover__');
+
+    const incomplete = listCachedImagesForBrowser('incomplete').map((e) => e.coverArtId);
+    expect(incomplete).not.toContain('__starred_cover__');
+    expect(incomplete).not.toContain('__various_artists_cover__');
   });
 });
 

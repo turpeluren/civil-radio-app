@@ -27,6 +27,7 @@ import { BottomSheet } from './BottomSheet';
 import { TrackDetailsModal } from './TrackDetailsModal';
 import { CachedImage } from './CachedImage';
 import { ThemedAlert } from './ThemedAlert';
+import { useConfirmAlbumRemoval } from '../hooks/useConfirmAlbumRemoval';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { StarRatingDisplay } from './StarRating';
 import { useDownloadStatus, type DownloadStatus } from '../hooks/useDownloadStatus';
@@ -228,6 +229,7 @@ export function MoreOptionsSheet() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { alert, alertProps } = useThemedAlert();
+  const { confirmRemove, alertProps: removalAlertProps } = useConfirmAlbumRemoval();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -406,7 +408,11 @@ export function MoreOptionsSheet() {
     handleClose();
     try {
       if (downloadStatus === 'complete') {
-        removeDownload(entity.item.id);
+        if (entity.type === 'album') {
+          confirmRemove(entity.item.id);
+        } else {
+          removeDownload(entity.item.id);
+        }
       } else if (downloadStatus === 'queued' || downloadStatus === 'downloading') {
         const queueItem = musicCacheStore.getState().downloadQueue.find(
           (q) => q.itemId === entity.item.id,
@@ -422,7 +428,7 @@ export function MoreOptionsSheet() {
     } catch {
       /* best-effort */
     }
-  }, [entity, downloadStatus, handleClose]);
+  }, [entity, downloadStatus, handleClose, confirmRemove]);
 
   const handleSongDownload = useCallback(async () => {
     if (!entity || entity.type !== 'song') return;
@@ -1053,7 +1059,9 @@ export function MoreOptionsSheet() {
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     {downloadStatus === 'queued' || downloadStatus === 'downloading'
                       ? t('cancelDownload')
-                      : t('download')}
+                      : downloadStatus === 'partial'
+                        ? t('downloadRemaining')
+                        : t('download')}
                   </Text>
                 </Pressable>
               )}
@@ -1536,7 +1544,9 @@ export function MoreOptionsSheet() {
                   <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
                     {downloadStatus === 'queued' || downloadStatus === 'downloading'
                       ? t('cancelDownload')
-                      : t('download')}
+                      : downloadStatus === 'partial'
+                        ? t('downloadRemaining')
+                        : t('download')}
                   </Text>
                 </Pressable>
               )}
@@ -1609,6 +1619,7 @@ export function MoreOptionsSheet() {
         />
       )}
       <ThemedAlert {...alertProps} />
+      <ThemedAlert {...removalAlertProps} />
     </>
   );
 }

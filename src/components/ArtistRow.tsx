@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { StarRatingDisplay } from './StarRating';
+import { RowMetaLine } from './RowMetaLine';
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useRating } from '../hooks/useRating';
@@ -70,18 +70,22 @@ export const ArtistRow = memo(function ArtistRow({ artist }: { artist: ArtistID3
             {artist.name}
           </Text>
           <View style={styles.meta}>
-            <View style={styles.metaLeft}>
-              <Ionicons name="disc-outline" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {t('albumCount', { count: artist.albumCount })}
-              </Text>
-            </View>
-            {rating > 0 && (
-              <View style={styles.indicator}>
-                <StarRatingDisplay rating={rating} size={12} color={colors.primary} emptyColor={colors.primary} />
-              </View>
-            )}
-            {starred && <Ionicons name="heart" size={14} color={colors.red} style={styles.indicator} />}
+            <RowMetaLine
+              leading={
+                <>
+                  <Ionicons name="disc-outline" size={14} color={colors.primary} />
+                  <Text
+                    style={[styles.metaText, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    {t('albumCount', { count: artist.albumCount })}
+                  </Text>
+                </>
+              }
+              slots={['rating', 'heart']}
+              rating={rating}
+              starred={starred}
+            />
           </View>
         </View>
       </View>
@@ -110,18 +114,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginTop: 10,
-  },
-  metaLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 0,
-  },
-  indicator: {
-    marginLeft: 6,
   },
   metaText: {
     fontSize: 12,

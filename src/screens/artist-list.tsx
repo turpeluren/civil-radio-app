@@ -6,7 +6,9 @@ import { onPullToRefresh } from '../services/dataSyncService';
 import { albumLibraryStore } from '../store/albumLibraryStore';
 import { artistLibraryStore } from '../store/artistLibraryStore';
 import { favoritesStore } from '../store/favoritesStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { albumPassesDownloadedFilter } from '../store/persistence/cachedItemHelpers';
 
 export function ArtistListScreen({
   layout = 'list',
@@ -25,6 +27,7 @@ export function ArtistListScreen({
   const fetchAllArtists = artistLibraryStore((s) => s.fetchAllArtists);
 
   const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const includePartial = layoutPreferencesStore((s) => s.includePartialInDownloadedFilter);
   const allAlbums = albumLibraryStore((s) => s.albums);
   const starredArtists = favoritesStore((s) => s.artists);
 
@@ -45,7 +48,7 @@ export function ArtistListScreen({
     if (downloadedOnly) {
       downloadedArtistIds = new Set<string>();
       for (const album of allAlbums) {
-        if (album.id in cachedItems && album.artistId) {
+        if (albumPassesDownloadedFilter(album, cachedItems, includePartial) && album.artistId) {
           downloadedArtistIds.add(album.artistId);
         }
       }
@@ -56,7 +59,7 @@ export function ArtistListScreen({
       if (starredIds && !starredIds.has(artist.id)) return false;
       return true;
     });
-  }, [artists, downloadedOnly, favoritesOnly, cachedItems, allAlbums, starredArtists]);
+  }, [artists, downloadedOnly, favoritesOnly, cachedItems, allAlbums, starredArtists, includePartial]);
 
   const [refreshing, setRefreshing] = useState(false);
 

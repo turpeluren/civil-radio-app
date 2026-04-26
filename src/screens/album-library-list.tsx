@@ -5,7 +5,9 @@ import { AlbumListView, type AlbumLayout } from '../components/AlbumListView';
 import { onPullToRefresh } from '../services/dataSyncService';
 import { albumLibraryStore } from '../store/albumLibraryStore';
 import { favoritesStore } from '../store/favoritesStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { albumPassesDownloadedFilter } from '../store/persistence/cachedItemHelpers';
 
 export function AlbumLibraryListScreen({
   layout = 'list',
@@ -25,6 +27,7 @@ export function AlbumLibraryListScreen({
 
   const cachedItems = musicCacheStore((s) => s.cachedItems);
   const starredAlbums = favoritesStore((s) => s.albums);
+  const includePartial = layoutPreferencesStore((s) => s.includePartialInDownloadedFilter);
 
   useEffect(() => {
     if (albums.length === 0 && !loading) {
@@ -40,11 +43,13 @@ export function AlbumLibraryListScreen({
       : null;
 
     return albums.filter((album) => {
-      if (downloadedOnly && !(album.id in cachedItems)) return false;
+      if (downloadedOnly && !albumPassesDownloadedFilter(album, cachedItems, includePartial)) {
+        return false;
+      }
       if (starredIds && !starredIds.has(album.id)) return false;
       return true;
     });
-  }, [albums, downloadedOnly, favoritesOnly, cachedItems, starredAlbums]);
+  }, [albums, downloadedOnly, favoritesOnly, cachedItems, starredAlbums, includePartial]);
 
   const [refreshing, setRefreshing] = useState(false);
 

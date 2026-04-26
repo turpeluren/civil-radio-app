@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useSegments } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet } from 'react-native';
@@ -15,10 +14,15 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../hooks/useTheme';
+import { useLayoutMode } from '../hooks/useLayoutMode';
+import { authStore } from '../store/authStore';
+import { musicCacheStore } from '../store/musicCacheStore';
+import { playerStore } from '../store/playerStore';
 import {
   playbackToastStore,
   type PlaybackToastStatus,
 } from '../store/playbackToastStore';
+import { BANNER_HEIGHT } from './DownloadBanner';
 
 const CAPSULE_HEIGHT = 44;
 const CAPSULE_BORDER_RADIUS = CAPSULE_HEIGHT / 2;
@@ -26,22 +30,41 @@ const CAPSULE_BORDER_RADIUS = CAPSULE_HEIGHT / 2;
 const SUCCESS_DISPLAY_MS = 1400;
 const ERROR_DISPLAY_MS = 2200;
 const BOTTOM_OFFSET = 24;
+/** Keep in sync with MINI_PLAYER_HEIGHT in `MiniPlayer.tsx`. */
+const MINI_PLAYER_HEIGHT = 56;
 
 const SPRING_CONFIG = { damping: 14, stiffness: 200, mass: 0.8 };
 const SHRINK_MS = 300;
 const SHRINK_EASING = Easing.in(Easing.cubic);
 
-const DETAIL_SEGMENTS = new Set(['album', 'artist', 'playlist', 'tuned-in']);
-
 export function PlaybackToast() {
-  const segments = useSegments();
-  const isDetailScreen = DETAIL_SEGMENTS.has(segments[0] as string);
-
   const { t } = useTranslation();
   const status = playbackToastStore((s) => s.status);
+  const successLabel = playbackToastStore((s) => s.successLabel);
   const hide = playbackToastStore((s) => s.hide);
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Lift the pill above the bottom chrome (DownloadBanner + MiniPlayer)
+  // when either is rendered so they don't stack. The chrome lives in
+  // `BottomChrome` (per-screen and inside the tabs `renderTabBar`); its
+  // visibility rules must match this predicate so the offsets align.
+  // Banner visibility is independent of MiniPlayer visibility — the banner
+  // can be on screen with no track playing (downloads queued, queue
+  // cleared while downloading, etc.), so it gets its own offset term.
+  const isLoggedIn = authStore((s) => s.isLoggedIn);
+  const hasCurrentTrack = playerStore((s) => s.currentTrack !== null);
+  const isWide = useLayoutMode() === 'wide';
+  const miniPlayerVisible = isLoggedIn && hasCurrentTrack && !isWide;
+  const hasDownloads = musicCacheStore((s) =>
+    s.downloadQueue.some(
+      (q) => q.status === 'downloading' || q.status === 'queued' || q.status === 'error',
+    ),
+  );
+  const bottomOffset =
+    Math.max(insets.bottom, 16) +
+    BOTTOM_OFFSET +
+    (miniPlayerVisible ? MINI_PLAYER_HEIGHT : 0) +
+    (hasDownloads ? BANNER_HEIGHT : 0);
 
   const capsuleScale = useSharedValue(0);
   const capsuleOpacity = useSharedValue(0);
@@ -59,19 +82,6 @@ export function PlaybackToast() {
       dismissTimer.current = null;
     }
 
-    if (!isDetailScreen) {
-      if (status !== 'idle') {
-        capsuleScale.value = 0;
-        capsuleOpacity.value = 0;
-        loadingOpacity.value = 0;
-        resultOpacity.value = 0;
-        resultScale.value = 0.6;
-        hide();
-      }
-      prevStatus.current = status;
-      return;
-    }
-
     if (status === 'loading') {
       resultOpacity.value = 0;
       resultScale.value = 0.6;
@@ -80,7 +90,17 @@ export function PlaybackToast() {
       capsuleScale.value = withSpring(1, SPRING_CONFIG);
       loadingOpacity.value = withTiming(1, { duration: 200 });
     } else if (status === 'success' || status === 'error') {
-      loadingOpacity.value = withTiming(0, { duration: 150 });
+      // When the caller skipped the loading phase (e.g. flashSuccess), the
+      // capsule is still hidden from its initial 0/0 state. Drive the
+      // capsule's own entrance here so the pill animates in either way.
+      const enteringFromIdle = prevStatus.current === 'idle';
+      if (enteringFromIdle) {
+        loadingOpacity.value = 0;
+        capsuleOpacity.value = withTiming(1, { duration: 150 });
+        capsuleScale.value = withSpring(1, SPRING_CONFIG);
+      } else {
+        loadingOpacity.value = withTiming(0, { duration: 150 });
+      }
 
       resultOpacity.value = withTiming(1, { duration: 200 });
       resultScale.value = withSequence(
@@ -113,7 +133,6 @@ export function PlaybackToast() {
     };
   }, [
     status,
-    isDetailScreen,
     hide,
     capsuleScale,
     capsuleOpacity,
@@ -139,15 +158,13 @@ export function PlaybackToast() {
     transform: [{ scale: resultScale.value }],
   }));
 
-  const label = getLabel(status, t);
+  const label =
+    status === 'success' && successLabel ? successLabel : getLabel(status, t);
   const icon = getIcon(status);
 
   return (
     <Animated.View
-      style={[
-        styles.wrapper,
-        { bottom: Math.max(insets.bottom, 16) + BOTTOM_OFFSET },
-      ]}
+      style={[styles.wrapper, { bottom: bottomOffset }]}
       pointerEvents="box-none"
     >
       <Animated.View

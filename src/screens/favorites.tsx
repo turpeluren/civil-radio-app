@@ -29,6 +29,7 @@ import {
 } from '../store/layoutPreferencesStore';
 import { favoritesStore } from '../store/favoritesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { albumPassesDownloadedFilter } from '../store/persistence/cachedItemHelpers';
 import { searchStore } from '../store/searchStore';
 
 type FavoritesSegment = 'songs' | 'albums' | 'artists';
@@ -94,6 +95,7 @@ export function FavoritesScreen() {
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const downloadedOnly = filterBarStore((s) => s.downloadedOnly);
   const cachedItems = musicCacheStore((s) => s.cachedItems);
+  const includePartial = layoutPreferencesStore((s) => s.includePartialInDownloadedFilter);
   const starredSongsDownloaded = STARRED_SONGS_ITEM_ID in cachedItems;
 
   /* ---- Configure filter bar ---- */
@@ -142,19 +144,19 @@ export function FavoritesScreen() {
 
   const filteredAlbums = useMemo(() => {
     if (!downloadedOnly) return albums;
-    return albums.filter((a) => a.id in cachedItems);
-  }, [albums, downloadedOnly, cachedItems]);
+    return albums.filter((a) => albumPassesDownloadedFilter(a, cachedItems, includePartial));
+  }, [albums, downloadedOnly, cachedItems, includePartial]);
 
   const filteredArtists = useMemo(() => {
     if (!downloadedOnly) return artists;
     const downloadedArtistIds = new Set<string>();
     for (const album of albums) {
-      if (album.id in cachedItems && album.artistId) {
+      if (albumPassesDownloadedFilter(album, cachedItems, includePartial) && album.artistId) {
         downloadedArtistIds.add(album.artistId);
       }
     }
     return artists.filter((a) => downloadedArtistIds.has(a.id));
-  }, [artists, albums, downloadedOnly, cachedItems]);
+  }, [artists, albums, downloadedOnly, cachedItems, includePartial]);
 
   /* ---- Pull-to-refresh ---- */
   const [refreshing, setRefreshing] = useState(false);

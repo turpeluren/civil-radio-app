@@ -26,6 +26,9 @@ jobs:
       - name: Validate translations
         run: node scripts/validate-translations.js
 
+      - name: Validate Intl helpers
+        run: node scripts/validate-intl.js
+
       - name: TypeScript compilation check
         run: npx tsc --noEmit
 

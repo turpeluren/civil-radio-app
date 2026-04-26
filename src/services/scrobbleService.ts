@@ -13,6 +13,7 @@ import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { pendingScrobbleStore } from '../store/pendingScrobbleStore';
 import { scrobbleExclusionStore } from '../store/scrobbleExclusionStore';
+import { applyLocalPlay } from './playStatsService';
 import { getApi, type Child } from './subsonicService';
 
 /**
@@ -111,6 +112,11 @@ export async function sendNowPlaying(song: Child, playlistId?: string): Promise<
 export function addCompletedScrobble(song: Child, playlistId?: string): void {
   if (!song?.id || !song.title) return;
   if (isExcluded(song, playlistId)) return;
+  // Eagerly bump local play-count + last-played across every store that
+  // holds a copy of this song or its album so UI reflects the play before
+  // the server round-trip. Respects the exclusion gate above for free —
+  // excluded plays skip this automatically.
+  applyLocalPlay(song);
   pendingScrobbleStore.getState().addScrobble(song, Date.now());
   processScrobbles();
 }

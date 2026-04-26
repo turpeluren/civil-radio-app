@@ -5,7 +5,6 @@ import { HeaderHeightContext } from '@react-navigation/elements';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -15,9 +14,10 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { SegmentControl, type Segment } from '../components/SegmentControl';
 import { settingsStyles } from '../styles/settingsStyles';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
@@ -53,7 +53,6 @@ const CacheRow = memo(function CacheRow({
   onDelete: (coverArtId: string) => void;
 }) {
   const { t } = useTranslation();
-  const thumbUri = entry.files[0]?.uri;
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
   const handleDelete = useCallback(() => {
@@ -77,8 +76,9 @@ const CacheRow = memo(function CacheRow({
   return (
     <SwipeableRow rightActions={rightActions} leftActions={leftActions} enableFullSwipeRight enableFullSwipeLeft={!offlineMode} rowGap={10} borderRadius={12}>
       <View style={styles.row}>
-        <Image
-          source={{ uri: thumbUri }}
+        <CachedImage
+          coverArtId={entry.coverArtId}
+          size={THUMB_SIZE}
           style={[styles.thumb, { backgroundColor: colors.border }]}
           resizeMode="cover"
         />
@@ -264,7 +264,16 @@ export function ImageCacheBrowserScreen() {
           setItemStatus(coverArtId, 'success');
           setTimeout(() => setItemStatus(coverArtId, 'idle'), 3000);
         })
-        .catch(() => {
+        .catch((err: unknown) => {
+          // Surface the underlying reason so support can trace why a
+          // row stays stuck. The row circuit-breaker in imageCacheService
+          // will purge 404s and 3× failures; anything surviving to here
+          // is a genuine transient problem the user can retry.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[image-cache-browser] refresh failed for ${coverArtId}:`,
+            err,
+          );
           setItemStatus(coverArtId, 'error');
           setTimeout(() => setItemStatus(coverArtId, 'idle'), 3000);
         });
@@ -402,7 +411,7 @@ export function ImageCacheBrowserScreen() {
           onSelect={setStatusFilter}
         />
       </View>
-      <MiniPlayerFooter />
+      <BottomChrome withSafeAreaPadding />
     </GradientBackground>
     <ThemedAlert {...alertProps} />
     </>

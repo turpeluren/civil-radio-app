@@ -7,29 +7,21 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { CachedImage } from './CachedImage';
 import { MarqueeText } from './MarqueeText';
 import WaveformLogo from './WaveformLogo';
-import { useCachedCoverArt } from '../hooks/useCachedCoverArt';
+import { useImagePalette } from '../hooks/useImagePalette';
 import { useTheme } from '../hooks/useTheme';
 import { skipToNext, togglePlayPause } from '../services/playerService';
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { playerStore } from '../store/playerStore';
-import { getProminentColor, type ExtractedColors } from '../utils/colors';
 
 const MINI_PLAYER_HEIGHT = 56;
 /** Matches the placeholder cover art background (rgb 150,150,150). */
@@ -47,12 +39,9 @@ export function MiniPlayer() {
   const queue = playerStore((s) => s.queue);
   const repeatMode = playbackSettingsStore((s) => s.repeatMode);
 
-  const progress = duration > 0 ? position / duration : 0;
-  const progressAnim = useSharedValue(0);
-
-  useEffect(() => {
-    progressAnim.value = withTiming(progress, { duration: 300 });
-  }, [progress, progressAnim]);
+  // Rendered synchronously from the store each re-render — same contract as
+  // PlayerProgressBar so the two surfaces can never visually diverge.
+  const progress = duration > 0 ? Math.max(0, Math.min(position / duration, 1)) : 0;
 
   const error = playerStore((s) => s.error);
   const isPlaying = playbackState === 'playing' || playbackState === 'buffering';
@@ -70,57 +59,9 @@ export function MiniPlayer() {
     [queueLoading, colors.textSecondary, colors.textPrimary],
   );
 
-  // --- Colour extraction ---
-  const cachedUri = useCachedCoverArt(currentTrack?.coverArt, 50);
-  const [bgColor, setBgColor] = useState<string | null>(null);
-  const gradientOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (!currentTrack?.coverArt) {
-      setBgColor(null);
-      return;
-    }
-    if (Constants.appOwnership === 'expo') {
-      setBgColor(null);
-      return;
-    }
-    const uri = cachedUri;
-    if (!uri) {
-      setBgColor(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { getColors } = await import('react-native-image-colors');
-        const result = await getColors(uri, {
-          fallback: colors.background,
-          quality: 'low',
-        });
-        if (cancelled) return;
-        const prominent = getProminentColor(result as ExtractedColors);
-        setBgColor(prominent ?? null);
-      } catch {
-        if (!cancelled) setBgColor(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentTrack?.coverArt, cachedUri, colors.background]);
-
-  useEffect(() => {
-    if (bgColor) {
-      gradientOpacity.value = 0;
-      gradientOpacity.value = withTiming(1, { duration: 400 });
-    } else {
-      gradientOpacity.value = withTiming(0, { duration: 300 });
-    }
-  }, [bgColor, gradientOpacity]);
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${interpolate(progressAnim.value, [0, 1], [0, 100], Extrapolation.CLAMP)}%`,
-  }));
+  // --- Colour extraction (palette is theme-aware; primary is lightness-clamped
+  // for safe icon contrast, secondary is null for monochromatic covers). ---
+  const { primary, secondary, gradientOpacity } = useImagePalette(currentTrack?.coverArt);
 
   const gradientAnimatedStyle = useAnimatedStyle(() => ({
     opacity: gradientOpacity.value,
@@ -132,24 +73,38 @@ export function MiniPlayer() {
 
   if (!currentTrack) return null;
 
-  const gradientStart = queueLoading ? PLACEHOLDER_BG : (bgColor ?? colors.card);
-  const gradientEnd = colors.background;
-
   /** Append alpha hex to a colour string (supports #RGB, #RRGGBB). */
   const withAlpha = (hex: string, alpha: number) => {
     const a = Math.round(alpha * 255).toString(16).padStart(2, '0');
     return `${hex}${a}`;
   };
 
+  // 2-stop vertical gradient: extracted secondary (prefer) → theme
+  // background. On smaller screens the richer 3-stop bi-tone read as
+  // too busy over the mini player, so we drop the more-vibrant `primary`
+  // from the render and use `secondary` (the most-common hue distinct
+  // from primary) as the calmer top colour. `primary` still extracts
+  // and is available in the hook for future tablet/landscape layouts.
+  const extractedTop = secondary ?? primary ?? colors.card;
+  const topColor = queueLoading ? PLACEHOLDER_BG : extractedTop;
+  const gradientColors: readonly [string, string, ...string[]] = [
+    withAlpha(topColor, 0.65),
+    withAlpha(colors.background, 0.65),
+  ];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 1];
+
   return (
     <View style={[styles.container, { backgroundColor: withAlpha(colors.card, 0.65) }]}>
       {/* Progress bar */}
       <View style={styles.progressTrack}>
-        <Animated.View
+        <View
           style={[
             styles.progressFill,
-            { backgroundColor: colors.primary, opacity: 0.65 },
-            progressStyle,
+            {
+              backgroundColor: colors.primary,
+              opacity: 0.65,
+              width: `${progress * 100}%`,
+            },
           ]}
         />
       </View>
@@ -157,7 +112,8 @@ export function MiniPlayer() {
       {/* Gradient overlay */}
       <Animated.View style={[StyleSheet.absoluteFillObject, gradientAnimatedStyle]} pointerEvents="none">
         <LinearGradient
-          colors={[withAlpha(gradientStart, 0.65), withAlpha(gradientEnd, 0.65)]}
+          colors={gradientColors}
+          locations={gradientLocations}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}

@@ -4,8 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { DownloadedIcon } from './DownloadedIcon';
-import { StarRatingDisplay } from './StarRating';
+import { RowMetaLine } from './RowMetaLine';
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
@@ -24,7 +23,7 @@ export const SongRow = memo(function SongRow({ song, onPress }: { song: Child; o
   const { colors } = useTheme();
   const { t } = useTranslation();
   const starred = useIsStarred('song', song.id);
-  const downloaded = useDownloadStatus('song', song.id) === 'complete';
+  const downloadStatus = useDownloadStatus('song', song.id);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
   const rating = useRating(song.id, song.userRating);
   const duration =
@@ -99,30 +98,30 @@ export const SongRow = memo(function SongRow({ song, onPress }: { song: Child; o
             {song.artist ?? t('unknownArtist')}
           </Text>
           <View style={styles.meta}>
-            <View style={styles.metaAlbum}>
-              <Ionicons name="disc-outline" size={14} color={colors.primary} />
-              <View style={styles.albumTextWrapper}>
-                <Text
-                  style={[styles.albumText, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {song.album ?? t('unknownAlbum')}
-                </Text>
-              </View>
-            </View>
-            {rating > 0 && (
-              <View style={styles.indicator}>
-                <StarRatingDisplay rating={rating} size={12} color={colors.primary} emptyColor={colors.primary} />
-              </View>
-            )}
-            {starred && <Ionicons name="heart" size={14} color={colors.red} style={styles.indicator} />}
-            {downloaded && <View style={styles.indicator}><DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" /></View>}
-            <View style={styles.metaDuration}>
-              <Ionicons name="time-outline" size={14} color={colors.primary} />
-              <Text style={[styles.durationText, { color: colors.textSecondary }]}>
-                {duration}
-              </Text>
-            </View>
+            <RowMetaLine
+              leading={
+                <>
+                  <Ionicons name="disc-outline" size={14} color={colors.primary} />
+                  <View style={styles.albumTextWrapper}>
+                    <Text
+                      style={[styles.albumText, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {song.album ?? t('unknownAlbum')}
+                    </Text>
+                  </View>
+                </>
+              }
+              slots={['rating', 'download', 'heart', 'duration']}
+              rating={rating}
+              starred={starred}
+              downloadStatus={
+                downloadStatus === 'complete' || downloadStatus === 'partial'
+                  ? downloadStatus
+                  : 'none'
+              }
+              durationText={duration}
+            />
           </View>
         </View>
       </View>
@@ -150,39 +149,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  indicator: {
-    marginLeft: 6,
-  },
   artistName: {
     fontSize: 14,
     marginTop: 2,
   },
   meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginTop: 3,
-  },
-  metaAlbum: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 0,
   },
   albumTextWrapper: {
     flex: 1,
+    // `minWidth: 0` is essential for the album-name Text to actually
+    // ellipsize when long. Without it, flex children refuse to shrink
+    // below their content's intrinsic width and the row pushes wider
+    // than its parent.
+    minWidth: 0,
     marginLeft: 3,
   },
   albumText: {
     fontSize: 12,
-  },
-  metaDuration: {
-    flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  durationText: {
-    fontSize: 12,
-    marginLeft: 3,
   },
 });

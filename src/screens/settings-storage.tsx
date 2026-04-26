@@ -3,19 +3,23 @@ import Slider from '@react-native-community/slider';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useRouter } from 'expo-router';
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { settingsStyles } from '../styles/settingsStyles';
 import { StorageUsageBar } from '../components/StorageUsageBar';
 import { useTheme } from '../hooks/useTheme';
 import { useThemedAlert } from '../hooks/useThemedAlert';
 import { ThemedAlert } from '../components/ThemedAlert';
-import { clearImageCache } from '../services/imageCacheService';
+import {
+  clearImageCache,
+  reconcileImageCacheAsync,
+  repairIncompleteImagesAsync,
+} from '../services/imageCacheService';
 import { clearMusicCache } from '../services/musicCacheService';
 import { clearQueue } from '../services/playerService';
 import { checkStorageLimit, getFreeDiskSpace } from '../services/storageService';
@@ -29,9 +33,12 @@ import {
   musicCacheStore,
   type MaxConcurrentDownloads,
 } from '../store/musicCacheStore';
+import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistDetailStore } from '../store/playlistDetailStore';
+import { processingOverlayStore } from '../store/processingOverlayStore';
 import { storageLimitStore, type StorageLimitMode } from '../store/storageLimitStore';
 import { formatBytes } from '../utils/formatters';
+import { minDelay } from '../utils/stringHelpers';
 
 const CONCURRENT_OPTIONS: MaxConcurrentDownloads[] = [1, 3, 5];
 const IMAGE_CONCURRENT_OPTIONS: MaxConcurrentImageDownloads[] = [1, 3, 5, 10];
@@ -78,6 +85,8 @@ export function SettingsStorageScreen() {
 
   const limitMode = storageLimitStore((s) => s.limitMode);
   const maxCacheSizeGB = storageLimitStore((s) => s.maxCacheSizeGB);
+
+  const offlineMode = offlineModeStore((s) => s.offlineMode);
 
   const BYTES_PER_GB = 1024 ** 3;
   const freeDisk = getFreeDiskSpace();
@@ -206,6 +215,61 @@ export function SettingsStorageScreen() {
     imageCacheStore.getState().setMaxConcurrentImageDownloads(value);
     setImageConcurrentSheetVisible(false);
   }, []);
+
+  const [imageScanning, setImageScanning] = useState(false);
+
+  const handleImageScan = useCallback(async () => {
+    if (imageScanning) return;
+    setImageScanning(true);
+    // Reconcile can finish in tens of ms for a small cache — pair it with a
+    // minimum display window so the spinner is perceptible and the user sees
+    // the tap actually did something.
+    const minShown = minDelay(1500);
+    try {
+      await reconcileImageCacheAsync();
+      imageCacheStore.getState().recalculateFromDb();
+    } finally {
+      await minShown;
+      setImageScanning(false);
+    }
+  }, [imageScanning]);
+
+  const [imageRepairing, setImageRepairing] = useState(false);
+
+  const handleImageRepair = useCallback(async () => {
+    if (offlineMode || imageRepairing) return;
+    setImageRepairing(true);
+    processingOverlayStore.getState().show(t('repairingImages'));
+    const minShown = minDelay(1500);
+    try {
+      const outcome = await repairIncompleteImagesAsync();
+      imageCacheStore.getState().recalculateFromDb();
+
+      if (outcome.queued === 0 && outcome.removed === 0) {
+        processingOverlayStore.getState().showSuccess(t('imageRepairNothingToDo'));
+      } else if (outcome.failed > 0) {
+        processingOverlayStore.getState().showSuccess(
+          t('imageRepairCompleteWithFailures', {
+            repaired: outcome.repaired,
+            removed: outcome.removed,
+            failed: outcome.failed,
+          }),
+        );
+      } else {
+        processingOverlayStore.getState().showSuccess(
+          t('imageRepairComplete', {
+            repaired: outcome.repaired,
+            removed: outcome.removed,
+          }),
+        );
+      }
+    } catch {
+      processingOverlayStore.getState().showError(t('imageRepairFailed'));
+    } finally {
+      await minShown;
+      setImageRepairing(false);
+    }
+  }, [offlineMode, imageRepairing, t]);
 
   const dynamicStyles = useMemo(
     () =>
@@ -366,28 +430,19 @@ export function SettingsStorageScreen() {
               {formatBytes(totalBytes)}
             </Text>
           </View>
-          {incompleteCount > 0 && (
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/image-cache-browser',
-                  params: { filter: 'incomplete' },
-                })
-              }
-              style={({ pressed }) => [
-                settingsStyles.infoRow,
-                { borderBottomColor: colors.border },
-                pressed && settingsStyles.pressed,
+          <View style={[settingsStyles.infoRow, { borderBottomColor: colors.border }]}>
+            <Text style={[settingsStyles.infoLabel, { color: colors.textPrimary }]}>
+              {t('incompleteImages')}
+            </Text>
+            <Text
+              style={[
+                settingsStyles.infoValue,
+                { color: incompleteCount > 0 ? colors.red : colors.textSecondary },
               ]}
             >
-              <Text style={[settingsStyles.infoLabel, { color: colors.red }]}>
-                {t('incompleteImages')}
-              </Text>
-              <Text style={[settingsStyles.infoValue, { color: colors.red }]}>
-                {t('incompleteImagesWarning', { count: incompleteCount })}
-              </Text>
-            </Pressable>
-          )}
+              {incompleteCount}
+            </Text>
+          </View>
           <Pressable
             onPress={handleImageConcurrentPress}
             style={({ pressed }) => [
@@ -401,6 +456,56 @@ export function SettingsStorageScreen() {
               {maxConcurrentImageDownloads}
             </Text>
           </Pressable>
+          <View style={settingsStyles.actionRow}>
+            <Pressable
+              onPress={handleImageScan}
+              disabled={imageScanning}
+              style={({ pressed }) => [
+                settingsStyles.actionRowButton,
+                { borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth },
+                pressed && !imageScanning && settingsStyles.pressed,
+                imageScanning && settingsStyles.disabled,
+              ]}
+            >
+              {imageScanning ? (
+                <ActivityIndicator size="small" color={colors.textPrimary} />
+              ) : (
+                <Ionicons name="search-outline" size={18} color={colors.textPrimary} />
+              )}
+              <Text style={[settingsStyles.actionRowButtonText, { color: colors.textPrimary }]}>
+                {t('scan')}
+              </Text>
+            </Pressable>
+            {incompleteCount > 0 && (
+              <Pressable
+                onPress={handleImageRepair}
+                disabled={offlineMode || imageRepairing}
+                style={({ pressed }) => [
+                  settingsStyles.actionRowButton,
+                  { backgroundColor: colors.primary },
+                  pressed && !offlineMode && !imageRepairing && settingsStyles.pressed,
+                  (offlineMode || imageRepairing) && settingsStyles.disabled,
+                ]}
+              >
+                {imageRepairing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="build-outline" size={18} color="#fff" />
+                )}
+                <Text style={[settingsStyles.actionRowButtonText, { color: '#fff' }]}>
+                  {t('repair')}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+          {offlineMode && incompleteCount > 0 && (
+            <View style={styles.offlineNotice}>
+              <Ionicons name="cloud-offline-outline" size={16} color={colors.textSecondary} />
+              <Text style={[styles.offlineNoticeText, { color: colors.textSecondary }]}>
+                {t('repairImagesOfflineNotice')}
+              </Text>
+            </View>
+          )}
           <Pressable
             onPress={() => router.push('/image-cache-browser')}
             style={({ pressed }) => [
@@ -519,7 +624,7 @@ export function SettingsStorageScreen() {
       </View>
 
     </ScrollView>
-    <MiniPlayerFooter />
+    <BottomChrome withSafeAreaPadding />
     </GradientBackground>
 
     <Modal
@@ -614,6 +719,22 @@ export function SettingsStorageScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Mirrors `offlineNotice` / `offlineNoticeText` in
+  // `settings-library-data.tsx`. Duplicated here rather than lifted into
+  // settingsStyles because it's currently only used on these two cards;
+  // if a third caller appears, move it into the shared sheet.
+  offlineNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  offlineNoticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
+  },
   clearCacheButton: {
     flexDirection: 'row',
     alignItems: 'center',

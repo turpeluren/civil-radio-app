@@ -36,10 +36,16 @@ export interface FavoritesState {
    */
   overrides: Record<string, boolean>;
 
-  /** Fetch all starred items from the server via getStarred2. */
-  fetchStarred: () => Promise<void>;
+  /** Fetch all starred items from the server via getStarred2.
+   *  Pass `{ prefetchCovers: false }` to skip the eager cover-art cache —
+   *  used by the background library sync. User-facing refreshes omit it. */
+  fetchStarred: (opts?: { prefetchCovers?: boolean }) => Promise<void>;
   /** Set an optimistic override for a single item. */
   setOverride: (id: string, starred: boolean) => void;
+  /** Eagerly bump local play stats for a just-scrobbled song and its album
+   *  when they appear in the starred lists. No-op for either half that
+   *  isn't present. */
+  applyLocalPlay: (songId: string, albumId: string | undefined, now: string) => void;
   /** Clear all favorites data */
   clearFavorites: () => void;
 }
@@ -57,7 +63,8 @@ export const favoritesStore = create<FavoritesState>()(
       lastFetchedAt: null,
       overrides: {},
 
-      fetchStarred: async () => {
+      fetchStarred: async (opts?: { prefetchCovers?: boolean }) => {
+        const prefetchCovers = opts?.prefetchCovers ?? true;
         // Prevent duplicate fetches
         if (get().loading) return;
 
@@ -82,13 +89,16 @@ export const favoritesStore = create<FavoritesState>()(
             overrides: {},
           });
 
-          // Proactively cache cover art for new IDs so they survive offline
-          cacheEntityCoverArt(songs);
-          for (const a of albums) {
-            if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
-          }
-          for (const a of artists) {
-            if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
+          // Proactively cache cover art for new IDs so they survive offline.
+          // Skipped during bulk sync — see prefetchCovers contract above.
+          if (prefetchCovers) {
+            cacheEntityCoverArt(songs);
+            for (const a of albums) {
+              if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
+            }
+            for (const a of artists) {
+              if (a.coverArt) cacheAllSizes(a.coverArt).catch(() => { /* non-critical */ });
+            }
           }
         } catch (e) {
           set({
@@ -100,6 +110,41 @@ export const favoritesStore = create<FavoritesState>()(
 
       setOverride: (id: string, starred: boolean) =>
         set((s) => ({ overrides: { ...s.overrides, [id]: starred } })),
+
+      applyLocalPlay: (songId, albumId, now) => {
+        const current = get();
+        let songs: Child[] = current.songs;
+        let albums: AlbumID3[] = current.albums;
+        let changed = false;
+
+        const songIdx = current.songs.findIndex((s) => s.id === songId);
+        if (songIdx !== -1) {
+          const oldSong = current.songs[songIdx];
+          const nextSong: Child = {
+            ...oldSong,
+            playCount: (oldSong.playCount ?? 0) + 1,
+            played: now,
+          };
+          songs = current.songs.map((s, i) => (i === songIdx ? nextSong : s));
+          changed = true;
+        }
+
+        if (albumId) {
+          const albumIdx = current.albums.findIndex((a) => a.id === albumId);
+          if (albumIdx !== -1) {
+            const oldAlbum = current.albums[albumIdx];
+            const nextAlbum: AlbumID3 = {
+              ...oldAlbum,
+              playCount: (oldAlbum.playCount ?? 0) + 1,
+              played: now,
+            };
+            albums = current.albums.map((a, i) => (i === albumIdx ? nextAlbum : a));
+            changed = true;
+          }
+        }
+
+        if (changed) set({ songs, albums });
+      },
 
       clearFavorites: () =>
         set({

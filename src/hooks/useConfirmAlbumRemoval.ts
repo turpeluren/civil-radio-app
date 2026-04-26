@@ -1,0 +1,69 @@
+import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { useThemedAlert } from './useThemedAlert';
+import {
+  computeAlbumRemovalOutcome,
+  deleteCachedItem,
+  demoteAlbumToPartial,
+} from '../services/musicCacheService';
+import { musicCacheStore } from '../store/musicCacheStore';
+
+/**
+ * Returns `{ confirmRemove, alertProps }`. Callers must render
+ * `<ThemedAlert {...alertProps} />` so the Android confirmation modal can
+ * mount. On iOS the native `Alert.alert` is used, but `alertProps` is still
+ * returned (spreads are a no-op when `visible` is `false`).
+ *
+ * `confirmRemove(itemId)` behaviour:
+ * - Non-album items → pass straight through to `deleteCachedItem`.
+ * - Album with no survivors (all songs would be orphaned) → `deleteCachedItem`.
+ * - Album with survivors (some songs are also edged by playlist / favorites /
+ *   single-song items) → show a confirmation dialog explaining the outcome.
+ *   On confirm, `demoteAlbumToPartial` preserves the album row with survivor
+ *   edges (and its original `downloadedAt`), so the UI shows it as partial.
+ */
+export function useConfirmAlbumRemoval() {
+  const { alert, alertProps } = useThemedAlert();
+  const { t } = useTranslation();
+
+  const confirmRemove = useCallback(
+    (itemId: string) => {
+      if (!itemId) return;
+      const cached = musicCacheStore.getState().cachedItems[itemId];
+      if (!cached) {
+        deleteCachedItem(itemId);
+        return;
+      }
+      if (cached.type !== 'album') {
+        deleteCachedItem(itemId);
+        return;
+      }
+      const { survivorCount } = computeAlbumRemovalOutcome(itemId);
+      if (survivorCount === 0) {
+        deleteCachedItem(itemId);
+        return;
+      }
+      alert(
+        t('removeAlbumKeepsSongsTitle'),
+        t('removeAlbumKeepsSongsMessage', {
+          count: survivorCount,
+          album: cached.name,
+        }),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          {
+            text: t('removeAnyway'),
+            style: 'destructive',
+            onPress: () => {
+              demoteAlbumToPartial(itemId);
+            },
+          },
+        ],
+      );
+    },
+    [alert, t],
+  );
+
+  return { confirmRemove, alertProps };
+}

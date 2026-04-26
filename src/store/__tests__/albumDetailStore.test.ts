@@ -205,4 +205,94 @@ describe('albumDetailStore', () => {
       expect(albumDetailStore.getState().hasHydrated).toBe(true);
     });
   });
+
+  describe('applyLocalPlay', () => {
+    const now = '2026-04-22T10:00:00.000Z';
+
+    it('bumps album + matching song when both exist', async () => {
+      const album = {
+        id: 'a1',
+        name: 'Test',
+        playCount: 4,
+        played: '2026-04-01T00:00:00Z',
+        song: [
+          { id: 's1', title: 'Song 1', playCount: 2, played: '2026-04-01T00:00:00Z' },
+          { id: 's2', title: 'Song 2', playCount: 0 },
+        ],
+      };
+      mockGetAlbum.mockResolvedValue(album as any);
+      await albumDetailStore.getState().fetchAlbum('a1');
+
+      albumDetailStore.getState().applyLocalPlay('s1', 'a1', now);
+
+      const updated = albumDetailStore.getState().albums['a1']!.album as any;
+      expect(updated.playCount).toBe(5);
+      expect(updated.played).toBe(now);
+      expect(updated.song[0].playCount).toBe(3);
+      expect(updated.song[0].played).toBe(now);
+      expect(updated.song[1].playCount).toBe(0);
+      expect(updated.song[1].played).toBeUndefined();
+    });
+
+    it('treats undefined playCount as 0 before incrementing', async () => {
+      const album = { id: 'a1', name: 'T', song: [{ id: 's1', title: 'S' }] };
+      mockGetAlbum.mockResolvedValue(album as any);
+      await albumDetailStore.getState().fetchAlbum('a1');
+
+      albumDetailStore.getState().applyLocalPlay('s1', 'a1', now);
+
+      const updated = albumDetailStore.getState().albums['a1']!.album as any;
+      expect(updated.playCount).toBe(1);
+      expect(updated.song[0].playCount).toBe(1);
+      expect(updated.song[0].played).toBe(now);
+    });
+
+    it('bumps album-level stats even when the song is not in the cached song list', async () => {
+      const album = {
+        id: 'a1',
+        name: 'T',
+        playCount: 7,
+        song: [{ id: 's1', title: 'S' }],
+      };
+      mockGetAlbum.mockResolvedValue(album as any);
+      await albumDetailStore.getState().fetchAlbum('a1');
+
+      albumDetailStore.getState().applyLocalPlay('s99', 'a1', now);
+
+      const updated = albumDetailStore.getState().albums['a1']!.album as any;
+      expect(updated.playCount).toBe(8);
+      expect(updated.played).toBe(now);
+      expect(updated.song[0].playCount).toBeUndefined();
+    });
+
+    it('is a no-op when albumId is undefined', async () => {
+      const album = { id: 'a1', name: 'T', playCount: 4, song: [] };
+      mockGetAlbum.mockResolvedValue(album as any);
+      await albumDetailStore.getState().fetchAlbum('a1');
+      const before = albumDetailStore.getState().albums['a1'];
+
+      albumDetailStore.getState().applyLocalPlay('s1', undefined, now);
+
+      // Same reference — state should not have changed.
+      expect(albumDetailStore.getState().albums['a1']).toBe(before);
+    });
+
+    it('is a no-op when the album is not in the cache', () => {
+      albumDetailStore.getState().applyLocalPlay('s1', 'unknown-album', now);
+      expect(albumDetailStore.getState().albums['unknown-album']).toBeUndefined();
+    });
+
+    it('produces a new object reference on the mutated entry (selector identity)', async () => {
+      const album = { id: 'a1', name: 'T', playCount: 1, song: [{ id: 's1', title: 'S' }] };
+      mockGetAlbum.mockResolvedValue(album as any);
+      await albumDetailStore.getState().fetchAlbum('a1');
+      const before = albumDetailStore.getState().albums['a1'];
+
+      albumDetailStore.getState().applyLocalPlay('s1', 'a1', now);
+
+      const after = albumDetailStore.getState().albums['a1'];
+      expect(after).not.toBe(before);
+      expect(after!.album).not.toBe(before!.album);
+    });
+  });
 });

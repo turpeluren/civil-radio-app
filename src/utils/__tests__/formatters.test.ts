@@ -14,28 +14,57 @@ describe('formatCompactDuration', () => {
     expect(formatCompactDuration(2760)).toBe('46m');
   });
 
-  it('formats exact hours', () => {
-    expect(formatCompactDuration(3600)).toBe('1h');
-    expect(formatCompactDuration(7200)).toBe('2h');
+  it('formats exact hours with explicit "0m"', () => {
+    expect(formatCompactDuration(3600)).toBe('1h 0m');
+    expect(formatCompactDuration(7200)).toBe('2h 0m');
   });
 
-  it('formats hours and minutes', () => {
-    expect(formatCompactDuration(5400)).toBe('1h30m');
-    expect(formatCompactDuration(3660)).toBe('1h1m');
+  it('formats hours and minutes with a space separator', () => {
+    expect(formatCompactDuration(5400)).toBe('1h 30m');
+    expect(formatCompactDuration(3660)).toBe('1h 1m');
   });
 
-  it('rounds to nearest minute', () => {
-    expect(formatCompactDuration(90)).toBe('2m');
-    expect(formatCompactDuration(89)).toBe('1m');
+  it('formats just before the day boundary', () => {
+    expect(formatCompactDuration(23 * 3600 + 59 * 60)).toBe('23h 59m');
+  });
+
+  it('switches to days at 24h, drops minutes', () => {
+    expect(formatCompactDuration(24 * 3600)).toBe('1d 0h');
+    expect(formatCompactDuration(24 * 3600 + 30 * 60)).toBe('1d 0h');
+    expect(formatCompactDuration(33 * 24 * 3600 + 8 * 3600)).toBe('33d 8h');
+  });
+
+  it('floors sub-minute seconds to 0m', () => {
+    expect(formatCompactDuration(30)).toBe('0m');
+    expect(formatCompactDuration(59)).toBe('0m');
   });
 
   it('handles negative input', () => {
+    // Negative durations are nonsensical for album/playlist totals; this
+    // documents that the formatter doesn't crash, not that the output is
+    // beautiful.
     expect(formatCompactDuration(-60)).toBe('-1m');
   });
 
   it('handles NaN input without crashing', () => {
     const result = formatCompactDuration(NaN);
     expect(result).toContain('NaN');
+  });
+
+  it('keeps the output bounded to ≤ 7 characters', () => {
+    // Cap relied upon by RowMetaLine when sizing DURATION_SLOT_WIDTH.
+    const samples = [
+      0,
+      59 * 60,
+      60 * 60,
+      23 * 3600 + 59 * 60,
+      24 * 3600,
+      107 * 3600 + 10 * 60,
+      365 * 24 * 3600,
+    ];
+    for (const s of samples) {
+      expect(formatCompactDuration(s).length).toBeLessThanOrEqual(7);
+    }
   });
 });
 

@@ -6,9 +6,10 @@ import { useTranslation } from 'react-i18next';
 
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { SwipeableRow, type SwipeAction } from '../components/SwipeableRow';
 import { useTheme } from '../hooks/useTheme';
+import { defaultCollator } from '../utils/intl';
 import {
   scrobbleExclusionStore,
   type ScrobbleExclusion,
@@ -89,7 +90,7 @@ export function ScrobbleExclusionBrowserScreen() {
       ...Object.values(excludedArtists).map((e) => ({ ...e, type: 'artist' as const })),
       ...Object.values(excludedPlaylists).map((e) => ({ ...e, type: 'playlist' as const })),
     ];
-    return items.sort((a, b) => a.name.localeCompare(b.name));
+    return items.sort((a, b) => defaultCollator.compare(a.name, b.name));
   }, [excludedAlbums, excludedArtists, excludedPlaylists]);
 
   const renderItem = useCallback(
@@ -117,7 +118,7 @@ export function ScrobbleExclusionBrowserScreen() {
           title={t('noScrobbleExclusions')}
           subtitle={t('scrobbleExclusionsSubtitle')}
         />
-        <MiniPlayerFooter />
+        <BottomChrome withSafeAreaPadding />
       </GradientBackground>
     );
   }
@@ -130,7 +131,7 @@ export function ScrobbleExclusionBrowserScreen() {
         keyExtractor={keyExtractor}
         contentContainerStyle={contentContainerStyle}
       />
-      <MiniPlayerFooter />
+      <BottomChrome withSafeAreaPadding />
     </GradientBackground>
   );
 }

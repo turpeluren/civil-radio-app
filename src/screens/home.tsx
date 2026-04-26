@@ -38,7 +38,9 @@ import { completedScrobbleStore } from '../store/completedScrobbleStore';
 import { favoritesStore } from '../store/favoritesStore';
 import { pendingScrobbleStore } from '../store/pendingScrobbleStore';
 import { filterBarStore } from '../store/filterBarStore';
+import { layoutPreferencesStore } from '../store/layoutPreferencesStore';
 import { musicCacheStore } from '../store/musicCacheStore';
+import { albumPassesDownloadedFilter } from '../store/persistence/cachedItemHelpers';
 import { LIST_LENGTH_DISPLAY_CAP } from '../store/layoutPreferencesStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import { playlistLibraryStore } from '../store/playlistLibraryStore';
@@ -363,6 +365,7 @@ export function HomeScreen() {
   const favoritesOnly = filterBarStore((s) => s.favoritesOnly);
   const cachedItems = musicCacheStore((s) => s.cachedItems);
   const starredAlbums = favoritesStore((s) => s.albums);
+  const includePartial = layoutPreferencesStore((s) => s.includePartialInDownloadedFilter);
 
   const allLibraryAlbums = albumLibraryStore((s) => s.albums);
   const allPlaylists = playlistLibraryStore((s) => s.playlists);
@@ -387,23 +390,26 @@ export function HomeScreen() {
     const result: Record<string, AlbumID3[]> = {};
     for (const key of SECTION_ORDER) {
       result[key] = allSections[key].filter((album) => {
-        if (downloadedOnly && !(album.id in cachedItems)) return false;
+        if (downloadedOnly && !albumPassesDownloadedFilter(album, cachedItems, includePartial)) {
+          return false;
+        }
         if (starredIds && !starredIds.has(album.id)) return false;
         return true;
       });
     }
     return result as Record<AlbumListType, AlbumID3[]>;
-  }, [allSections, downloadedOnly, favoritesOnly, cachedItems, starredAlbums]);
+  }, [allSections, downloadedOnly, favoritesOnly, cachedItems, starredAlbums, includePartial]);
 
   const hasAnyFilters = downloadedOnly || favoritesOnly;
 
   const downloadedAlbums = useMemo(() => {
     if (!downloadedOnly) return [];
-    return allLibraryAlbums.filter((a) => a.id in cachedItems);
-  }, [downloadedOnly, allLibraryAlbums, cachedItems]);
+    return allLibraryAlbums.filter((a) => albumPassesDownloadedFilter(a, cachedItems, includePartial));
+  }, [downloadedOnly, allLibraryAlbums, cachedItems, includePartial]);
 
   const downloadedPlaylists = useMemo(() => {
     if (!downloadedOnly) return [];
+    // Playlists don't have a "partial" state — they download atomically.
     return allPlaylists.filter((p) => p.id in cachedItems);
   }, [downloadedOnly, allPlaylists, cachedItems]);
 

@@ -12,10 +12,28 @@ function formatNumber(v: number): string {
   return v.toLocaleString();
 }
 
-function formatDuration(v: number): string {
-  const h = Math.floor(v / 3600);
-  const m = Math.floor((v % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+/**
+ * Format a number of seconds for the My Listening card. Auto-scales to
+ * the largest meaningful unit so the value always fits in its column:
+ *
+ *   <1h   → "Xm"
+ *   <24h  → "Xh Ym"
+ *   ≥24h  → "Xd Yh"      (drops minutes — noise at this scale)
+ *
+ * The day-tier switch keeps "107h 10m" from wrapping the column on
+ * heavy listeners; the same value renders as "4d 11h" instead.
+ */
+export function formatDuration(v: number): string {
+  const totalMinutes = Math.floor(v / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    const m = totalMinutes - totalHours * 60;
+    return `${totalHours}h ${m}m`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours - days * 24;
+  return `${days}d ${hours}h`;
 }
 
 const EXIT_DURATION = 200;

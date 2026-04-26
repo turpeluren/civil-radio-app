@@ -11,16 +11,25 @@ import { useCallback } from 'react';
 
 import { getLocalTrackUri, getTrackQueueStatus } from '../services/musicCacheService';
 import { musicCacheStore, type MusicCacheState } from '../store/musicCacheStore';
+import { isPartialAlbum } from '../store/persistence/cachedItemHelpers';
 
-export type DownloadStatus = 'none' | 'queued' | 'downloading' | 'complete';
+export type DownloadStatus =
+  | 'none'
+  | 'queued'
+  | 'downloading'
+  | 'partial'
+  | 'complete';
 
 /**
  * Returns the download status for the given item.
  *
  * - **song:** checks the in-memory track URI map for `'complete'`,
  *   then falls back to queue membership for `'queued'`/`'downloading'`.
- * - **album/playlist:** checks `cachedItems` for `'complete'`,
- *   then `downloadQueue` for `'queued'`/`'downloading'`.
+ * - **album/playlist:** a complete cached row wins outright. A partial album
+ *   row with an active queue entry (top-up in flight) reports as
+ *   `'downloading'` / `'queued'` so the download button reflects in-progress
+ *   work. A partial album with no queue entry reports `'partial'`. Falls
+ *   back to the queue when there's no cached row at all.
  */
 export function useDownloadStatus(
   type: 'song' | 'album' | 'playlist',
@@ -39,8 +48,19 @@ export function useDownloadStatus(
         }
 
         // Album or playlist
-        if (id in s.cachedItems) return 'complete';
+        const item = s.cachedItems[id];
         const queueItem = s.downloadQueue.find((q) => q.itemId === id);
+        if (item) {
+          if (isPartialAlbum(item)) {
+            // Top-up in flight — surface the queue status so the button
+            // switches from the orange partial badge to a progress ring.
+            if (queueItem) {
+              return queueItem.status === 'downloading' ? 'downloading' : 'queued';
+            }
+            return 'partial';
+          }
+          return 'complete';
+        }
         if (queueItem) {
           return queueItem.status === 'downloading' ? 'downloading' : 'queued';
         }

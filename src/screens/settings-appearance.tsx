@@ -1,11 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useCallback, useContext, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { settingsStyles } from '../styles/settingsStyles';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { useTheme } from '../hooks/useTheme';
@@ -121,6 +121,13 @@ export function SettingsAppearanceScreen() {
 
   const listLength = layoutPreferencesStore((s) => s.listLength);
   const setListLength = layoutPreferencesStore((s) => s.setListLength);
+
+  const includePartialInDownloadedFilter = layoutPreferencesStore(
+    (s) => s.includePartialInDownloadedFilter,
+  );
+  const setIncludePartialInDownloadedFilter = layoutPreferencesStore(
+    (s) => s.setIncludePartialInDownloadedFilter,
+  );
 
   const handleListLengthChange = useCallback(
     async (value: ListLength) => {
@@ -501,6 +508,27 @@ export function SettingsAppearanceScreen() {
       </View>
 
       <View style={settingsStyles.section}>
+        <Text style={[settingsStyles.sectionTitle, dynamicStyles.sectionTitle]}>{t('filters')}</Text>
+        <View style={[settingsStyles.card, { backgroundColor: colors.card }]}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextWrap}>
+              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                {t('includePartialDownloads')}
+              </Text>
+              <Text style={[styles.toggleHint, { color: colors.textSecondary }]}>
+                {t('includePartialDownloadsHint')}
+              </Text>
+            </View>
+            <Switch
+              value={includePartialInDownloadedFilter}
+              onValueChange={setIncludePartialInDownloadedFilter}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={settingsStyles.section}>
         <Text style={[settingsStyles.sectionTitle, dynamicStyles.sectionTitle]}>{t('libraryLayout')}</Text>
         <View style={styles.themeCard}>
           {LAYOUT_ROWS.map((row) => {
@@ -588,7 +616,7 @@ export function SettingsAppearanceScreen() {
 
 
     </ScrollView>
-    <MiniPlayerFooter />
+    <BottomChrome withSafeAreaPadding />
     </GradientBackground>
   );
 }
@@ -678,5 +706,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 16,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 16,
+  },
+  toggleHint: {
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 16,
   },
 });

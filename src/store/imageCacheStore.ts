@@ -26,6 +26,14 @@ const DEFAULT_MAX_CONCURRENT: MaxConcurrentImageDownloads = 5;
 
 interface ImageCacheSettings {
   maxConcurrentImageDownloads: MaxConcurrentImageDownloads;
+  /** Timestamp of the last successful FS↔SQL reconcile, epoch ms.
+   *  Consumed by imageCacheService to throttle reconcile to once per
+   *  week in the deferred-init path. Undefined = never run. */
+  lastReconcileMs?: number;
+  /** Set true after the one-shot filesystem-hostile-char (`:` etc.)
+   *  directory migration has run and renamed any pre-existing
+   *  `dc-xxxx:N`-style dirs under image-cache to the sanitised form. */
+  fsKeyMigrationV1Done?: boolean;
 }
 
 function readSettingsBlob(): ImageCacheSettings {
@@ -36,10 +44,19 @@ function readSettingsBlob(): ImageCacheSettings {
   try {
     const parsed = JSON.parse(raw) as Partial<ImageCacheSettings>;
     const max = parsed?.maxConcurrentImageDownloads;
-    if (max === 1 || max === 3 || max === 5 || max === 10) {
-      return { maxConcurrentImageDownloads: max };
+    const validated: ImageCacheSettings = {
+      maxConcurrentImageDownloads:
+        max === 1 || max === 3 || max === 5 || max === 10
+          ? max
+          : DEFAULT_MAX_CONCURRENT,
+    };
+    if (typeof parsed?.lastReconcileMs === 'number' && parsed.lastReconcileMs > 0) {
+      validated.lastReconcileMs = parsed.lastReconcileMs;
     }
-    return { maxConcurrentImageDownloads: DEFAULT_MAX_CONCURRENT };
+    if (parsed?.fsKeyMigrationV1Done === true) {
+      validated.fsKeyMigrationV1Done = true;
+    }
+    return validated;
   } catch {
     return { maxConcurrentImageDownloads: DEFAULT_MAX_CONCURRENT };
   }
@@ -51,6 +68,36 @@ function writeSettingsBlob(settings: ImageCacheSettings): void {
   } catch {
     /* dropped — next launch falls back to defaults */
   }
+}
+
+/**
+ * Return the epoch-ms timestamp of the last successful image-cache
+ * reconcile, or undefined when one has never completed. Consumed by the
+ * service's deferred-init throttle.
+ */
+export function getLastReconcileMs(): number | undefined {
+  return readSettingsBlob().lastReconcileMs;
+}
+
+/**
+ * Persist the timestamp of a just-completed reconcile pass. Merges with
+ * the existing settings blob so unrelated fields (e.g. the concurrency
+ * limit) aren't clobbered.
+ */
+export function markReconcileRan(ts: number): void {
+  const existing = readSettingsBlob();
+  writeSettingsBlob({ ...existing, lastReconcileMs: ts });
+}
+
+/** True once the FS-hostile-char cache-dir migration has run. */
+export function getFsKeyMigrationDone(): boolean {
+  return readSettingsBlob().fsKeyMigrationV1Done === true;
+}
+
+/** Persist the migration-done flag; preserves all other settings. */
+export function markFsKeyMigrationDone(): void {
+  const existing = readSettingsBlob();
+  writeSettingsBlob({ ...existing, fsKeyMigrationV1Done: true });
 }
 
 export interface ImageCacheState {
@@ -121,7 +168,8 @@ export const imageCacheStore = create<ImageCacheState>()((set) => ({
     }),
 
   setMaxConcurrentImageDownloads: (max) => {
-    writeSettingsBlob({ maxConcurrentImageDownloads: max });
+    const existing = readSettingsBlob();
+    writeSettingsBlob({ ...existing, maxConcurrentImageDownloads: max });
     set({ maxConcurrentImageDownloads: max });
   },
 }));

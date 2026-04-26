@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: 24,
   },
   lineWrap: {

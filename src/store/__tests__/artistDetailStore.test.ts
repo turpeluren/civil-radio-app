@@ -441,3 +441,116 @@ describe('fetchArtist — timeout', () => {
     }
   });
 });
+
+describe('applyLocalPlay', () => {
+  const now = '2026-04-22T10:00:00.000Z';
+
+  beforeEach(() => {
+    artistDetailStore.getState().clearArtists();
+  });
+
+  it('bumps matching album in artist.album[] and matching song in topSongs[]', () => {
+    artistDetailStore.setState({
+      artists: {
+        'ar-1': {
+          artist: {
+            id: 'ar-1',
+            name: 'Artist',
+            album: [
+              { id: 'a1', name: 'A1', playCount: 2 },
+              { id: 'a2', name: 'A2' },
+            ],
+          },
+          artistInfo: null,
+          topSongs: [
+            { id: 's1', title: 'S1', playCount: 4 },
+            { id: 's2', title: 'S2' },
+          ],
+          biography: null,
+          resolvedMbid: null,
+          retrievedAt: Date.now(),
+        } as any,
+      },
+    });
+
+    artistDetailStore.getState().applyLocalPlay('s1', 'a1', now);
+
+    const entry = artistDetailStore.getState().artists['ar-1']!;
+    expect((entry.artist.album![0] as any).playCount).toBe(3);
+    expect((entry.artist.album![0] as any).played).toBe(now);
+    expect((entry.topSongs[0] as any).playCount).toBe(5);
+    expect((entry.topSongs[0] as any).played).toBe(now);
+    expect((entry.artist.album![1] as any).playCount).toBeUndefined();
+    expect((entry.topSongs[1] as any).playCount).toBeUndefined();
+  });
+
+  it('updates matching rows across multiple artists', () => {
+    artistDetailStore.setState({
+      artists: {
+        'ar-1': {
+          artist: { id: 'ar-1', name: 'A', album: [{ id: 'a1', name: 'A1' }] },
+          artistInfo: null,
+          topSongs: [{ id: 's1', title: 'S1' }],
+          biography: null,
+          resolvedMbid: null,
+          retrievedAt: 1,
+        } as any,
+        'ar-2': {
+          artist: { id: 'ar-2', name: 'B', album: [{ id: 'a1', name: 'A1' }] },
+          artistInfo: null,
+          topSongs: [],
+          biography: null,
+          resolvedMbid: null,
+          retrievedAt: 2,
+        } as any,
+      },
+    });
+
+    artistDetailStore.getState().applyLocalPlay('s1', 'a1', now);
+
+    expect((artistDetailStore.getState().artists['ar-1']!.artist.album![0] as any).playCount).toBe(1);
+    expect((artistDetailStore.getState().artists['ar-1']!.topSongs[0] as any).playCount).toBe(1);
+    expect((artistDetailStore.getState().artists['ar-2']!.artist.album![0] as any).playCount).toBe(1);
+  });
+
+  it('is a no-op when neither album nor song matches', () => {
+    artistDetailStore.setState({
+      artists: {
+        'ar-1': {
+          artist: { id: 'ar-1', name: 'A', album: [{ id: 'a1', name: 'A1' }] },
+          artistInfo: null,
+          topSongs: [{ id: 's1', title: 'S1' }],
+          biography: null,
+          resolvedMbid: null,
+          retrievedAt: Date.now(),
+        } as any,
+      },
+    });
+    const before = artistDetailStore.getState().artists;
+
+    artistDetailStore.getState().applyLocalPlay('unknown-song', 'unknown-album', now);
+
+    expect(artistDetailStore.getState().artists).toBe(before);
+  });
+
+  it('skips album matching when albumId is undefined but still bumps the song', () => {
+    artistDetailStore.setState({
+      artists: {
+        'ar-1': {
+          artist: { id: 'ar-1', name: 'A', album: [{ id: 'a1', name: 'A1' }] },
+          artistInfo: null,
+          topSongs: [{ id: 's1', title: 'S1' }],
+          biography: null,
+          resolvedMbid: null,
+          retrievedAt: Date.now(),
+        } as any,
+      },
+    });
+
+    artistDetailStore.getState().applyLocalPlay('s1', undefined, now);
+
+    const entry = artistDetailStore.getState().artists['ar-1']!;
+    expect((entry.topSongs[0] as any).playCount).toBe(1);
+    expect((entry.artist.album![0] as any).playCount).toBeUndefined();
+  });
+});

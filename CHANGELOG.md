@@ -1,5 +1,107 @@
 # Changelog
 
+## [8.0.56] - 2026-04-25
+
+- docs(rules): consolidate project rules into AGENTS.md
+- fix(android): MIUI/Redmi notification controls (re #87)
+- fix(perf): cache Intl.Collator/DateTimeFormat to avoid Hermes #867 ANR
+- android: edge-to-edge safe area handling improvement
+- feat(library): article-stripped sort with server-supplied article list
+- fix(chrome): hard-mount banner only when queue has work; don't cache null URIs
+- feat(rows): standardise list-row trailing meta into fixed-width slots
+- fix(home): auto-scale listening time to days so heavy totals fit the column
+- feat(downloads): unified BottomChrome; remove routine playback toasts
+- fix(downloads): hide banner when queue has only ghost-status rows
+- feat(music-cache): preserve full Subsonic envelope; backfill partial albums
+- fix(image-cache): guarantee placeholder, simplify CachedImage, sanitise disc IDs
+- fix(image-cache): unstick incomplete rows and surface repair feedback
+- fix(player): bulletproof queue resume on cold start
+- ci: update coverage badge [skip ci]
+## [8.0.55] - 2026-04-22
+
+- ci: update coverage badge [skip ci]
+- chore: gitignore .claude/scheduled_tasks.lock runtime lockfile
+- ci: update coverage badge [skip ci]
+- fix(expanded-player): reorder right-panel toggles to queue/info/lyrics to match PlayerTabBar
+- fix(album-info): theme-aware skeleton fill so bars are visible in light mode
+- feat(downloads): partial-album state, top-up, filter, cache-browser UI
+- feat(scrobble): update play count + last-played locally on scrobble
+- ci: update coverage badge [skip ci]
+- fix(media): recover blank album art from broken cached images
+- ci: update coverage badge [skip ci]
+## [8.0.54] - 2026-04-21
+
+- fix(palette): 2-stop gradient on phone layouts — secondary → theme bg
+- ci: update coverage badge [skip ci]
+- fix(palette): 3-stop gradient — primary/secondary at top, theme bg at bottom
+- feat(palette): local expo-image-colors module replaces react-native-image-colors
+- fix(android): suppress Fresco drawee-controller release race
+- fix(settings-storage): spinner + min-display for image cache Scan button
+- ci: update coverage badge [skip ci]
+- fix(expo-image-resize): add missing android/build.gradle
+- ci: update coverage badge [skip ci]
+- fix(android): bypass expo-image-manipulator with a local resize module
+- ci: update coverage badge [skip ci]
+## [8.0.53] - 2026-04-21
+
+- reset changelog
+- ci: update coverage badge [skip ci]
+- fix(player): make MiniPlayer and PlayerProgressBar share a single source
+- ci: update coverage badge [skip ci]
+- i18n(zh): fill 38 remaining English placeholders in zh-Hans + zh-Hant
+- ci: update coverage badge [skip ci]
+- i18n: round-2 defense of Apple-aligned values
+- i18n: update translations from Crowdin (#121)
+- ci: update coverage badge [skip ci]
+- i18n(zh-Hant): full Taiwan Traditional pass from zh-Hans baseline
+- ci: update coverage badge [skip ci]
+- i18n: defend Apple-aligned zh-Hans and ru terminology
+- ci: update coverage badge [skip ci]
+- i18n: update translations from Crowdin (#120)
+- i18n: Apple Music / Spotify terminology pass for 6 locales
+- ci: update coverage badge [skip ci]
+- i18n: update translations from Crowdin (#119)
+- ci: update coverage badge [skip ci]
+- fix(image-cache): drop isProcessing guard blocking bulk repair
+- ci: update coverage badge [skip ci]
+## [8.0.52] - 2026-04-20
+
+- refactor(scrobbles): move pendingScrobbleStore to per-row SQLite
+- chore(settings): remove My Listening nav row from Library & Data
+- fix(lyrics): wrap long lines within viewport width
+- fix(splash): start waveform ripple when visible so forward sweep plays
+- fix(player): avoid hang when server unreachable in offline mode
+- ci: update coverage badge [skip ci]
+- feat(image-cache): Scan + Repair actions, auto-repair on reconnect
+- ci: update coverage badge [skip ci]
+## [8.0.51] - 2026-04-19
+
+- fix(sync): skip cover prefetch during library sync; surface offline pause
+- ci: update coverage badge [skip ci]
+## [8.0.50] - 2026-04-19
+
+- fix(release): stop clobbering curated store release notes
+- ci: update coverage badge [skip ci]
+- fix(lyrics): rewrite auto-scroll + tab visibility + UI polish
+- chore(deps): patch-level bumps across Expo SDK 55 + ecosystem
+- ci: update coverage badge [skip ci]
+- chore: QA sweep hardening
+- docs(release-notes): trim and refresh for next release
+- fix(migration-log): use generic Share/Clear labels
+- fix(home): render Mix It Up chip unconditionally
+- refactor(image-cache): per-row SQLite replaces whole-tree FS walks
+- refactor(persistence): consolidate into a single SQLite service
+- feat(music-cache): migration 14 removes v1 blob after successful migration
+- feat(music-cache): Music Downloads v2 + critical persistence fixes
+- refactor(scrobbles): move completedScrobbleStore to per-row SQLite
+- feat(sync): canonical album-data sync pipeline
+- ci: update coverage badge [skip ci]
+- fix(segment-control): boost background opacity to 85% for readability
+- ci: update coverage badge [skip ci]
+- fix(language-picker): use bottom sheet so list is scrollable on login
+- ci: update coverage badge [skip ci]
+- fix(tuned-in): respect list length setting for offline and multi-genre playlists
+- ci: update coverage badge [skip ci]
 ## [8.0.49] - 2026-04-16
 
 - docs: release notes

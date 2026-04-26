@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -45,6 +53,22 @@ type Props = {
   color?: string;
   /** Called after all ripple cycles finish. */
   onComplete?: () => void;
+  /**
+   * Gates when the ripple sequence auto-starts on mount. When `false`,
+   * the bars stay at rest until {@link WaveformHandle.start} is called
+   * via ref. Defaults to `true` for standalone usage; the splash screen
+   * passes `false` and triggers `start()` imperatively inside its
+   * bootsplash `animate()` callback so the forward sweep isn't consumed
+   * while the component is still invisible.
+   */
+  autoStart?: boolean;
+};
+
+/** Imperative handle exposed via forwardRef for consumers that need to
+ *  trigger the ripple sequence at a specific moment (e.g. the splash
+ *  screen starts the animation when its bootsplash `animate()` fires). */
+export type WaveformHandle = {
+  start(): void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -90,11 +114,10 @@ const BarView = memo(function BarView({
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function AnimatedWaveformLogo({
-  size = 130,
-  color = '#FFFFFF',
-  onComplete,
-}: Props) {
+const AnimatedWaveformLogo = forwardRef<WaveformHandle, Props>(function AnimatedWaveformLogo(
+  { size = 130, color = '#FFFFFF', onComplete, autoStart = true },
+  ref,
+) {
   const barWidth = size / (BAR_COUNT + (BAR_COUNT - 1) * GAP_RATIO);
   const gap = barWidth * GAP_RATIO;
   const pillRadius = barWidth / 2;
@@ -119,7 +142,12 @@ export default function AnimatedWaveformLogo({
     onCompleteRef.current?.();
   }, []);
 
-  useEffect(() => {
+  const startedRef = useRef(false);
+
+  const runRipple = useCallback(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const buildCycleForBar = (i: number) => {
       const fwdDelay = i * STAGGER_MS;
       const gapDelay = 2 * (BAR_COUNT - 1 - i) * STAGGER_MS;
@@ -162,7 +190,12 @@ export default function AnimatedWaveformLogo({
         scale.value = withRepeat(cycle, CYCLE_COUNT) as number;
       }
     });
+  }, [fireComplete, scales]);
 
+  useImperativeHandle(ref, () => ({ start: runRipple }), [runRipple]);
+
+  useEffect(() => {
+    if (autoStart) runRipple();
     return () => {
       scales.forEach((s) => cancelAnimation(s));
     };
@@ -184,7 +217,9 @@ export default function AnimatedWaveformLogo({
       ))}
     </View>
   );
-}
+});
+
+export default AnimatedWaveformLogo;
 
 const styles = StyleSheet.create({
   wrap: {

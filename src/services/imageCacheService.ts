@@ -23,12 +23,20 @@
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { AppState, type AppStateStatus } from 'react-native';
 import { fetch } from 'expo/fetch';
 
 import { listDirectoryAsync } from 'expo-async-fs';
-import { imageCacheStore } from '../store/imageCacheStore';
+import { resizeImageToFileAsync } from 'expo-image-resize';
+import {
+  getFsKeyMigrationDone,
+  getLastReconcileMs,
+  imageCacheStore,
+  markFsKeyMigrationDone,
+  markReconcileRan,
+} from '../store/imageCacheStore';
+import { offlineModeStore } from '../store/offlineModeStore';
+import { fireAndForget } from '../utils/fireAndForget';
 import {
   bulkInsertCachedImages,
   type CachedImageEntry as DbCachedImageEntry,
@@ -42,7 +50,28 @@ import {
   upsertCachedImage,
   type CacheBrowserFilter,
 } from '../store/persistence/imageCacheTable';
-import { ensureCoverArtAuth, getCoverArtUrl, stripCoverArtSuffix } from './subsonicService';
+import {
+  ensureCoverArtAuth,
+  getCoverArtUrl,
+  stripCoverArtSuffix,
+} from './subsonicService';
+
+// Sentinel cover-art IDs rendered from bundled assets via
+// `CachedImage.tsx`, never downloaded. Inlined here (not imported)
+// because the canonical `STARRED_COVER_ART_ID` lives in
+// `musicCacheService.ts` which already imports from this module
+// (cycle), and `VARIOUS_ARTISTS_COVER_ART_ID` from `subsonicService`
+// is auto-nulled by jest.mock in the test file. Drift risk is low:
+// these strings are baked into multiple layers (backup format, UI
+// code, tests).
+const SENTINEL_COVER_ART_IDS: ReadonlySet<string> = new Set([
+  '__starred_cover__',
+  '__various_artists_cover__',
+]);
+
+function isSentinelCoverArtId(coverArtId: string): boolean {
+  return SENTINEL_COVER_ART_IDS.has(coverArtId);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -101,6 +130,167 @@ function uriCacheKey(coverArtId: string, size: number): string {
   return `${coverArtId}:${size}`;
 }
 
+/**
+ * Characters that are either reserved on some filesystems (Windows:
+ * `\/:*?"<>|`; legacy macOS: `:`) or otherwise troublesome in URIs.
+ * Replaced with `_` before the coverArtId is used as an on-disk
+ * directory name. The original coverArtId is still used everywhere
+ * else (server URLs, SQL rows, URI cache keys) so the server side and
+ * DB-side keys stay stable.
+ *
+ * Today's target is the OpenSubsonic/Navidrome disc-cover format
+ * `dc-xxxx:N`, which APFS/ext4 accept but which we want to keep away
+ * from the filesystem boundary on principle.
+ */
+const FS_UNSAFE_CHARS = /[:\\/?<>*|"\x00]/g;
+
+function coverArtPathKey(coverArtId: string): string {
+  return coverArtId.replace(FS_UNSAFE_CHARS, '_');
+}
+
+/** Evict every size's URI-cache entry for a coverArtId. Call at every
+ *  cleanup site that removes files from disk so a subsequent
+ *  getCachedImageUri doesn't return a stale URI pointing at nothing. */
+function evictUriCacheForCover(coverArtId: string): void {
+  for (const size of IMAGE_SIZES) uriCache.delete(uriCacheKey(coverArtId, size));
+}
+
+/**
+ * Per-session consecutive failure counts for source-image (600px)
+ * downloads. After MAX_SOURCE_FAILURES in a row we purge the rows + files
+ * for that coverArtId so the "incomplete" count actually reaches zero
+ * rather than re-queuing forever. Reset on success; cleared on app
+ * restart so transient issues self-heal on the next launch.
+ */
+const sourceFailureCount = new Map<string, number>();
+const MAX_SOURCE_FAILURES = 3;
+
+/**
+ * Delete every on-disk variant and DB row for a coverArtId, and evict
+ * its URI-cache entries. Used by the sentinel sweep and the source-
+ * download circuit breaker (404 or N× failure).
+ */
+function purgeCoverArtRows(coverArtId: string): { files: number } {
+  const result = deleteCachedImagesForCoverArt(coverArtId);
+  try {
+    const subDir = new Directory(ensureCacheDir(), coverArtPathKey(coverArtId));
+    if (subDir.exists) {
+      for (const size of IMAGE_SIZES) {
+        for (const ext of EXTENSIONS) {
+          const file = new File(subDir, `${size}${ext}`);
+          if (file.exists) {
+            try { file.delete(); } catch { /* best-effort */ }
+          }
+        }
+      }
+    }
+  } catch {
+    /* best-effort — DB is the source of truth */
+  }
+  for (const s of IMAGE_SIZES) uriCache.delete(uriCacheKey(coverArtId, s));
+  sourceFailureCount.delete(coverArtId);
+  return { files: result.count };
+}
+
+/**
+ * Remove any cached_images rows + on-disk files for the sentinel cover
+ * IDs (`__starred_cover__`, `__various_artists_cover__`). Their images
+ * are bundled with the app — CachedImage renders them from the asset
+ * resolver, never from the disk cache — so any rows here are stale from
+ * a prior app version and will otherwise show up as permanently
+ * "Incomplete" because getCoverArtUrl returns null for them.
+ *
+ * Returns the number of sentinel coverArtIds that had rows (0–2). Safe
+ * to call multiple times — idempotent after the first run.
+ */
+/**
+ * One-shot migration: rename any `{image-cache}/*` subdirectory whose
+ * name contains a filesystem-hostile char (`:` etc.) to the sanitised
+ * form produced by {@link coverArtPathKey}. If a sanitised sibling dir
+ * already exists, move the raw-form's variant files into it (skipping
+ * collisions) before deleting the now-empty original.
+ *
+ * Gated by the `fsKeyMigrationV1Done` flag in the image-cache settings
+ * blob so it runs at most once per install. No-op on a fresh install
+ * (no raw-form dirs exist).
+ */
+async function migrateFsHostileCacheDirs(): Promise<void> {
+  if (getFsKeyMigrationDone()) return;
+  let dir: Directory;
+  try {
+    dir = ensureCacheDir();
+  } catch {
+    return;
+  }
+  if (!dir.exists) {
+    markFsKeyMigrationDone();
+    return;
+  }
+
+  let topLevel: string[];
+  try {
+    topLevel = await listDirectoryAsync(dir.uri);
+  } catch {
+    // Can't enumerate — leave the flag unset so a later session can retry.
+    return;
+  }
+
+  for (const name of topLevel) {
+    if (!name) continue;
+    const sanitised = coverArtPathKey(name);
+    if (sanitised === name) continue; // nothing to do
+
+    const src = new Directory(dir, name);
+    if (!src.exists) continue;
+
+    const dst = new Directory(dir, sanitised);
+    if (!dst.exists) {
+      // Simple rename — delete/create isn't exposed; copy each file
+      // across then remove the source dir.
+      try { dst.create(); } catch { continue; }
+    }
+
+    let fileNames: string[] = [];
+    try {
+      fileNames = await listDirectoryAsync(src.uri);
+    } catch {
+      continue;
+    }
+    for (const fileName of fileNames) {
+      const srcFile = new File(src, fileName);
+      if (!srcFile.exists) continue;
+      const dstFile = new File(dst, fileName);
+      if (dstFile.exists) {
+        // Collision — the sanitised dir already had this variant. Keep
+        // the existing file (it's newer or at least already indexed by
+        // SQL) and drop the raw-form's copy.
+        try { srcFile.delete(); } catch { /* best-effort */ }
+        continue;
+      }
+      try { srcFile.move(dstFile); } catch { /* best-effort */ }
+    }
+
+    // Attempt to remove the now-empty src dir.
+    try { src.delete(); } catch { /* best-effort */ }
+  }
+
+  markFsKeyMigrationDone();
+}
+
+function sweepSentinelRows(): number {
+  let cleared = 0;
+  let totalFiles = 0;
+  for (const id of SENTINEL_COVER_ART_IDS) {
+    const { files } = purgeCoverArtRows(id);
+    if (files > 0) cleared++;
+    totalFiles += files;
+  }
+  if (totalFiles > 0) {
+    imageCacheStore.getState().recalculateFromDb();
+  }
+  return cleared;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Initialisation                                                     */
 /* ------------------------------------------------------------------ */
@@ -132,8 +322,8 @@ export function initImageCache(): void {
 
     if (!appStateSubscription) {
       appStateSubscription = AppState.addEventListener('change', (next: AppStateStatus) => {
-        if (next === 'active' && !isProcessing) {
-          recoverStalledImageDownloadsAsync();
+        if (next === 'active') {
+          fireAndForget(repairIncompleteImagesAsync(), 'imageCache.appStateActive');
         }
       });
     }
@@ -164,15 +354,73 @@ export function teardownImageCache(): void {
  *   1. `reconcileImageCacheAsync` heals FS↔SQL drift before anything else
  *      reads cache state. Without it, orphan files or missing rows would
  *      confuse the incomplete-detection query.
- *   2. `recoverStalledImageDownloadsAsync` sweeps stale `.tmp` files and
+ *   2. `repairIncompleteImagesAsync` sweeps stale `.tmp` files and
  *      re-queues any covers SQL now reports as incomplete.
  *
  * All filesystem work runs via expo-async-fs, keeping the JS thread free.
  */
-export async function deferredImageCacheInit(): Promise<void> {
-  await reconcileImageCacheAsync();
-  await recoverStalledImageDownloadsAsync();
+/** Reconcile only runs once per this interval in the deferred-init path.
+ *  Manual triggers from Settings always run regardless of this throttle. */
+const RECONCILE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * True when the last successful reconcile is missing or older than
+ * RECONCILE_INTERVAL_MS. Only consulted by the deferred-init path —
+ * user-initiated scans from Settings call `reconcileImageCacheAsync`
+ * directly and bypass this check entirely.
+ */
+function shouldRunReconcile(): boolean {
+  const last = getLastReconcileMs();
+  if (last == null) return true;
+  return Date.now() - last >= RECONCILE_INTERVAL_MS;
 }
+
+export function deferredImageCacheInit(): Promise<void> {
+  // Defer to an idle window so the reconcile/repair FS passes never
+  // compete with first-render or initial animations. requestIdleCallback
+  // is polyfilled by RN (used elsewhere in dataSyncService, useTransitionComplete).
+  return new Promise((resolve) => {
+    requestIdleCallback(async () => {
+      try {
+        // One-shot migration: rename any cache subdirs containing FS-
+        // hostile chars (e.g. Navidrome disc IDs like `dc-xxxx:1`) to
+        // the sanitised form before reconcile walks the tree.
+        await migrateFsHostileCacheDirs();
+
+        // Always sweep sentinel rows, even offline — it's a pure SQL +
+        // local-file cleanup and prevents the Settings "Incomplete"
+        // count from permanently including rows the download pipeline
+        // can never service.
+        sweepSentinelRows();
+
+        if (shouldRunReconcile()) {
+          await reconcileImageCacheAsync();
+        }
+        // Skip repair when offline — queuing downloads against a network
+        // we can't reach would just churn until each retry exhausts. The
+        // offline→online subscriber below picks it up when we reconnect.
+        if (!offlineModeStore.getState().offlineMode) {
+          await repairIncompleteImagesAsync();
+        }
+      } finally {
+        // Always resolve — this is a best-effort init, same contract as
+        // the previous direct-await implementation.
+        resolve();
+      }
+    });
+  });
+}
+
+// Auto-resume repair when the user toggles back online. An in-flight
+// offline session can accumulate incomplete covers (downloads that were
+// mid-variant when the app went offline); the moment connectivity is
+// back we want to clear them without making the user open Settings.
+offlineModeStore.subscribe((state, prev) => {
+  if (state.offlineMode === prev.offlineMode) return;
+  if (state.offlineMode) return;
+  if (imageCacheStore.getState().incompleteCount <= 0) return;
+  fireAndForget(repairIncompleteImagesAsync(), 'imageCache.offlineResume');
+});
 
 /**
  * Heal drift between the `cached_images` table and the on-disk layout.
@@ -215,11 +463,29 @@ export async function reconcileImageCacheAsync(): Promise<void> {
   const seenOnDisk = new Set<string>();
   const diskKey = (coverArtId: string, size: number) => `${coverArtId}::${size}`;
 
+  // Reverse-map from the on-disk (sanitised) directory name back to the
+  // SQL-canonical coverArtId so Pass 1 doesn't fork a duplicate row when
+  // a pre-existing SQL entry (e.g. `dc-abc:1`) lives under the migrated
+  // dir `dc-abc_1`. Built once from the current SQL view.
+  const sqlIdByDirName = new Map<string, string>();
+  for (const entry of listCachedImagesForBrowser('all')) {
+    const dirName = coverArtPathKey(entry.coverArtId);
+    // If two SQL ids collide on the same sanitised dir (should be rare),
+    // prefer one that contains FS-unsafe chars — it's the "original" form.
+    const existing = sqlIdByDirName.get(dirName);
+    if (!existing || existing === dirName) {
+      sqlIdByDirName.set(dirName, entry.coverArtId);
+    }
+  }
+
   // --- Pass 1: FS -> SQL (discover missing rows) ---
-  for (const coverArtId of topLevelNames) {
-    if (!coverArtId) continue;
-    const subDir = new Directory(dir, coverArtId);
+  for (const dirName of topLevelNames) {
+    if (!dirName) continue;
+    const subDir = new Directory(dir, dirName);
     if (!subDir.exists) continue;
+    // Resolve the dir name back to its SQL-canonical coverArtId so we
+    // upsert into the existing row family rather than a parallel one.
+    const coverArtId = sqlIdByDirName.get(dirName) ?? dirName;
     let fileNames: string[] = [];
     try {
       fileNames = await listDirectoryAsync(subDir.uri);
@@ -232,10 +498,19 @@ export async function reconcileImageCacheAsync(): Promise<void> {
       if (!match) continue;
       const size = Number(match[1]);
       const ext = match[2];
-      seenOnDisk.add(diskKey(coverArtId, size));
-      if (dbHasCachedImage(coverArtId, size)) continue;
       const file = new File(subDir, name);
       if (!file.exists) continue;
+      // A zero-byte finalised file is the signature of a crashed write
+      // (e.g. ENOSPC between rename and content write, or a kill after
+      // the move but before the bytes landed). RNImage renders nothing
+      // for it, so delete it here — Pass 2 then drops any stale DB row.
+      if ((file.size ?? 0) === 0) {
+        try { file.delete(); } catch { /* best-effort */ }
+        uriCache.delete(uriCacheKey(coverArtId, size));
+        continue;
+      }
+      seenOnDisk.add(diskKey(coverArtId, size));
+      if (dbHasCachedImage(coverArtId, size)) continue;
       newRows.push({
         coverArtId,
         size,
@@ -260,26 +535,45 @@ export async function reconcileImageCacheAsync(): Promise<void> {
     );
   }
 
-  // --- Pass 2: SQL -> FS (drop rows whose files are gone) ---
-  // Walk the DB's view; delete any row whose file wasn't observed on disk.
-  // Guarded by the same mass-missing heuristic — a temporarily-missing
-  // cache directory shouldn't wipe the table.
+  // --- Pass 2: SQL -> FS (drop rows whose files are gone or empty) ---
+  // Walk the DB's view; delete any row whose file wasn't observed on disk
+  // or whose file exists but is zero bytes (crashed write). Guarded by
+  // the same mass-missing heuristic — a temporarily-missing cache
+  // directory shouldn't wipe the table.
   if (!isMassInsert) {
     const post = listCachedImagesForBrowser('all');
     let droppedCount = 0;
     for (const entry of post) {
       for (const file of entry.files) {
         if (seenOnDisk.has(diskKey(entry.coverArtId, file.size))) continue;
-        const subDir = new Directory(dir, entry.coverArtId);
+        // Disk paths are sanitised; SQL rows keep the original coverArtId.
+        const subDir = new Directory(dir, coverArtPathKey(entry.coverArtId));
         const onDisk = new File(subDir, `${file.size}.${file.ext}`);
-        if (onDisk.exists) continue;
+        if (onDisk.exists) {
+          // Belt-and-braces: if Pass 1 missed a zero-byte file (e.g.
+          // listDirectoryAsync failed for that subdir), catch it here.
+          if ((onDisk.size ?? 0) === 0) {
+            try { onDisk.delete(); } catch { /* best-effort */ }
+            deleteCachedImageVariant(entry.coverArtId, file.size);
+            uriCache.delete(uriCacheKey(entry.coverArtId, file.size));
+            droppedCount++;
+          }
+          continue;
+        }
         deleteCachedImageVariant(entry.coverArtId, file.size);
+        uriCache.delete(uriCacheKey(entry.coverArtId, file.size));
         droppedCount++;
       }
     }
     if (droppedCount > 0 || newRows.length > 0) {
       imageCacheStore.getState().recalculateFromDb();
     }
+
+    // Timestamp the successful pass so the deferred-init throttle can
+    // skip this work on the next launch. Only written when the safety
+    // gate did NOT trip — otherwise we'd lock in a 7-day skip on a
+    // transient filesystem issue.
+    markReconcileRan(Date.now());
   }
 }
 
@@ -295,17 +589,42 @@ function ensureCacheDir(): Directory {
 
 /**
  * Clean up any abandoned `.tmp` files left from a crashed download or
- * variant generation, then re-queue any coverArtId that's missing one
- * or more size variants on disk.
+ * variant generation, then re-queue every cover-art ID that's missing
+ * one or more size variants on disk.
  *
- * The "incomplete" check used to walk every subdirectory; it now runs as
- * one SQL query (`findIncompleteCovers`). The `.tmp` sweep still walks —
- * `.tmp` files aren't in the DB by design, and a full tree walk catches
- * any that accumulated before the DB row was written.
+ * The "incomplete" check used to walk every subdirectory; it now runs
+ * as one SQL query (`findIncompleteCovers`). The `.tmp` sweep still
+ * walks — `.tmp` files aren't in the DB by design, and a full tree
+ * walk catches any that accumulated before the DB row was written.
+ *
+ * Exposed to the UI as the "Repair" action (settings-storage card +
+ * image-cache browser row badge); also fires automatically at launch
+ * post-splash and on resume-from-background via AppState.
  */
-async function recoverStalledImageDownloadsAsync(): Promise<void> {
-  if (isProcessing) return;
+/**
+ * Outcome counts from a repair pass. The Settings UI surfaces this as
+ * a toast; tests assert on the individual counts.
+ */
+export interface RepairOutcome {
+  /** Incomplete coverArtIds found when the pass started (post-sentinel-sweep). */
+  queued: number;
+  /** Covers whose 4 variants are all present on disk after the pass. */
+  repaired: number;
+  /** Covers still missing one or more variants (transient errors, etc.). */
+  failed: number;
+  /** Covers whose rows were deleted — sentinel sweep + 404 + 3×-failure. */
+  removed: number;
+}
 
+export async function repairIncompleteImagesAsync(): Promise<RepairOutcome> {
+  // 1. Sentinel sweep first — these should never have rows. Their count
+  //    does NOT enter `queued` (which only covers the user-actionable
+  //    incomplete set) but it does add to `removed` so the toast can
+  //    report "2 sentinels removed".
+  const sentinelCoversCleared = sweepSentinelRows();
+
+  // 2. .tmp sweep — clean up abandoned half-writes from previous sessions
+  //    or crashes before re-queuing anything.
   const dir = ensureCacheDir();
   let subDirNames: string[];
   try {
@@ -313,8 +632,6 @@ async function recoverStalledImageDownloadsAsync(): Promise<void> {
   } catch {
     subDirNames = [];
   }
-
-  // --- Pass 1: sweep abandoned .tmp files ---
   for (const coverArtId of subDirNames) {
     if (!coverArtId) continue;
     const subDir = new Directory(dir, coverArtId);
@@ -331,19 +648,57 @@ async function recoverStalledImageDownloadsAsync(): Promise<void> {
     }
   }
 
-  // --- Pass 2: re-queue incomplete covers via SQL ---
-  const incomplete = findIncompleteCovers();
-  for (const coverArtId of incomplete) {
-    if (downloading.has(coverArtId) || downloadQueue.includes(coverArtId)) continue;
-    for (const s of IMAGE_SIZES) {
-      uriCache.delete(uriCacheKey(coverArtId, s));
-    }
-    downloadQueue.push(coverArtId);
+  // 3. Re-queue and AWAIT completion for each incomplete cover. We use
+  //    cacheAllSizes() rather than poking downloadQueue + processQueue()
+  //    directly: cacheAllSizes returns a per-coverArtId promise that
+  //    resolves in processNext's finally block via resolveWaiters(), so
+  //    Promise.all below gives us a real "repair-done" signal that the
+  //    Settings overlay can hook into.
+  const snapshot = findIncompleteCovers().filter(
+    (id) => !isSentinelCoverArtId(id),  // sentinels already handled in step 1
+  );
+  const queued = snapshot.length;
+
+  if (queued === 0) {
+    return {
+      queued: 0,
+      repaired: 0,
+      failed: 0,
+      removed: sentinelCoversCleared,
+    };
   }
 
-  if (downloadQueue.length > 0) {
-    processQueue();
+  await Promise.all(
+    snapshot.map((id) =>
+      cacheAllSizes(id).catch(() => { /* per-cover failure reported below */ }),
+    ),
+  );
+
+  // 4. Classify each original coverArtId by its post-pass state in SQL.
+  const afterIncomplete = new Set(findIncompleteCovers());
+  let repaired = 0;
+  let failed = 0;
+  let removedDuringRepair = 0;
+  for (const id of snapshot) {
+    if (afterIncomplete.has(id)) {
+      // Still incomplete — transient failure (offline mid-repair, single
+      // 5xx below the 3× threshold, etc.). Will retry on next launch.
+      failed++;
+    } else {
+      // Either all 4 variants present → repaired, or all rows gone →
+      // purged by the 404/3×-failure circuit breaker.
+      const has600 = dbHasCachedImage(id, SOURCE_SIZE);
+      if (has600) repaired++;
+      else removedDuringRepair++;
+    }
   }
+
+  return {
+    queued,
+    repaired,
+    failed,
+    removed: sentinelCoversCleared + removedDuringRepair,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -353,6 +708,17 @@ async function recoverStalledImageDownloadsAsync(): Promise<void> {
 /**
  * Check if a cached image exists for the given coverArtId and size.
  * Returns the local `file://` URI or `null`.
+ *
+ * Caching policy: only POSITIVE lookups are memoised in `uriCache`. A
+ * miss (file not on disk) re-checks the filesystem on every call.
+ * Caching nulls was the root cause of "covers vanish after a download"
+ * — once a row was poisoned with null (via a transient FS hiccup, an
+ * eviction by a sibling code path, or a never-completed download), the
+ * map returned null forever even after the file had been written. The
+ * cost of re-checking on miss is one sync `file.exists` per render —
+ * cheap on-device, no network — and the logic stays simple: the map's
+ * presence implies "we know there's a file here", absence implies
+ * "ask the filesystem".
  */
 export function getCachedImageUri(
   coverArtId: string,
@@ -362,13 +728,11 @@ export function getCachedImageUri(
   coverArtId = stripCoverArtSuffix(coverArtId);
 
   const key = uriCacheKey(coverArtId, size);
-  if (uriCache.has(key)) return uriCache.get(key)!;
+  const cached = uriCache.get(key);
+  if (cached) return cached;
 
-  const subDir = new Directory(ensureCacheDir(), coverArtId);
-  if (!subDir.exists) {
-    uriCache.set(key, null);
-    return null;
-  }
+  const subDir = new Directory(ensureCacheDir(), coverArtPathKey(coverArtId));
+  if (!subDir.exists) return null;
   for (const ext of EXTENSIONS) {
     const file = new File(subDir, `${size}${ext}`);
     if (file.exists) {
@@ -376,7 +740,6 @@ export function getCachedImageUri(
       return file.uri;
     }
   }
-  uriCache.set(key, null);
   return null;
 }
 
@@ -387,6 +750,29 @@ export function getCachedImageUri(
 export function evictUriCacheEntry(coverArtId: string, size: number): void {
   coverArtId = stripCoverArtSuffix(coverArtId);
   uriCache.delete(uriCacheKey(coverArtId, size));
+}
+
+/**
+ * Delete a single cached variant: file on disk, DB row, and in-memory
+ * Map entry. Used by CachedImage when an `onError` indicates the local
+ * file is broken and a re-download is needed. Scoped to one size —
+ * sibling variants for the same coverArt may still be healthy.
+ */
+export function deleteCachedVariant(coverArtId: string, size: number): void {
+  if (!coverArtId) return;
+  coverArtId = stripCoverArtSuffix(coverArtId);
+  uriCache.delete(uriCacheKey(coverArtId, size));
+  const subDir = new Directory(ensureCacheDir(), coverArtPathKey(coverArtId));
+  if (subDir.exists) {
+    for (const ext of EXTENSIONS) {
+      const file = new File(subDir, `${size}${ext}`);
+      if (file.exists) {
+        try { file.delete(); } catch { /* best-effort */ }
+      }
+    }
+  }
+  deleteCachedImageVariant(coverArtId, size);
+  imageCacheStore.getState().recalculateFromDb();
 }
 
 /* ------------------------------------------------------------------ */
@@ -417,6 +803,10 @@ function resolveAllWaiters(): void {
  */
 export function cacheAllSizes(coverArtId: string): Promise<void> {
   if (!coverArtId) return Promise.resolve();
+  // Sentinels render from bundled assets via CachedImage — never queue
+  // them for download. Belt-and-braces guard; CachedImage already maps
+  // their coverArtId to `undefined` before calling here.
+  if (isSentinelCoverArtId(coverArtId)) return Promise.resolve();
   coverArtId = stripCoverArtSuffix(coverArtId);
 
   const allCached = IMAGE_SIZES.every(
@@ -505,7 +895,13 @@ async function processNext(): Promise<void> {
  * and generate the 300, 150, and 50px variants locally.
  */
 async function downloadAndCacheImage(coverArtId: string): Promise<void> {
-  const subDir = new Directory(ensureCacheDir(), coverArtId);
+  // Defensive — sentinels should never reach the pipeline. Callers
+  // already filter via isSentinelCoverArtId() / CachedImage's mapping,
+  // but an external `repairIncompleteImagesAsync` could still hand us
+  // a stale row that slipped through.
+  if (isSentinelCoverArtId(coverArtId)) return;
+
+  const subDir = new Directory(ensureCacheDir(), coverArtPathKey(coverArtId));
   if (!subDir.exists) subDir.create();
 
   let source600Uri = getCachedImageUri(coverArtId, SOURCE_SIZE);
@@ -531,12 +927,38 @@ async function downloadSourceImage(
 ): Promise<string | null> {
   await ensureCoverArtAuth();
   const url = getCoverArtUrl(coverArtId, SOURCE_SIZE);
-  if (!url) return null;
+  if (!url) {
+    // Null URL means offline, missing auth, or a sentinel slipped past
+    // the upstream guards. Don't count this against the failure budget:
+    // offline/auth issues are transient by nature and should recover
+    // when the user comes back online.
+    return null;
+  }
 
   let tmpName: string | null = null;
   try {
     const response = await fetch(url);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Definitive server signal that this cover doesn't exist
+        // (album removed, re-indexed with a new ID, etc.). Re-requesting
+        // the same URL every launch is pure churn — purge immediately
+        // so the "incomplete" count actually reaches zero. The cover
+        // will re-populate naturally if the user navigates to the
+        // album again and CachedImage calls cacheAllSizes.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[imageCacheService] 404 for coverArt=${coverArtId} — purging cache rows`,
+        );
+        purgeCoverArtRows(coverArtId);
+        return null;
+      }
+      // Other non-OK statuses (5xx, 403, etc.) count toward the failure
+      // budget. Transient issues (one 503, single timeout) don't cost
+      // anything; persistent ones eventually purge.
+      bumpSourceFailure(coverArtId);
+      return null;
+    }
 
     const contentType = response.headers.get('content-type') ?? '';
     const ext = MIME_TO_EXT[contentType.split(';')[0].trim()] ?? '.jpg';
@@ -565,6 +987,9 @@ async function downloadSourceImage(
     });
     uriCache.set(uriCacheKey(coverArtId, SOURCE_SIZE), dest.uri);
 
+    // Success — wipe any accumulated failure count.
+    sourceFailureCount.delete(coverArtId);
+
     return dest.uri;
   } catch {
     if (tmpName) {
@@ -573,13 +998,46 @@ async function downloadSourceImage(
         try { tmp.delete(); } catch { /* best-effort */ }
       }
     }
+    // Network error, JSON parse, etc. — transient; count it.
+    bumpSourceFailure(coverArtId);
     return null;
   }
 }
 
 /**
- * Generate a single resized variant from the 600px source using
- * expo-image-manipulator. Writes to a .tmp file first, then renames.
+ * Increment the per-coverArt in-session failure counter and purge the
+ * rows if we've hit {@link MAX_SOURCE_FAILURES}. Keeps the "incomplete"
+ * count from stagnating on covers the server repeatedly refuses to
+ * serve (403, 5xx, sustained timeouts).
+ */
+function bumpSourceFailure(coverArtId: string): void {
+  const next = (sourceFailureCount.get(coverArtId) ?? 0) + 1;
+  sourceFailureCount.set(coverArtId, next);
+  if (next >= MAX_SOURCE_FAILURES) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[imageCacheService] ${next} consecutive failures for coverArt=${coverArtId} — purging cache rows`,
+    );
+    purgeCoverArtRows(coverArtId);
+  }
+}
+
+/**
+ * Coverages where variant generation has failed repeatedly during this
+ * app session. We stop retrying so a persistent per-cover decode bug
+ * (e.g. corrupt 600 source) can't produce an unbounded loop on re-entry.
+ * Resets on app restart — transient issues self-heal.
+ */
+const variantFailureCount = new Map<string, number>();
+const MAX_VARIANT_FAILURES = 3;
+
+/**
+ * Generate a single resized variant from the 600px source using the
+ * local `expo-image-resize` native module. Writes to a .tmp file first,
+ * then renames. The module uses `BitmapFactory.decodeFile` (Android) /
+ * `UIImage(contentsOfFile:)` (iOS) — no Glide, no coroutine callback
+ * surface, so the `expo-image-manipulator` double-resume crash that
+ * surfaces on Android 16 is structurally impossible here.
  */
 async function generateResizedVariant(
   sourceUri: string,
@@ -587,22 +1045,16 @@ async function generateResizedVariant(
   size: number,
   subDir: Directory,
 ): Promise<void> {
+  if ((variantFailureCount.get(coverArtId) ?? 0) >= MAX_VARIANT_FAILURES) return;
+
   const fileName = `${size}.jpg`;
   const tmpName = `${fileName}.tmp`;
+  const tmpFile = new File(subDir, tmpName);
+  const dest = new File(subDir, fileName);
+
   try {
-    const context = ImageManipulator.manipulate(sourceUri);
-    context.resize({ width: size });
-    const rendered = await context.renderAsync();
-    const saved = await rendered.saveAsync({
-      format: SaveFormat.JPEG,
-      compress: RESIZE_COMPRESS,
-    });
+    await resizeImageToFileAsync(sourceUri, tmpFile.uri, size, RESIZE_COMPRESS);
 
-    const savedFile = new File(saved.uri);
-    savedFile.move(new File(subDir, tmpName));
-    const tmpFile = new File(subDir, tmpName);
-
-    const dest = new File(subDir, fileName);
     if (dest.exists) {
       try { dest.delete(); } catch { /* best-effort */ }
     }
@@ -619,10 +1071,16 @@ async function generateResizedVariant(
       cachedAt: Date.now(),
     });
     uriCache.set(uriCacheKey(coverArtId, size), dest.uri);
+
+    // Success — reset any accumulated failures for this cover.
+    variantFailureCount.delete(coverArtId);
   } catch {
-    const tmp = new File(subDir, tmpName);
-    if (tmp.exists) {
-      try { tmp.delete(); } catch { /* best-effort */ }
+    variantFailureCount.set(
+      coverArtId,
+      (variantFailureCount.get(coverArtId) ?? 0) + 1,
+    );
+    if (tmpFile.exists) {
+      try { tmpFile.delete(); } catch { /* best-effort */ }
     }
   }
 }
@@ -717,11 +1175,9 @@ export async function deleteCachedImage(coverArtId: string): Promise<void> {
   if (!coverArtId) return;
   coverArtId = stripCoverArtSuffix(coverArtId);
 
-  for (const s of IMAGE_SIZES) {
-    uriCache.delete(uriCacheKey(coverArtId, s));
-  }
+  evictUriCacheForCover(coverArtId);
 
-  const subDir = new Directory(ensureCacheDir(), coverArtId);
+  const subDir = new Directory(ensureCacheDir(), coverArtPathKey(coverArtId));
   if (!subDir.exists) {
     // Clean up any orphan DB rows for this cover (e.g. directory was
     // already removed externally), then stop.

@@ -30,6 +30,7 @@ jest.mock('@expo/vector-icons', () => {
 });
 
 jest.mock('react-native-reanimated', () => {
+  const React = require('react');
   const { View, Text } = require('react-native');
   return {
     __esModule: true,
@@ -37,7 +38,15 @@ jest.mock('react-native-reanimated', () => {
       View,
       Text,
     },
-    useSharedValue: (init: number) => ({ value: init }),
+    // useSharedValue must persist its object across renders so that
+    // post-effect mutations (heightValue.value = 44) survive into the
+    // next render's useAnimatedStyle read. The trivial `() => ({ value })`
+    // version returned a fresh object every render, which made entrance
+    // animations untestable.
+    useSharedValue: (init: number) => {
+      const ref = React.useRef({ value: init });
+      return ref.current;
+    },
     useAnimatedStyle: (fn: () => object) => fn(),
     withTiming: (val: number) => val,
     withDelay: (_: number, val: number) => val,
@@ -85,10 +94,16 @@ describe('DownloadBanner', () => {
   });
 
   it('expands to BANNER_HEIGHT when queue has items', () => {
+    // The banner always mounts collapsed and runs the entrance animation
+    // via the visibility effect. With the reanimated mock, withTiming
+    // resolves synchronously on the shared value, but the rendered JSX
+    // captures the style at first render (height 0). A rerender flushes
+    // the post-effect value into the JSX.
     musicCacheStore.setState({
       downloadQueue: [makeQueueItem({ status: 'downloading', completedSongs: 3 })],
     });
-    const { toJSON } = render(<DownloadBanner />);
+    const { toJSON, rerender } = render(<DownloadBanner />);
+    rerender(<DownloadBanner />);
     const root = toJSON() as import('react-test-renderer').ReactTestRendererJSON;
     expect(root.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ height: 44 })]),
@@ -158,6 +173,37 @@ describe('DownloadBanner', () => {
     const root = toJSON() as import('react-test-renderer').ReactTestRendererJSON;
     expect(root.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ height: 0 })]),
+    );
+  });
+
+  it('stays hidden when queue contains only rows with unknown statuses', () => {
+    // A row in an unexpected status (e.g. a stuck `complete` survivor
+    // from a v1 migration, or any drift) must NOT keep the banner
+    // visible — the download-queue screen filters such rows out, so
+    // there's no UI affordance for the user to resolve it otherwise.
+    musicCacheStore.setState({
+      downloadQueue: [
+        makeQueueItem({ status: 'complete' as DownloadQueueItem['status'] }),
+      ],
+    });
+    const { toJSON } = render(<DownloadBanner />);
+    const root = toJSON() as import('react-test-renderer').ReactTestRendererJSON;
+    expect(root.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ height: 0 })]),
+    );
+  });
+
+  it('stays visible when queue has an error row with no in-flight transfer', () => {
+    musicCacheStore.setState({
+      downloadQueue: [
+        makeQueueItem({ status: 'error', error: 'network' }),
+      ],
+    });
+    const { toJSON, rerender } = render(<DownloadBanner />);
+    rerender(<DownloadBanner />);
+    const root = toJSON() as import('react-test-renderer').ReactTestRendererJSON;
+    expect(root.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ height: 44 })]),
     );
   });
 

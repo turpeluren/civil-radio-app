@@ -2,7 +2,7 @@
   "expo": {
     "name": "substreamer",
     "slug": "substreamer",
-    "version": "8.0.49",
+    "version": "8.0.56",
     "scheme": "substreamer",
     "platforms": [
       "android",
@@ -13,7 +13,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.ghenry22.substream2",
-      "buildNumber": "133",
+      "buildNumber": "140",
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
@@ -42,7 +42,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "predictiveBackGestureEnabled": false,
-      "versionCode": 80000133,
+      "versionCode": 80000140,
       "package": "com.ghenry22.substream2"
     },
     "web": {
@@ -63,6 +63,7 @@
       "./plugins/dedupe-lc++",
       "./plugins/fix-jvm-target",
       "./plugins/large-heap",
+      "./plugins/fresco-race-suppression",
       "./plugins/set-gradle-version",
       "expo-sqlite",
       "./modules/expo-ssl-trust/plugin",
@@ -91,7 +92,8 @@
       ],
       "./plugins/strip-push-entitlement",
       "expo-notifications",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-localization"
     ],
     "extra": {
       "router": {},

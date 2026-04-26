@@ -17,9 +17,10 @@ jest.mock('../../hooks/useTheme', () => ({
   }),
 }));
 
-jest.mock('../../hooks/useColorExtraction', () => ({
-  useColorExtraction: () => ({
-    coverBackgroundColor: '#333333',
+jest.mock('../../hooks/useImagePalette', () => ({
+  useImagePalette: () => ({
+    primary: '#333333',
+    secondary: null,
     gradientOpacity: { value: 1 },
   }),
 }));

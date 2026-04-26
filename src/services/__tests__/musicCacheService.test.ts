@@ -122,9 +122,13 @@ jest.mock('../../store/albumDetailStore', () => ({
 }));
 
 const mockFetchPlaylist = jest.fn();
+let mockPlaylistDetailPlaylists: Record<string, any> = {};
 jest.mock('../../store/playlistDetailStore', () => ({
   playlistDetailStore: {
-    getState: jest.fn(() => ({ fetchPlaylist: mockFetchPlaylist })),
+    getState: jest.fn(() => ({
+      fetchPlaylist: mockFetchPlaylist,
+      playlists: mockPlaylistDetailPlaylists,
+    })),
   },
 }));
 
@@ -266,6 +270,9 @@ import {
   redownloadTrack,
   registerMusicCacheOnAlbumReferencedHook,
   reconcileMusicCacheAsync,
+  waitForTrackMapsReady,
+  computeAlbumRemovalOutcome,
+  demoteAlbumToPartial,
 } from '../musicCacheService';
 
 import type { Child } from '../subsonicService';
@@ -308,6 +315,7 @@ function seedItem(itemId: string, opts: {
   artist?: string;
   coverArtId?: string;
   expectedSongCount?: number;
+  downloadedAt?: number;
 }) {
   const type = opts.type ?? 'album';
   const songIds = opts.songIds ?? [];
@@ -327,7 +335,7 @@ function seedItem(itemId: string, opts: {
         expectedSongCount: opts.expectedSongCount ?? songIds.length,
         parentAlbumId: undefined,
         lastSyncAt: Date.now(),
-        downloadedAt: Date.now(),
+        downloadedAt: opts.downloadedAt ?? Date.now(),
         songIds,
       },
     },
@@ -347,6 +355,7 @@ beforeEach(() => {
   mockFetchAlbum.mockReset();
   mockFetchPlaylist.mockReset();
   mockAlbumDetailAlbums.value = {};
+  mockPlaylistDetailPlaylists = {};
   mockCheckStorageLimit.mockReturnValue(false);
   mockFileExists = false;
   mockFileSize = 100;
@@ -785,10 +794,74 @@ describe('forceRecoverDownloadsAsync', () => {
 /* ------------------------------------------------------------------ */
 
 describe('enqueueAlbumDownload', () => {
-  it('skips if already cached', async () => {
-    seedItem('album-1', { type: 'album' });
+  it('skips if already fully downloaded (no missing songs)', async () => {
+    // A cached_items row that matches the server album exactly → top-up
+    // fetches fresh album data, sees no missing songs, and returns without
+    // enqueueing.
+    seedItem('album-1', {
+      type: 'album',
+      songIds: ['t1', 't2'],
+      expectedSongCount: 2,
+    });
+    mockFetchAlbum.mockResolvedValue({
+      id: 'album-1',
+      name: 'Already here',
+      song: [makeChild('t1'), makeChild('t2')],
+    });
     await enqueueAlbumDownload('album-1');
-    expect(mockFetchAlbum).not.toHaveBeenCalled();
+    expect(mockFetchAlbum).toHaveBeenCalled();
+    expect(musicCacheStore.getState().downloadQueue).toHaveLength(0);
+  });
+
+  it('tops up a partial album by enqueuing only missing songs', async () => {
+    seedItem('album-1', {
+      type: 'album',
+      songIds: ['t1', 't2'],
+      expectedSongCount: 5,
+      downloadedAt: 111,
+    });
+    mockFetchAlbum.mockResolvedValue({
+      id: 'album-1',
+      name: 'Partial',
+      artist: 'A',
+      coverArt: 'ac',
+      song: [
+        makeChild('t1'),
+        makeChild('t2'),
+        makeChild('t3'),
+        makeChild('t4'),
+        makeChild('t5'),
+      ],
+    });
+    mockCheckStorageLimit.mockReturnValue(true);
+    await enqueueAlbumDownload('album-1');
+    const queue = musicCacheStore.getState().downloadQueue;
+    expect(queue).toHaveLength(1);
+    expect(queue[0].itemId).toBe('album-1');
+    expect(queue[0].totalSongs).toBe(3);
+    const songs = JSON.parse(queue[0].songsJson) as Array<{ id: string }>;
+    expect(songs.map((s) => s.id).sort()).toEqual(['t3', 't4', 't5']);
+    // downloadedAt on the existing cached_items row is untouched.
+    expect(musicCacheStore.getState().cachedItems['album-1'].downloadedAt).toBe(111);
+  });
+
+  it('does not notify onAlbumReferenced hook on top-up', async () => {
+    const hook = jest.fn();
+    registerMusicCacheOnAlbumReferencedHook(hook);
+    seedItem('album-1', {
+      type: 'album',
+      songIds: ['t1'],
+      expectedSongCount: 2,
+    });
+    mockFetchAlbum.mockResolvedValue({
+      id: 'album-1',
+      name: 'X',
+      song: [makeChild('t1'), makeChild('t2')],
+    });
+    mockCheckStorageLimit.mockReturnValue(true);
+    await enqueueAlbumDownload('album-1');
+    expect(hook).not.toHaveBeenCalled();
+    registerMusicCacheOnAlbumReferencedHook(null);
   });
 
   it('skips if already queued', async () => {
@@ -1190,6 +1263,106 @@ describe('deleteCachedItem', () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  computeAlbumRemovalOutcome                                         */
+/* ------------------------------------------------------------------ */
+
+describe('computeAlbumRemovalOutcome', () => {
+  it('returns empty outcome for non-album types', () => {
+    seedSong(makeCachedSong('s1'));
+    seedItem('pl-1', { type: 'playlist', songIds: ['s1'] });
+    const outcome = computeAlbumRemovalOutcome('pl-1');
+    expect(outcome).toEqual({ orphanSongIds: [], survivorCount: 0 });
+  });
+
+  it('returns empty outcome for unknown itemId', () => {
+    expect(computeAlbumRemovalOutcome('nonexistent')).toEqual({
+      orphanSongIds: [],
+      survivorCount: 0,
+    });
+  });
+
+  it('all songs are orphans when no other item references them', () => {
+    seedSong(makeCachedSong('s1'));
+    seedSong(makeCachedSong('s2'));
+    seedItem('album-1', { type: 'album', songIds: ['s1', 's2'] });
+    const outcome = computeAlbumRemovalOutcome('album-1');
+    expect(outcome.orphanSongIds.sort()).toEqual(['s1', 's2']);
+    expect(outcome.survivorCount).toBe(0);
+  });
+
+  it('reports survivors when songs are edged to another item', () => {
+    seedSong(makeCachedSong('s1'));
+    seedSong(makeCachedSong('s2'));
+    seedItem('album-1', { type: 'album', songIds: ['s1', 's2'] });
+    // Add a second item (playlist) referencing s1 → s1 is a survivor.
+    seedItem('pl-1', { type: 'playlist', songIds: ['s1'] });
+    const outcome = computeAlbumRemovalOutcome('album-1');
+    expect(outcome.orphanSongIds).toEqual(['s2']);
+    expect(outcome.survivorCount).toBe(1);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  demoteAlbumToPartial                                               */
+/* ------------------------------------------------------------------ */
+
+describe('demoteAlbumToPartial', () => {
+  it('returns { demoted:false, removed:false } for non-album', () => {
+    seedItem('pl-1', { type: 'playlist', songIds: [] });
+    expect(demoteAlbumToPartial('pl-1')).toEqual({ demoted: false, removed: false });
+  });
+
+  it('falls through to full delete when no songs survive', () => {
+    mockFileExists = true;
+    seedSong(makeCachedSong('s1'));
+    seedSong(makeCachedSong('s2'));
+    seedItem('album-1', { type: 'album', songIds: ['s1', 's2'] });
+    const result = demoteAlbumToPartial('album-1');
+    expect(result).toEqual({ demoted: false, removed: true });
+    expect(musicCacheStore.getState().cachedItems['album-1']).toBeUndefined();
+  });
+
+  it('removes only orphan edges when survivors exist; preserves the album row + downloadedAt', () => {
+    mockFileExists = true;
+    seedSong(makeCachedSong('s1'));
+    seedSong(makeCachedSong('s2'));
+    seedSong(makeCachedSong('s3'));
+    seedItem('album-1', {
+      type: 'album',
+      songIds: ['s1', 's2', 's3'],
+      expectedSongCount: 3,
+      downloadedAt: 123456,
+    });
+    // s1 and s2 are also in a playlist → survivors.
+    seedItem('pl-1', { type: 'playlist', songIds: ['s1', 's2'] });
+
+    const result = demoteAlbumToPartial('album-1');
+    expect(result).toEqual({ demoted: true, removed: false });
+
+    const album = musicCacheStore.getState().cachedItems['album-1'];
+    expect(album).toBeDefined();
+    expect(album.downloadedAt).toBe(123456);
+    // Only the orphan (s3) should have been removed; s1 and s2 survive in
+    // the album's edge set.
+    expect(album.songIds.sort()).toEqual(['s1', 's2']);
+    // s3's file should have been deleted.
+    expect(fileDeletes.some((u) => u.includes('s3'))).toBe(true);
+    expect(fileDeletes.some((u) => u.includes('s1'))).toBe(false);
+    expect(fileDeletes.some((u) => u.includes('s2'))).toBe(false);
+  });
+
+  it('no-op guard when album item has no orphans (defensive: survivors fully cover it)', () => {
+    seedSong(makeCachedSong('s1'));
+    seedItem('album-1', { type: 'album', songIds: ['s1'], expectedSongCount: 1 });
+    seedItem('pl-1', { type: 'playlist', songIds: ['s1'] });
+    // Every song has >1 ref → no orphans. demoteAlbumToPartial should no-op.
+    const result = demoteAlbumToPartial('album-1');
+    expect(result).toEqual({ demoted: false, removed: false });
+    expect(musicCacheStore.getState().cachedItems['album-1']).toBeDefined();
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  removeCachedPlaylistTrack                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1364,6 +1537,61 @@ describe('syncCachedItemTracks', () => {
     expect(musicCacheStore.getState().cachedItems['pl-1']).toBeUndefined();
     expect(musicCacheStore.getState().downloadQueue).toHaveLength(1);
     expect(musicCacheStore.getState().downloadQueue[0].totalSongs).toBe(2);
+  });
+
+  describe('cover-art reconciliation (offline items only)', () => {
+    beforeEach(() => {
+      (cacheAllSizes as jest.Mock).mockClear();
+      (cacheEntityCoverArt as jest.Mock).mockClear();
+    });
+
+    it('triggers cacheAllSizes for the offline item and cacheEntityCoverArt for tracks when item exists', () => {
+      seedSong(makeCachedSong('s1'));
+      seedItem('pl-1', { type: 'playlist', songIds: ['s1'], coverArtId: 'pl-cover' });
+
+      const newSongs = [makeChild('s1'), makeChild('s2')];
+      syncCachedItemTracks('pl-1', newSongs);
+
+      // Item's own cover art reconciled.
+      expect(cacheAllSizes).toHaveBeenCalledWith('pl-cover');
+      // Per-track covers reconciled (idempotent no-op when complete).
+      expect(cacheEntityCoverArt).toHaveBeenCalledWith(newSongs);
+    });
+
+    it('runs even when no track changes are detected (heals missing/zero-byte covers)', () => {
+      seedSong(makeCachedSong('s1'));
+      seedItem('pl-1', { type: 'playlist', songIds: ['s1'], coverArtId: 'pl-cover' });
+
+      // Track list is identical — no re-enqueue should occur, but covers
+      // should still be reconciled.
+      syncCachedItemTracks('pl-1', [makeChild('s1')]);
+
+      expect(musicCacheStore.getState().downloadQueue).toHaveLength(0);
+      expect(cacheAllSizes).toHaveBeenCalledWith('pl-cover');
+      expect(cacheEntityCoverArt).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT trigger any cover reconciliation for a non-offline item', () => {
+      // No seedItem for 'missing' — this item is not in cachedItems.
+      syncCachedItemTracks('missing', [makeChild('t1', { coverArt: 'c1' })]);
+
+      // The scope guard (line 1425 in musicCacheService) short-circuits
+      // before reaching the cover reconciliation. Prevents library-wide
+      // fan-out that users explicitly don't want.
+      expect(cacheAllSizes).not.toHaveBeenCalled();
+      expect(cacheEntityCoverArt).not.toHaveBeenCalled();
+    });
+
+    it('skips cacheAllSizes when the item has no coverArtId but still reconciles per-song covers', () => {
+      seedSong(makeCachedSong('s1'));
+      seedItem('pl-2', { type: 'playlist', songIds: ['s1'] /* no coverArtId */ });
+
+      const newSongs = [makeChild('s1')];
+      syncCachedItemTracks('pl-2', newSongs);
+
+      expect(cacheAllSizes).not.toHaveBeenCalled();
+      expect(cacheEntityCoverArt).toHaveBeenCalledWith(newSongs);
+    });
   });
 });
 
@@ -1791,6 +2019,115 @@ describe('download pipeline', () => {
 
     const partial = musicCacheStore.getState().cachedItems['album-Z'];
     expect(partial.songIds.sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('partial-album: cached_songs row captures full Child envelope via raw_json', async () => {
+    mockFileExists = true;
+    mockFileSize = 5000;
+    mockDownloadFileAsyncWithProgress.mockResolvedValue(undefined);
+
+    const richChild = makeChild('rich-1', {
+      albumId: 'album-rich',
+      track: 4,
+      discNumber: 2,
+      genre: 'Jazz',
+      bpm: 120,
+      musicBrainzId: 'mbid-abc',
+      contributors: [{ role: 'producer', artist: { id: 'a1', name: 'X' } }] as any,
+    });
+    mockFetchPlaylist.mockResolvedValue({
+      id: 'pl-rich',
+      name: 'R',
+      entry: [richChild],
+    });
+
+    await enqueuePlaylistDownload('pl-rich');
+    await waitForQueueIdle();
+
+    const cached = musicCacheStore.getState().cachedSongs['rich-1'];
+    expect(cached).toBeDefined();
+    expect(cached.rawJson).toBeDefined();
+    const env = JSON.parse(cached.rawJson!);
+    expect(env.track).toBe(4);
+    expect(env.discNumber).toBe(2);
+    expect(env.genre).toBe('Jazz');
+    expect(env.bpm).toBe(120);
+    expect(env.musicBrainzId).toBe('mbid-abc');
+    expect(env.contributors).toBeDefined();
+  });
+
+  it('partial-album: row carries AlbumID3 envelope when album detail is cached', async () => {
+    mockFileExists = true;
+    mockFileSize = 5000;
+    mockDownloadFileAsyncWithProgress.mockResolvedValue(undefined);
+    mockAlbumDetailAlbums.value = {
+      'album-env': {
+        album: {
+          id: 'album-env',
+          name: 'Env Album',
+          genre: 'Classical',
+          moods: ['calm'],
+          recordLabels: [{ name: 'DG' }],
+          song: [{ id: 'env-t1' }],
+        },
+      },
+    };
+    mockFetchPlaylist.mockResolvedValue({
+      id: 'pl-env',
+      name: 'E',
+      entry: [makeChild('env-t1', { albumId: 'album-env' })],
+    });
+
+    await enqueuePlaylistDownload('pl-env');
+    await waitForQueueIdle();
+
+    const partial = musicCacheStore.getState().cachedItems['album-env'];
+    expect(partial.rawJson).toBeDefined();
+    const env = JSON.parse(partial.rawJson!);
+    expect(env.genre).toBe('Classical');
+    expect(env.moods).toEqual(['calm']);
+    expect(env.recordLabels).toEqual([{ name: 'DG' }]);
+    // `.song` stripped — songs live on cached_songs.raw_json.
+    expect('song' in env).toBe(false);
+  });
+
+  it('partial-album: row upgraded with envelope when an earlier partial existed without one', async () => {
+    mockFileExists = true;
+    mockFileSize = 5000;
+    mockDownloadFileAsyncWithProgress.mockResolvedValue(undefined);
+
+    // Seed an envelope-less partial row — simulates pre-Migration-19 state.
+    seedSong(makeCachedSong('up-a', { albumId: 'album-up' }));
+    seedItem('album-up', {
+      type: 'album',
+      songIds: ['up-a'],
+      expectedSongCount: 5,
+    });
+
+    // New song lands via playlist; albumDetailStore now has data.
+    mockAlbumDetailAlbums.value = {
+      'album-up': {
+        album: {
+          id: 'album-up',
+          name: 'Upgraded',
+          genre: 'Folk',
+          song: new Array(5).fill(null).map((_, i) => ({ id: `up-${i}` })),
+        },
+      },
+    };
+    mockFetchPlaylist.mockResolvedValue({
+      id: 'pl-up',
+      name: 'U',
+      entry: [makeChild('up-b', { albumId: 'album-up' })],
+    });
+
+    await enqueuePlaylistDownload('pl-up');
+    await waitForQueueIdle();
+
+    const partial = musicCacheStore.getState().cachedItems['album-up'];
+    expect(partial.rawJson).toBeDefined();
+    const env = JSON.parse(partial.rawJson!);
+    expect(env.genre).toBe('Folk');
   });
 
   it('partial-album: no-op when triggering item IS the album', async () => {
@@ -2417,5 +2754,41 @@ describe('reconcileMusicCacheAsync', () => {
         Object.defineProperty(Directory.prototype, 'exists', origDesc);
       }
     }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  waitForTrackMapsReady                                              */
+/* ------------------------------------------------------------------ */
+
+describe('waitForTrackMapsReady', () => {
+  it('resolves immediately once trackMapsReady is set (i.e. after deferredMusicCacheInit)', async () => {
+    // deferredMusicCacheInit runs populateTrackMapsAsync which flips the
+    // ready flag. Subsequent calls should resolve synchronously.
+    await deferredMusicCacheInit();
+    const start = Date.now();
+    await waitForTrackMapsReady();
+    expect(Date.now() - start).toBeLessThan(50);
+  });
+
+  it('queues and flushes waiters when populateTrackMapsAsync flips the flag', async () => {
+    // The module scope is shared across tests in this file; to exercise
+    // the queued-waiter code path we rely on isolateModules to get a
+    // fresh musicCacheService with `trackMapsReady === false`.
+    jest.isolateModules(() => {
+      jest.doMock('../subsonicService', () => ({
+        ...jest.requireActual('../subsonicService'),
+      }));
+      const mod = require('../musicCacheService');
+      let resolved = false;
+      const p = mod.waitForTrackMapsReady().then(() => {
+        resolved = true;
+      });
+      expect(resolved).toBe(false);
+      // Trigger populate via deferredMusicCacheInit — resolves the waiter.
+      return mod.deferredMusicCacheInit().then(() => p).then(() => {
+        expect(resolved).toBe(true);
+      });
+    });
   });
 });

@@ -8,6 +8,11 @@ jest.mock('../../store/albumListsStore', () => ({
   },
 }));
 
+const mockApplyLocalPlay = jest.fn();
+jest.mock('../playStatsService', () => ({
+  applyLocalPlay: (...args: unknown[]) => mockApplyLocalPlay(...args),
+}));
+
 import { completedScrobbleStore } from '../../store/completedScrobbleStore';
 import { pendingScrobbleStore } from '../../store/pendingScrobbleStore';
 import { scrobbleExclusionStore } from '../../store/scrobbleExclusionStore';
@@ -24,6 +29,7 @@ beforeEach(() => {
   completedScrobbleStore.setState({ completedScrobbles: [], stats: { totalPlays: 0, totalListeningSeconds: 0, uniqueArtists: {} } });
   scrobbleExclusionStore.setState({ excludedAlbums: {}, excludedArtists: {}, excludedPlaylists: {} });
   mockGetApi.mockReturnValue(null);
+  mockApplyLocalPlay.mockClear();
 });
 
 describe('addCompletedScrobble', () => {
@@ -63,6 +69,70 @@ describe('addCompletedScrobble', () => {
     const pending = pendingScrobbleStore.getState().pendingScrobbles[0];
     expect(typeof pending.time).toBe('number');
     expect(pending.time).toBeGreaterThan(0);
+  });
+
+  describe('eager local play stats update', () => {
+    it('calls applyLocalPlay once with the song for a non-excluded play', () => {
+      const song = { id: 's1', title: 'Song', artist: 'A', albumId: 'a1' };
+      addCompletedScrobble(song as any);
+      expect(mockApplyLocalPlay).toHaveBeenCalledTimes(1);
+      expect(mockApplyLocalPlay).toHaveBeenCalledWith(song);
+    });
+
+    it('skips the eager update when the song is missing an id', () => {
+      addCompletedScrobble({ title: 'Song', artist: 'A' } as any);
+      expect(mockApplyLocalPlay).not.toHaveBeenCalled();
+    });
+
+    it('skips the eager update when the song is missing a title', () => {
+      addCompletedScrobble({ id: 's1', artist: 'A' } as any);
+      expect(mockApplyLocalPlay).not.toHaveBeenCalled();
+    });
+
+    it('skips the eager update when the album is excluded', () => {
+      scrobbleExclusionStore.setState({
+        excludedAlbums: { 'a1': { id: 'a1', name: 'Album' } },
+        excludedArtists: {},
+        excludedPlaylists: {},
+      });
+      addCompletedScrobble({ id: 's1', title: 'Song', artist: 'A', albumId: 'a1' } as any);
+      expect(mockApplyLocalPlay).not.toHaveBeenCalled();
+      expect(pendingScrobbleStore.getState().pendingScrobbles).toHaveLength(0);
+    });
+
+    it('skips the eager update when the artist is excluded', () => {
+      scrobbleExclusionStore.setState({
+        excludedAlbums: {},
+        excludedArtists: { 'ar1': { id: 'ar1', name: 'Artist' } },
+        excludedPlaylists: {},
+      });
+      addCompletedScrobble({ id: 's1', title: 'Song', artist: 'A', artistId: 'ar1' } as any);
+      expect(mockApplyLocalPlay).not.toHaveBeenCalled();
+    });
+
+    it('skips the eager update when the playlist context is excluded', () => {
+      scrobbleExclusionStore.setState({
+        excludedAlbums: {},
+        excludedArtists: {},
+        excludedPlaylists: { 'pl1': { id: 'pl1', name: 'Playlist' } },
+      });
+      addCompletedScrobble(
+        { id: 's1', title: 'Song', artist: 'A' } as any,
+        'pl1',
+      );
+      expect(mockApplyLocalPlay).not.toHaveBeenCalled();
+    });
+
+    it('fires the eager update before enqueuing the scrobble', () => {
+      const song = { id: 's1', title: 'S', artist: 'A' };
+      addCompletedScrobble(song as any);
+
+      // Both happen; verify the apply was invoked and the pending queue
+      // grew — order here is synchronous so invocation presence is the
+      // important signal.
+      expect(mockApplyLocalPlay).toHaveBeenCalledTimes(1);
+      expect(pendingScrobbleStore.getState().pendingScrobbles).toHaveLength(1);
+    });
   });
 });
 

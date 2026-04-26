@@ -53,7 +53,7 @@ import { QueueItemRow } from '../components/QueueItemRow';
 import { closeOpenRow } from '../components/SwipeableRow';
 import { type ThemeColors } from '../constants/theme';
 import { useCanSkip } from '../hooks/useCanSkip';
-import { useColorExtraction } from '../hooks/useColorExtraction';
+import { useImagePalette } from '../hooks/useImagePalette';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useTheme } from '../hooks/useTheme';
 import { ThemedAlert } from '../components/ThemedAlert';
@@ -119,13 +119,17 @@ export function PlayerView() {
     }
   }, [currentTrack, wasPopulated, onClose]);
 
-  const { coverBackgroundColor, gradientOpacity } = useColorExtraction(
-    currentTrack?.coverArt,
-    colors.background,
-  );
+  const { primary, secondary, gradientOpacity } = useImagePalette(currentTrack?.coverArt);
 
-  const gradientStart = coverBackgroundColor ?? colors.background;
-  const gradientEnd = colors.background;
+  // 2-stop gradient: extracted secondary (prefer) → theme background. We
+  // drop the more-vibrant `primary` from the render here because on small
+  // phone screens it reads as too busy over the hero — `secondary` (the
+  // most-common hue distinct from primary) is calmer. `primary` still
+  // extracts and is available in the hook for future tablet/landscape
+  // layouts that have more room for the richer bi-tone.
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, colors.background];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.6];
 
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
@@ -161,6 +165,27 @@ export function PlayerView() {
       opacity.value = withTiming(tab === activeTab ? 1 : 0, config);
     }
   }, [activeTab, opacityMap]);
+
+  // Track which tabs should be visible in the compositor. The active tab
+  // is always visible; other tabs remain visible during their fade-out and
+  // are hidden with `display: 'none'` once the fade completes. Without
+  // this, the last-declared panel (Lyrics) keeps bleeding through whatever
+  // tab is active — opacity alone doesn't remove a view from compositing.
+  const [visibleTabs, setVisibleTabs] = useState<Set<PlayerTab>>(
+    () => new Set([activeTab]),
+  );
+  useEffect(() => {
+    setVisibleTabs((prev) => {
+      if (prev.has(activeTab) && prev.size === 1) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+    const timer = setTimeout(() => {
+      setVisibleTabs(new Set([activeTab]));
+    }, TAB_FADE_DURATION + 50);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
 
   const playerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: playerOpacity.value,
@@ -362,8 +387,8 @@ export function PlayerView() {
           pointerEvents="none"
         >
           <LinearGradient
-            colors={[gradientStart, gradientEnd]}
-            locations={[0, 0.6]}
+            colors={gradientColors}
+            locations={gradientLocations}
             style={StyleSheet.absoluteFillObject}
           />
         </Animated.View>
@@ -372,7 +397,12 @@ export function PlayerView() {
         <View style={styles.contentArea}>
           {/* Player tab — vertically centered across full area */}
           <Animated.View
-            style={[styles.tabPanel, Platform.OS === 'android' && { top: headerTopPadding }, playerAnimatedStyle]}
+            style={[
+              styles.tabPanel,
+              Platform.OS === 'android' && { top: headerTopPadding },
+              !visibleTabs.has('player') && styles.hiddenTab,
+              playerAnimatedStyle,
+            ]}
             pointerEvents={activeTab === 'player' ? 'auto' : 'none'}
           >
             <PlayerContent
@@ -385,7 +415,12 @@ export function PlayerView() {
 
           {/* Queue tab — below header */}
           <Animated.View
-            style={[styles.tabPanel, { top: headerTopPadding }, queueAnimatedStyle]}
+            style={[
+              styles.tabPanel,
+              { top: headerTopPadding },
+              !visibleTabs.has('queue') && styles.hiddenTab,
+              queueAnimatedStyle,
+            ]}
             pointerEvents={activeTab === 'queue' ? 'auto' : 'none'}
           >
             {mountedTabs.has('queue') && (
@@ -404,7 +439,12 @@ export function PlayerView() {
 
           {/* Album Info tab — below header */}
           <Animated.View
-            style={[styles.tabPanel, { top: headerTopPadding }, infoAnimatedStyle]}
+            style={[
+              styles.tabPanel,
+              { top: headerTopPadding },
+              !visibleTabs.has('info') && styles.hiddenTab,
+              infoAnimatedStyle,
+            ]}
             pointerEvents={activeTab === 'info' ? 'auto' : 'none'}
           >
             {mountedTabs.has('info') && (
@@ -414,7 +454,12 @@ export function PlayerView() {
 
           {/* Lyrics tab — below header */}
           <Animated.View
-            style={[styles.tabPanel, { top: headerTopPadding }, lyricsAnimatedStyle]}
+            style={[
+              styles.tabPanel,
+              { top: headerTopPadding },
+              !visibleTabs.has('lyrics') && styles.hiddenTab,
+              lyricsAnimatedStyle,
+            ]}
             pointerEvents={activeTab === 'lyrics' ? 'auto' : 'none'}
           >
             {mountedTabs.has('lyrics') && currentTrack && (
@@ -925,6 +970,9 @@ const styles = StyleSheet.create({
   },
   tabPanel: {
     ...StyleSheet.absoluteFillObject,
+  },
+  hiddenTab: {
+    display: 'none',
   },
   loadingContainer: {
     flex: 1,

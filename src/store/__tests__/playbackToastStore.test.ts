@@ -2,7 +2,12 @@ import { playbackToastStore } from '../playbackToastStore';
 
 beforeEach(() => {
   jest.useFakeTimers();
-  playbackToastStore.setState({ status: 'idle', errorMessage: null, _showedAt: 0 });
+  playbackToastStore.setState({
+    status: 'idle',
+    errorMessage: null,
+    successLabel: null,
+    _showedAt: 0,
+  });
 });
 
 afterEach(() => {
@@ -73,5 +78,25 @@ describe('playbackToastStore', () => {
     playbackToastStore.getState().fail('Error');
     jest.advanceTimersByTime(1200);
     expect(playbackToastStore.getState().status).toBe('error');
+  });
+
+  it('flashSuccess sets success status + custom label immediately (no loading delay)', () => {
+    playbackToastStore.getState().flashSuccess('Added to download queue');
+    const state = playbackToastStore.getState();
+    expect(state.status).toBe('success');
+    expect(state.successLabel).toBe('Added to download queue');
+    expect(state.errorMessage).toBeNull();
+  });
+
+  it('hide clears successLabel', () => {
+    playbackToastStore.getState().flashSuccess('Done');
+    playbackToastStore.getState().hide();
+    expect(playbackToastStore.getState().successLabel).toBeNull();
+  });
+
+  it('show resets successLabel so a subsequent loading→success uses default label', () => {
+    playbackToastStore.getState().flashSuccess('Custom');
+    playbackToastStore.getState().show();
+    expect(playbackToastStore.getState().successLabel).toBeNull();
   });
 });

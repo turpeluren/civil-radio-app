@@ -286,6 +286,19 @@ export type CacheBrowserFilter = 'all' | 'complete' | 'incomplete';
 const EXPECTED_VARIANTS = 4;
 
 /**
+ * Sentinel cover-art IDs rendered from bundled assets (CachedImage's
+ * asset resolver) rather than the disk cache. If rows for these ever
+ * exist — e.g. left over from an older app version — they're stale and
+ * should not surface in the image-cache browser UI. Inlined here because
+ * `imageCacheService.ts` has the same duplicate for circular-import
+ * reasons, and the persistence layer shouldn't depend on the service.
+ */
+const SENTINEL_COVER_ART_IDS: ReadonlySet<string> = new Set([
+  '__starred_cover__',
+  '__various_artists_cover__',
+]);
+
+/**
  * List every cached image grouped by cover_art_id, with an optional
  * complete/incomplete filter. Drives the image-cache-browser screen —
  * replaces the whole-tree `listCachedImagesAsync()` disk walk with a
@@ -322,9 +335,15 @@ export function listCachedImagesForBrowser(
       current.complete = current.files.length === EXPECTED_VARIANTS;
       entries.push(current);
     }
-    if (filter === 'complete') return entries.filter((e) => e.complete);
-    if (filter === 'incomplete') return entries.filter((e) => !e.complete);
-    return entries;
+    // Hide sentinel coverArtIds from the browser UI — if stale rows
+    // exist for them, they're permanently "incomplete" (the download
+    // pipeline can't service them) but the bundled artwork still
+    // renders. Suppressing them here keeps the user's incomplete list
+    // clean even if imageCacheService's sweep hasn't run yet.
+    const visible = entries.filter((e) => !SENTINEL_COVER_ART_IDS.has(e.coverArtId));
+    if (filter === 'complete') return visible.filter((e) => e.complete);
+    if (filter === 'incomplete') return visible.filter((e) => !e.complete);
+    return visible;
   } catch {
     return [];
   }

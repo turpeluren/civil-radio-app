@@ -5,8 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { DownloadedIcon } from './DownloadedIcon';
-import { StarRatingDisplay } from './StarRating';
+import { RowMetaLine } from './RowMetaLine';
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
@@ -26,7 +25,7 @@ export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
   const { t } = useTranslation();
   const router = useRouter();
   const starred = useIsStarred('album', album.id);
-  const downloaded = useDownloadStatus('album', album.id) === 'complete';
+  const downloadStatus = useDownloadStatus('album', album.id);
   const rating = useRating(album.id, album.userRating);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
@@ -110,25 +109,28 @@ export const AlbumRow = memo(function AlbumRow({ album }: { album: AlbumID3 }) {
             {album.artist ?? t('unknownArtist')}
           </Text>
           <View style={styles.meta}>
-            <View style={styles.metaLeft}>
-              <Ionicons name="musical-notes-outline" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {t('trackCount', { count: album.songCount })}
-              </Text>
-            </View>
-            {rating > 0 && (
-              <View style={styles.indicator}>
-                <StarRatingDisplay rating={rating} size={12} color={colors.primary} emptyColor={colors.primary} />
-              </View>
-            )}
-            {starred && <Ionicons name="heart" size={14} color={colors.red} style={styles.indicator} />}
-            {downloaded && <View style={styles.indicator}><DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" /></View>}
-            <View style={styles.metaRight}>
-              <Ionicons name="time-outline" size={14} color={colors.primary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {formatCompactDuration(album.duration)}
-              </Text>
-            </View>
+            <RowMetaLine
+              leading={
+                <>
+                  <Ionicons name="musical-notes-outline" size={14} color={colors.primary} />
+                  <Text
+                    style={[styles.metaText, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    {t('trackCount', { count: album.songCount })}
+                  </Text>
+                </>
+              }
+              slots={['rating', 'download', 'heart', 'duration']}
+              rating={rating}
+              starred={starred}
+              downloadStatus={
+                downloadStatus === 'complete' || downloadStatus === 'partial'
+                  ? downloadStatus
+                  : 'none'
+              }
+              durationText={formatCompactDuration(album.duration)}
+            />
           </View>
         </View>
       </View>
@@ -165,29 +167,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 6,
   },
-  indicator: {
-    marginLeft: 6,
-  },
   artistName: {
     fontSize: 14,
     marginTop: 2,
   },
   meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginTop: 3,
-  },
-  metaLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 0,
-  },
-  metaRight: {
-    flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
   },
   metaText: {
     fontSize: 12,

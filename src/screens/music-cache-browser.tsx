@@ -17,7 +17,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { GradientBackground } from '../components/GradientBackground';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
+import { SegmentControl, type Segment } from '../components/SegmentControl';
 import { settingsStyles } from '../styles/settingsStyles';
 import { useTransitionComplete } from '../hooks/useTransitionComplete';
 import {
@@ -32,17 +33,23 @@ import {
   clearDownloadQueue,
   clearMusicCache,
   deleteCachedItem,
+  enqueueAlbumDownload,
   redownloadItem,
   redownloadTrack,
 } from '../services/musicCacheService';
 import { clearQueue } from '../services/playerService';
+import { albumDetailStore } from '../store/albumDetailStore';
 import { offlineModeStore } from '../store/offlineModeStore';
 import {
   musicCacheStore,
   type CachedItemMeta,
   type CachedSongMeta,
 } from '../store/musicCacheStore';
+import { isPartialAlbum } from '../store/persistence/cachedItemHelpers';
+import { useConfirmAlbumRemoval } from '../hooks/useConfirmAlbumRemoval';
+import { computeAlbumRemovalOutcome } from '../services/musicCacheService';
 import { formatBytes } from '../utils/formatters';
+import type { Child } from '../services/subsonicService';
 
 /* ------------------------------------------------------------------ */
 /*  Track Row (inside expanded item)                                   */
@@ -71,6 +78,12 @@ const TrackFileRow = memo(function TrackFileRow({
 
   return (
     <View style={[styles.trackRow, { borderBottomColor: colors.border }]}>
+      <Ionicons
+        name="checkmark-circle"
+        size={16}
+        color={colors.primary}
+        style={styles.trackStatusIcon}
+      />
       <View style={styles.trackInfo}>
         <Text style={[styles.trackTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {track.title}
@@ -92,6 +105,42 @@ const TrackFileRow = memo(function TrackFileRow({
           </Pressable>
         )
       )}
+    </View>
+  );
+});
+
+/**
+ * Placeholder row rendered for tracks in a partial album that are NOT on
+ * disk. Visually distinct from TrackFileRow (dimmed text, download-arrow
+ * icon instead of a checkmark) so the user sees the full album track list
+ * and knows exactly which songs are missing.
+ */
+const MissingTrackRow = memo(function MissingTrackRow({
+  track,
+  colors,
+}: {
+  track: Child;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <View style={[styles.trackRow, { borderBottomColor: colors.border }]}>
+      <Ionicons
+        name="arrow-down-circle-outline"
+        size={16}
+        color={colors.textSecondary}
+        style={styles.trackStatusIcon}
+      />
+      <View style={styles.trackInfo}>
+        <Text
+          style={[styles.trackTitle, { color: colors.textSecondary }]}
+          numberOfLines={1}
+        >
+          {track.title ?? ''}
+        </Text>
+        <Text style={[styles.trackMeta, { color: colors.textSecondary }]}>
+          {track.artist ?? ''}
+        </Text>
+      </View>
     </View>
   );
 });
@@ -130,11 +179,22 @@ const CacheRow = memo(function CacheRow({
     ),
   );
   const knownCount = item.songIds.length;
-  const isPartial = knownCount < item.expectedSongCount;
+  const isPartial = isPartialAlbum(item);
   const trackLabel = isPartial
     ? t('songsPartial', { count: knownCount, total: item.expectedSongCount })
     : t('songCount', { count: knownCount });
   const totalBytes = tracks.reduce((sum, s) => sum + (s.bytes ?? 0), 0);
+
+  // For a partial album we want to render the FULL server track list with
+  // downloaded / missing indicators. Pull from albumDetailStore reactively;
+  // if nothing cached, we fetch on expand below. The fetched entry lands in
+  // `albumDetailStore.albums[albumId]` which is persisted + subscribed, so
+  // any later store update flows back here automatically.
+  const albumDetail = albumDetailStore((s) =>
+    item.type === 'album' ? s.albums[item.itemId] : undefined,
+  );
+  const fullAlbumSongs = albumDetail?.album?.song;
+  const [fetchingFullList, setFetchingFullList] = useState(false);
 
   // Defer track list rendering by one frame so the chevron flip and row
   // expansion feel instant before mounting potentially many TrackFileRows.
@@ -144,6 +204,23 @@ const CacheRow = memo(function CacheRow({
   useEffect(() => {
     if (expanded) {
       rafRef.current = requestAnimationFrame(() => setTracksReady(true));
+      // Lazy-fetch the full album detail when expanding a partial album
+      // that isn't yet cached. The fetch is best-effort — offline or
+      // server-unreachable falls back to the "downloaded tracks only"
+      // rendering below.
+      if (
+        isPartial &&
+        !fullAlbumSongs &&
+        !fetchingFullList &&
+        !offlineMode &&
+        item.type === 'album'
+      ) {
+        setFetchingFullList(true);
+        albumDetailStore
+          .getState()
+          .fetchAlbum(item.itemId, { prefetchCovers: false })
+          .finally(() => setFetchingFullList(false));
+      }
     } else {
       setTracksReady(false);
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -151,7 +228,7 @@ const CacheRow = memo(function CacheRow({
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
-  }, [expanded]);
+  }, [expanded, isPartial, fullAlbumSongs, fetchingFullList, offlineMode, item.type, item.itemId]);
 
   const handleDelete = useCallback(() => {
     onDelete(item.itemId);
@@ -212,7 +289,64 @@ const CacheRow = memo(function CacheRow({
 
         {expanded && (
           <View style={[styles.trackList, { borderTopColor: colors.border }]}>
-            {tracksReady ? (
+            {!tracksReady ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.trackLoading}
+              />
+            ) : isPartial && fullAlbumSongs ? (
+              // Partial album with the full server track list available:
+              // render each server track, marking downloaded vs missing.
+              (() => {
+                const downloadedById = new Map(tracks.map((t) => [t.id, t]));
+                return (
+                  <>
+                    {fullAlbumSongs.map((srvTrack) => {
+                      const cached = downloadedById.get(srvTrack.id);
+                      return cached ? (
+                        <TrackFileRow
+                          key={srvTrack.id}
+                          track={cached}
+                          itemId={item.itemId}
+                          colors={colors}
+                        />
+                      ) : (
+                        <MissingTrackRow
+                          key={srvTrack.id}
+                          track={srvTrack}
+                          colors={colors}
+                        />
+                      );
+                    })}
+                    {!offlineMode && (
+                      <Pressable
+                        onPress={() => {
+                          void enqueueAlbumDownload(item.itemId);
+                        }}
+                        style={({ pressed }) => [
+                          styles.partialActionRow,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Ionicons name="arrow-down-circle-outline" size={18} color={colors.primary} />
+                        <Text style={[styles.partialActionText, { color: colors.primary }]}>
+                          {t('downloadRemaining')}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </>
+                );
+              })()
+            ) : isPartial && fetchingFullList ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.trackLoading}
+              />
+            ) : (
+              // Complete item, or partial without album detail available
+              // (offline / fetch failed): show downloaded tracks only.
               tracks.map((track) => (
                 <TrackFileRow
                   key={track.id}
@@ -221,12 +355,6 @@ const CacheRow = memo(function CacheRow({
                   colors={colors}
                 />
               ))
-            ) : (
-              <ActivityIndicator
-                size="small"
-                color={colors.primary}
-                style={styles.trackLoading}
-              />
             )}
           </View>
         )}
@@ -256,11 +384,14 @@ export function MusicCacheBrowserScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const { alert, alertProps } = useThemedAlert();
+  const { confirmRemove, alertProps: removalAlertProps } = useConfirmAlbumRemoval();
   const transitionComplete = useTransitionComplete();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const cachedItems = musicCacheStore((s) => s.cachedItems);
   const [filter, setFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  type BrowserSegment = 'full' | 'partial';
+  const [statusFilter, setStatusFilter] = useState<BrowserSegment>('full');
 
   const hasItems = Object.keys(cachedItems).length > 0;
 
@@ -303,7 +434,7 @@ export function MusicCacheBrowserScreen() {
   const entries = useMemo<ListEntry[]>(() => {
     const all = Object.values(cachedItems);
     const query = filter.trim().toLowerCase();
-    const filtered = query.length === 0
+    const textFiltered = query.length === 0
       ? all
       : all.filter(
           (e) =>
@@ -311,12 +442,20 @@ export function MusicCacheBrowserScreen() {
             (e.artist?.toLowerCase().includes(query) ?? false),
         );
 
+    // Status filter: partial view shows only partial albums (songs and
+    // playlists can't be partial in v2). Full view shows everything that's
+    // not partial.
+    const statusFiltered = textFiltered.filter((e) => {
+      const partial = isPartialAlbum(e);
+      return statusFilter === 'partial' ? partial : !partial;
+    });
+
     // Partition: non-song items first (albums, playlists, favorites) sorted
     // by downloadedAt desc; song items grouped into a trailing section.
-    const nonSong = filtered
+    const nonSong = statusFiltered
       .filter((e) => e.type !== 'song')
       .sort((a, b) => b.downloadedAt - a.downloadedAt);
-    const songOnly = filtered
+    const songOnly = statusFiltered
       .filter((e) => e.type === 'song')
       .sort((a, b) => b.downloadedAt - a.downloadedAt);
 
@@ -328,7 +467,15 @@ export function MusicCacheBrowserScreen() {
       }
     }
     return result;
-  }, [cachedItems, filter, t]);
+  }, [cachedItems, filter, statusFilter, t]);
+
+  const filterSegments: ReadonlyArray<Segment<BrowserSegment>> = useMemo(
+    () => [
+      { key: 'full', label: t('segmentFull') },
+      { key: 'partial', label: t('segmentPartial') },
+    ],
+    [t],
+  );
 
   const handleToggle = useCallback((itemId: string) => {
     setExpandedId((prev) => (prev === itemId ? null : itemId));
@@ -338,6 +485,16 @@ export function MusicCacheBrowserScreen() {
     const state = musicCacheStore.getState();
     const item = state.cachedItems[itemId];
     if (!item) return;
+    // Albums with survivors get the partial-demote confirmation flow so the
+    // user sees that songs will stay on device.
+    if (item.type === 'album') {
+      const { survivorCount } = computeAlbumRemovalOutcome(itemId);
+      if (survivorCount > 0) {
+        setExpandedId((prev) => (prev === itemId ? null : prev));
+        confirmRemove(itemId);
+        return;
+      }
+    }
     const itemBytes = item.songIds.reduce(
       (sum, id) => sum + (state.cachedSongs[id]?.bytes ?? 0),
       0,
@@ -357,7 +514,7 @@ export function MusicCacheBrowserScreen() {
         },
       ],
     );
-  }, []);
+  }, [alert, t, confirmRemove]);
 
   const handleRedownload = useCallback((itemId: string) => {
     const item = musicCacheStore.getState().cachedItems[itemId];
@@ -407,8 +564,12 @@ export function MusicCacheBrowserScreen() {
   );
 
   const isFiltered = filter.trim().length > 0;
-  const emptyMessage = isFiltered ? t('noMatchingDownloads') : t('noDownloadedMusic');
-  const emptySubtitle = isFiltered ? undefined : t('downloadForOffline');
+  // Treat a non-default segment as "filtered" so we don't show
+  // "no downloaded music" when the user has downloads but none match the
+  // current segment.
+  const hasAnyFilter = isFiltered || statusFilter !== 'full';
+  const emptyMessage = hasAnyFilter ? t('noMatchingDownloads') : t('noDownloadedMusic');
+  const emptySubtitle = hasAnyFilter ? undefined : t('downloadForOffline');
 
   const listEmpty = useMemo(
     () =>
@@ -422,9 +583,37 @@ export function MusicCacheBrowserScreen() {
     [transitionComplete, emptyMessage, emptySubtitle, colors.primary],
   );
 
-  const listHeader = useMemo(
-    () => (
-      <View style={settingsStyles.filterContainer}>
+  const [chromeHeight, setChromeHeight] = useState(0);
+  const contentInsetTop = headerHeight + chromeHeight;
+
+  const listContentContainerStyle = useMemo(
+    () => ({
+      paddingTop: contentInsetTop,
+      paddingHorizontal: 16,
+      paddingBottom: 32,
+      ...((!transitionComplete || entries.length === 0) ? { flex: 1 } : undefined),
+    }),
+    [contentInsetTop, transitionComplete, entries.length],
+  );
+
+  return (
+    <>
+    <GradientBackground style={settingsStyles.container} scrollable>
+      <View style={styles.listWrap}>
+        <FlashList
+          data={transitionComplete ? entries : []}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          extraData={expandedId}
+          ListEmptyComponent={listEmpty}
+          contentContainerStyle={listContentContainerStyle}
+          onScrollBeginDrag={closeOpenRow}
+        />
+      </View>
+      <View
+        style={[styles.chromeOverlay, { top: headerHeight }]}
+        onLayout={(e) => setChromeHeight(e.nativeEvent.layout.height)}
+      >
         <View style={[settingsStyles.filterPill, { backgroundColor: colors.inputBg }]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} style={settingsStyles.filterIcon} />
           <TextInput
@@ -438,37 +627,16 @@ export function MusicCacheBrowserScreen() {
             clearButtonMode="while-editing"
           />
         </View>
+        <SegmentControl
+          segments={filterSegments}
+          selected={statusFilter}
+          onSelect={setStatusFilter}
+        />
       </View>
-    ),
-    [colors, filter],
-  );
-
-  const listContentContainerStyle = useMemo(
-    () => ({
-      paddingTop: headerHeight,
-      paddingHorizontal: 16,
-      paddingBottom: 32,
-      ...((!transitionComplete || entries.length === 0) ? { flex: 1 } : undefined),
-    }),
-    [headerHeight, transitionComplete, entries.length],
-  );
-
-  return (
-    <>
-    <GradientBackground style={settingsStyles.container} scrollable>
-      <FlashList
-        data={transitionComplete ? entries : []}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        extraData={expandedId}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={listEmpty}
-        contentContainerStyle={listContentContainerStyle}
-        onScrollBeginDrag={closeOpenRow}
-      />
-      <MiniPlayerFooter />
+      <BottomChrome withSafeAreaPadding />
     </GradientBackground>
     <ThemedAlert {...alertProps} />
+    <ThemedAlert {...removalAlertProps} />
     </>
   );
 }
@@ -544,6 +712,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  trackStatusIcon: {
+    marginRight: 8,
+  },
   trackInfo: {
     flex: 1,
     minWidth: 0,
@@ -556,11 +727,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  partialActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 6,
+  },
+  partialActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   pressed: {
     opacity: 0.6,
   },
   clearButton: {
     fontSize: 16,
     fontWeight: '400',
+  },
+  listWrap: {
+    flex: 1,
+  },
+  chromeOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 8,
+    zIndex: 1,
   },
 });

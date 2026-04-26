@@ -20,7 +20,7 @@ import { CachedImage } from '../components/CachedImage';
 import { EmptyState } from '../components/EmptyState';
 import { DownloadButton } from '../components/DownloadButton';
 import { MarqueeText } from '../components/MarqueeText';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { closeOpenRow } from '../components/SwipeableRow';
 import { TrackRow } from '../components/TrackRow';
@@ -30,7 +30,7 @@ import {
   GRADIENT_MIX_CURVE,
   LIGHT_MIX,
 } from '../components/GradientBackground';
-import { SKIP_COLOR_EXTRACTION, useColorExtraction } from '../hooks/useColorExtraction';
+import { SKIP_COLOR_EXTRACTION, useImagePalette } from '../hooks/useImagePalette';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useLayoutMode } from '../hooks/useLayoutMode';
@@ -97,9 +97,8 @@ export function AlbumDetailScreen() {
     if (id) toggleStar('album', id);
   }, [id]);
 
-  const { coverBackgroundColor, gradientOpacity } = useColorExtraction(
+  const { primary, secondary, gradientOpacity } = useImagePalette(
     isWide ? SKIP_COLOR_EXTRACTION : album?.coverArt,
-    colors.background,
   );
 
   const themeGradientColors = useMemo(() => {
@@ -336,7 +335,15 @@ export function AlbumDetailScreen() {
     [colors.textPrimary, colors.textSecondary, t],
   );
 
-  const gradientStart = coverBackgroundColor ?? colors.background;
+  // 2-stop gradient: extracted secondary (prefer) → theme background.
+  // On smaller screens the richer 3-stop bi-tone read as too busy over
+  // the hero, so we drop the more-vibrant `primary` from the render and
+  // use `secondary` (the most-common hue distinct from primary) as the
+  // calmer top colour. `primary` still extracts and is available in the
+  // hook for future tablet/landscape layouts with more room.
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, colors.background];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.5];
 
   const gradientAnimatedStyle = useAnimatedStyle(() => ({
     opacity: gradientOpacity.value,
@@ -361,8 +368,6 @@ export function AlbumDetailScreen() {
       </View>
     );
   }
-
-  const gradientEnd = colors.background;
 
   const gradientFillStyle = [
     StyleSheet.absoluteFillObject,
@@ -403,8 +408,8 @@ export function AlbumDetailScreen() {
           pointerEvents="none"
         >
           <LinearGradient
-            colors={[gradientStart, gradientEnd]}
-            locations={[0, 0.5]}
+            colors={gradientColors}
+            locations={gradientLocations}
             style={StyleSheet.absoluteFillObject}
           />
         </Animated.View>
@@ -440,7 +445,7 @@ export function AlbumDetailScreen() {
             )
           }
         />
-        <MiniPlayerFooter />
+        <BottomChrome withSafeAreaPadding />
       </View>
     </>
   );

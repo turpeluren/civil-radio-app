@@ -30,8 +30,16 @@ export interface AlbumDetailState {
   albums: Record<string, AlbumDetailEntry>;
   /** True after the on-start hydration from SQLite has populated `albums`. */
   hasHydrated: boolean;
-  /** Fetch album from API, store it, and return it. Returns null on failure. */
-  fetchAlbum: (id: string) => Promise<AlbumWithSongsID3 | null>;
+  /** Fetch album from API, store it, and return it. Returns null on failure.
+   *  Pass `{ prefetchCovers: false }` to skip the eager cover-art cache —
+   *  used by the background library sync so a metadata refresh doesn't
+   *  kick off hundreds of image downloads. User-facing fetches (detail
+   *  screens, pull-to-refresh) omit the flag so art still pre-caches. */
+  fetchAlbum: (id: string, opts?: { prefetchCovers?: boolean }) => Promise<AlbumWithSongsID3 | null>;
+  /** Eagerly bump local play stats for a just-scrobbled song. Updates both
+   *  the album row (playCount + played) and the matching song inside
+   *  `album.data.song[]`. No-op when the album isn't in the cache. */
+  applyLocalPlay: (songId: string, albumId: string | undefined, now: string) => void;
   /** True if an entry for `id` already exists in memory. Cheap check used by
    *  the Phase-4 walk to skip already-cached albums. */
   hasEntry: (id: string) => boolean;
@@ -49,7 +57,8 @@ export const albumDetailStore = create<AlbumDetailState>()((set, get) => ({
   albums: {},
   hasHydrated: false,
 
-  fetchAlbum: async (id: string) => {
+  fetchAlbum: async (id: string, opts?: { prefetchCovers?: boolean }) => {
+    const prefetchCovers = opts?.prefetchCovers ?? true;
     const result = await withTimeout(async () => {
       await ensureCoverArtAuth();
       const data = await getAlbum(id);
@@ -75,13 +84,54 @@ export const albumDetailStore = create<AlbumDetailState>()((set, get) => ({
         songIndexStore.getState().upsertSongsForAlbum(id, data.song ?? []);
 
         // Proactively cache cover art for new IDs so they survive offline.
-        if (data.coverArt) cacheAllSizes(data.coverArt).catch(() => { /* non-critical */ });
-        if (data.song?.length) cacheEntityCoverArt(data.song);
+        // Skipped during bulk sync — see prefetchCovers contract above.
+        if (prefetchCovers) {
+          if (data.coverArt) cacheAllSizes(data.coverArt).catch(() => { /* non-critical */ });
+          if (data.song?.length) cacheEntityCoverArt(data.song);
+        }
       }
       return data;
     }, FETCH_TIMEOUT_MS);
 
     return result === 'timeout' ? null : result;
+  },
+
+  applyLocalPlay: (songId, albumId, now) => {
+    if (!albumId) return;
+    const entry = get().albums[albumId];
+    if (!entry) return;
+    const songs = entry.album.song ?? [];
+    const songIdx = songs.findIndex((s) => s.id === songId);
+    if (songIdx === -1) {
+      // Album in cache but song not in its song list — still bump the album's
+      // own play stats (the user is playing a track that belongs to this
+      // album, even if our cached song list hasn't been refreshed yet).
+      const updatedAlbum: AlbumWithSongsID3 = {
+        ...entry.album,
+        playCount: (entry.album.playCount ?? 0) + 1,
+        played: now,
+      };
+      const updatedEntry: AlbumDetailEntry = { ...entry, album: updatedAlbum };
+      set({ albums: { ...get().albums, [albumId]: updatedEntry } });
+      upsertAlbumDetail(albumId, updatedAlbum, entry.retrievedAt);
+      return;
+    }
+    const oldSong = songs[songIdx];
+    const updatedSong = {
+      ...oldSong,
+      playCount: (oldSong.playCount ?? 0) + 1,
+      played: now,
+    };
+    const updatedSongs = songs.map((s, i) => (i === songIdx ? updatedSong : s));
+    const updatedAlbum: AlbumWithSongsID3 = {
+      ...entry.album,
+      playCount: (entry.album.playCount ?? 0) + 1,
+      played: now,
+      song: updatedSongs,
+    };
+    const updatedEntry: AlbumDetailEntry = { ...entry, album: updatedAlbum };
+    set({ albums: { ...get().albums, [albumId]: updatedEntry } });
+    upsertAlbumDetail(albumId, updatedAlbum, entry.retrievedAt);
   },
 
   hasEntry: (id: string) => Object.prototype.hasOwnProperty.call(get().albums, id),

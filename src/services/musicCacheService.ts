@@ -41,7 +41,11 @@ import {
   type CachedSongMeta,
   type DownloadQueueItem,
 } from '../store/musicCacheStore';
-import { insertCachedItemSong } from '../store/persistence/musicCacheTables';
+import {
+  countSongRefs,
+  insertCachedItemSong,
+} from '../store/persistence/musicCacheTables';
+import { processingOverlayStore } from '../store/processingOverlayStore';
 import { playbackSettingsStore } from '../store/playbackSettingsStore';
 import { resolveEffectiveFormat } from '../utils/effectiveFormat';
 import { playlistDetailStore } from '../store/playlistDetailStore';
@@ -215,6 +219,11 @@ export function teardownMusicCache(): void {
  * stalled downloads.
  */
 export async function deferredMusicCacheInit(): Promise<void> {
+  // Call populateTrackMapsAsync directly (not ensureTrackMapsReady's
+  // coalescing wrapper) so a reconciliation pass always refreshes the
+  // in-memory maps from the latest store state — covering the case where
+  // the maps were already warmed by a prior call from the player's
+  // hydration path.
   await populateTrackMapsAsync();
 
   // Force all musicCacheStore subscribers (e.g. useDownloadStatus) to
@@ -241,6 +250,9 @@ export async function deferredMusicCacheInit(): Promise<void> {
 
   await recoverStalledDownloadsAsync();
 }
+
+/** In-flight populate promise for coalescing concurrent callers. */
+let populatePromise: Promise<void> | null = null;
 
 /**
  * Rebuild `trackUriMap` and `trackToItems` from the hydrated SQL mirror in
@@ -270,10 +282,50 @@ async function populateTrackMapsAsync(): Promise<void> {
   }
 
   trackMapsReady = true;
+  flushTrackMapsReadyWaiters();
 
   // Run any starred-songs sync that was deferred because the favoritesStore
   // subscription fired before the maps were ready.
   syncStarredSongsDownload();
+}
+
+/**
+ * Idempotent, coalescing trigger for the populate pass. Safe to call from
+ * multiple call sites — concurrent callers all await the same in-flight
+ * promise. The player's cold-start hydration uses this to avoid blocking
+ * on the image-cache-init chain that owns the "post-splash" populate call.
+ */
+export function ensureTrackMapsReady(): Promise<void> {
+  if (trackMapsReady) return Promise.resolve();
+  if (populatePromise) return populatePromise;
+  populatePromise = populateTrackMapsAsync().finally(() => {
+    populatePromise = null;
+  });
+  return populatePromise;
+}
+
+/** Waiters queued before `trackMapsReady` flipped true. */
+const trackMapsReadyWaiters: Array<() => void> = [];
+
+function flushTrackMapsReadyWaiters(): void {
+  while (trackMapsReadyWaiters.length > 0) {
+    const resolve = trackMapsReadyWaiters.shift();
+    resolve?.();
+  }
+}
+
+/**
+ * Resolves as soon as the in-memory track maps are ready. Proactive —
+ * kicks off the populate itself if it hasn't started yet (coalesced with
+ * any concurrent call via {@link ensureTrackMapsReady}).
+ *
+ * Used by the player's resume path so `childToTrack` sees local URIs for
+ * downloaded songs instead of server stream URLs — critical on cold launch
+ * in offline mode where the launch race would otherwise push unreachable
+ * URLs into RNTP.
+ */
+export function waitForTrackMapsReady(): Promise<void> {
+  return ensureTrackMapsReady();
 }
 
 /**
@@ -608,14 +660,81 @@ function cacheTrackCoverArt(tracks: Child[]): void {
 /** Enqueue an album download. */
 export async function enqueueAlbumDownload(albumId: string): Promise<void> {
   const state = musicCacheStore.getState();
-  if (albumId in state.cachedItems) return;
+  const existing = state.cachedItems[albumId];
   if (state.downloadQueue.some((q) => q.itemId === albumId)) return;
 
-  onAlbumReferencedHook?.(albumId);
+  const isTopUp = existing !== undefined;
+  if (!isTopUp) {
+    onAlbumReferencedHook?.(albumId);
+  }
 
   await ensureCoverArtAuth();
   const album = await albumDetailStore.getState().fetchAlbum(albumId);
-  if (!album?.song?.length) return;
+  if (!album?.song?.length) {
+    if (isTopUp) {
+      processingOverlayStore.getState().showError(i18n.t('failedToLoadAlbum'));
+    }
+    return;
+  }
+
+  if (isTopUp) {
+    // Top-up: download only the songs that aren't already edged to this
+    // album. If the server-side album grew, the new `expectedSongCount`
+    // captures that; if it shrank, we still download whatever the server
+    // currently reports and the stale `expectedSongCount` self-corrects
+    // on merge via `markItemComplete`.
+    const haveIds = new Set(existing.songIds);
+    const missingSongs = album.song.filter((s) => s.id && !haveIds.has(s.id));
+
+    // We just fetched a fresh album — carry its envelope into the row so
+    // any previously stored thin/null `rawJson` gets upgraded.
+    const { song: _albumSongsIgnored, ...albumMeta } = album;
+    const refreshedEnvelope = JSON.stringify(albumMeta);
+
+    if (missingSongs.length === 0) {
+      // No missing songs — refresh `expectedSongCount` so the defensive
+      // partial classification self-corrects and return.
+      musicCacheStore.getState().upsertCachedItem({
+        ...existing,
+        expectedSongCount: album.song.length,
+        rawJson: refreshedEnvelope,
+      });
+      return;
+    }
+
+    // Refresh `expectedSongCount` on the existing row with the fresh server
+    // total BEFORE enqueueing. The top-up queue row's `songsJson` only
+    // contains the missing delta, so the worker's derived count would be
+    // wrong — `markItemComplete` preserves this existing value on merge.
+    if (
+      existing.expectedSongCount !== album.song.length ||
+      existing.rawJson !== refreshedEnvelope
+    ) {
+      musicCacheStore.getState().upsertCachedItem({
+        ...existing,
+        expectedSongCount: album.song.length,
+        rawJson: refreshedEnvelope,
+      });
+    }
+
+    if (album.coverArt) {
+      cacheAllSizes(album.coverArt).catch(() => { /* non-critical */ });
+    }
+    cacheTrackCoverArt(missingSongs);
+
+    musicCacheStore.getState().enqueueTopUp({
+      itemId: albumId,
+      type: 'album',
+      name: album.name,
+      artist: album.artist ?? album.displayArtist,
+      coverArtId: album.coverArt,
+      totalSongs: missingSongs.length,
+      songsJson: JSON.stringify(missingSongs),
+    });
+
+    processQueue();
+    return;
+  }
 
   if (album.coverArt) {
     cacheAllSizes(album.coverArt).catch(() => { /* non-critical */ });
@@ -678,9 +797,19 @@ export async function enqueueSongDownload(song: Child): Promise<void> {
   if (state.downloadQueue.some((q) => q.itemId === itemId)) return;
 
   // If the underlying song is already fully cached, don't transfer bytes —
-  // just create the `song:` item + edge so it shows up in the browser.
+  // just create the `song:` item + edge so it shows up in the browser. We
+  // also take this opportunity to refresh the underlying `cached_songs`
+  // row's envelope with whatever the caller supplied: if the song came
+  // from a screen that just round-tripped getSong/getAlbum, the Child
+  // here can be richer than what we stored at original download time.
   if (song.id in state.cachedSongs) {
     const existing = state.cachedSongs[song.id];
+    if (song) {
+      musicCacheStore.getState().upsertCachedSong({
+        ...existing,
+        rawJson: JSON.stringify(song),
+      });
+    }
     musicCacheStore.getState().upsertCachedItem(
       {
         itemId,
@@ -754,6 +883,41 @@ function registerTrackToItem(songId: string, itemId: string): void {
 }
 
 /**
+ * Serialise the "envelope" for a `cached_items` row — the full Subsonic
+ * entity metadata minus any per-song list. Songs live authoritatively in
+ * `cached_songs.raw_json`; carrying `AlbumWithSongsID3.song[]` or
+ * `PlaylistWithSongs.entry[]` on the parent row would be a stale
+ * duplicate that could drift, so we strip them.
+ *
+ * Returns `undefined` when the corresponding detail store is empty (e.g.
+ * first download where the user hasn't opened the album). Callers pass
+ * `undefined` straight through to the row; Migration 18/19 will backfill
+ * later from local caches, and future writes will populate it when the
+ * store warms up.
+ */
+function buildCachedItemEnvelope(
+  itemId: string,
+  type: CachedItemMeta['type'],
+): string | undefined {
+  if (type === 'album') {
+    const albums = albumDetailStore.getState().albums;
+    const album = albums?.[itemId]?.album;
+    if (!album) return undefined;
+    const { song: _songs, ...meta } = album;
+    return JSON.stringify(meta);
+  }
+  if (type === 'playlist') {
+    const playlists = playlistDetailStore.getState().playlists;
+    const playlist = playlists?.[itemId]?.playlist;
+    if (!playlist) return undefined;
+    const { entry: _entries, ...meta } = playlist;
+    return JSON.stringify(meta);
+  }
+  // `favorites` (__starred__) and `song` intents have no natural envelope.
+  return undefined;
+}
+
+/**
  * Ensure a partial-album `cached_items` row + edge exist for songs
  * downloaded from a non-album item. No-op when the triggering item IS the
  * album itself.
@@ -770,6 +934,30 @@ function ensurePartialAlbumEdge(
   const existing = state.cachedItems[song.albumId];
 
   if (existing) {
+    // Opportunistically refresh expectedSongCount if the album detail store
+    // has a fresher, larger count than the existing row — corrects the
+    // `expectedSongCount = 1` fallback taken at partial-row creation when
+    // albumDetailStore was empty. Also refresh `rawJson` if the existing
+    // row is still missing its envelope and we can produce one now.
+    const cachedAlbumForRefresh = albumDetailStore.getState().albums[song.albumId];
+    const freshCount = cachedAlbumForRefresh?.album?.song?.length;
+    const envelope = existing.rawJson
+      ? undefined
+      : buildCachedItemEnvelope(song.albumId, 'album');
+    if (
+      (freshCount !== undefined && freshCount > existing.expectedSongCount) ||
+      envelope !== undefined
+    ) {
+      musicCacheStore.getState().upsertCachedItem({
+        ...existing,
+        expectedSongCount:
+          freshCount !== undefined && freshCount > existing.expectedSongCount
+            ? freshCount
+            : existing.expectedSongCount,
+        rawJson: envelope ?? existing.rawJson,
+      });
+    }
+
     // Append this song as a new edge if not already present.
     if (existing.songIds.includes(song.id)) return;
     const nextPosition = existing.songIds.length + 1;
@@ -808,6 +996,7 @@ function ensurePartialAlbumEdge(
       parentAlbumId: undefined,
       lastSyncAt: now,
       downloadedAt: now,
+      rawJson: buildCachedItemEnvelope(song.albumId, 'album'),
     },
     [song.id],
   );
@@ -964,6 +1153,7 @@ async function downloadItem(queueItem: DownloadQueueItem, myId: number): Promise
       parentAlbumId: queueItem.type === 'song' ? songs[0]?.albumId : undefined,
       lastSyncAt: Date.now(),
       downloadedAt: Date.now(),
+      rawJson: buildCachedItemEnvelope(queueItem.itemId, queueItem.type),
     };
     const songsToCommit = Array.from(itemSongsForCommit.values());
     const edgesForCommit = itemEdges.map((e) => ({
@@ -1064,6 +1254,11 @@ async function downloadSong(track: Child): Promise<CachedSongMeta | null> {
       samplingRate: effectiveFmt.samplingRate,
       formatCapturedAt: effectiveFmt.capturedAt,
       downloadedAt: now,
+      // Preserve the full Subsonic envelope next to the indexed columns.
+      // Any future feature reading from `getSongEnvelope()` sees discNumber,
+      // track, genre, MusicBrainz id, ReplayGain, contributors, moods,
+      // explicitStatus, etc. — every optional field the server returned.
+      rawJson: JSON.stringify(track),
     };
 
     // Upsert to the pool immediately so subsequent dedup checks within this
@@ -1273,6 +1468,93 @@ export function deleteCachedItem(itemId: string): void {
 }
 
 /**
+ * Inspect what would happen if the user removed this album: which songs
+ * would be orphaned (deleted from disk) and how many would survive because
+ * they're referenced by other items (playlists, favorites, single-song
+ * downloads). Survivors > 0 means the caller should confirm with the user
+ * before proceeding.
+ */
+export function computeAlbumRemovalOutcome(
+  itemId: string,
+): { orphanSongIds: string[]; survivorCount: number } {
+  const cached = musicCacheStore.getState().cachedItems[itemId];
+  if (!cached || cached.type !== 'album') {
+    return { orphanSongIds: [], survivorCount: 0 };
+  }
+  const orphanSongIds: string[] = [];
+  let survivorCount = 0;
+  for (const sid of cached.songIds) {
+    if (countSongRefs(sid) <= 1) {
+      orphanSongIds.push(sid);
+    } else {
+      survivorCount++;
+    }
+  }
+  return { orphanSongIds, survivorCount };
+}
+
+/**
+ * Remove orphaned songs from an album while preserving the `cached_items`
+ * row itself when any song survives (because it's referenced by another
+ * item). The surviving songs keep their album edge, so the album naturally
+ * shows as partially downloaded afterward — with its original `downloadedAt`
+ * intact. If no songs survive, falls through to `deleteCachedItem`.
+ */
+export function demoteAlbumToPartial(
+  itemId: string,
+): { demoted: boolean; removed: boolean } {
+  const initial = musicCacheStore.getState().cachedItems[itemId];
+  if (!initial || initial.type !== 'album') {
+    return { demoted: false, removed: false };
+  }
+
+  const { orphanSongIds } = computeAlbumRemovalOutcome(itemId);
+
+  if (orphanSongIds.length === initial.songIds.length) {
+    // No survivors — full delete is the right outcome.
+    deleteCachedItem(itemId);
+    return { demoted: false, removed: true };
+  }
+  if (orphanSongIds.length === 0) {
+    // Nothing to remove (shouldn't happen for a "remove album" flow — the
+    // caller should have confirmed survivors > 0 first — but be defensive).
+    return { demoted: false, removed: false };
+  }
+
+  // Snapshot song metadata for file deletion BEFORE the store removes rows.
+  const orphanSnapshot: CachedSongMeta[] = [];
+  for (const sid of orphanSongIds) {
+    const s = musicCacheStore.getState().cachedSongs[sid];
+    if (s) orphanSnapshot.push(s);
+  }
+
+  // Remove each orphan edge. Positions shift after each removal, so we
+  // re-read the current index every iteration.
+  for (const songId of orphanSongIds) {
+    const current = musicCacheStore.getState().cachedItems[itemId];
+    if (!current) break;
+    const idx = current.songIds.indexOf(songId);
+    if (idx < 0) continue;
+    musicCacheStore.getState().removeCachedItemSong(itemId, idx + 1);
+    // `removeCachedItemSong` has already deleted the cached_songs row and
+    // decremented refcount-via-COUNT. Update the in-memory mirrors.
+    trackToItems.delete(songId);
+    trackUriMap.delete(songId);
+  }
+
+  // Delete orphan files (best-effort).
+  for (const song of orphanSnapshot) {
+    const file = resolveSongFile(song);
+    if (file.exists) {
+      try { file.delete(); } catch { /* best-effort */ }
+    }
+  }
+
+  resumeIfSpaceAvailable();
+  return { demoted: true, removed: false };
+}
+
+/**
  * Remove a single song from a cached playlist/favorites/song item. Deletes
  * the underlying file iff the song's refcount hits zero.
  */
@@ -1402,6 +1684,18 @@ export function syncCachedItemTracks(
 
   // Removes + reorders via the playlist sync.
   syncCachedPlaylistTracks(itemId, newTrackIds);
+
+  // Belt-and-braces cover-art reconciliation for this offline item only.
+  // `cacheAllSizes` and `cacheEntityCoverArt` are idempotent — instant
+  // no-op when every variant is already on disk (imageCacheService.ts:447),
+  // refills only what's missing (e.g. a variant dropped by the
+  // reconcileImageCacheAsync zero-byte pass, or an OS cache eviction).
+  // This check never walks the full library — only this single cached
+  // item and its tracks.
+  if (cached.coverArtId) {
+    cacheAllSizes(cached.coverArtId).catch(() => { /* non-critical */ });
+  }
+  cacheEntityCoverArt(newSongs);
 
   const hasNewTracks = newSongs.some((t) => !cachedIdSet.has(t.id));
   if (!hasNewTracks) return;
@@ -1645,8 +1939,29 @@ function syncStarredSongsDownload(): void {
   }
 }
 
-// Auto-sync starred songs whenever the favorites song list changes.
-// Guard: skip if track maps haven't been populated yet.
+/* ------------------------------------------------------------------ */
+/*  Implicit cross-store coupling: favoritesStore -> musicCacheService */
+/* ------------------------------------------------------------------ */
+/*
+ * When the favorites song list changes (user stars/unstars a track, or
+ * a library sync arrives with new starred data), automatically reconcile
+ * the local `__starred__` virtual playlist if the user has it marked
+ * offline. Nothing happens for users who haven't opted in — the work
+ * is gated inside syncStarredSongsDownload() by a cachedItems membership
+ * check before any download / deletion is triggered.
+ *
+ * One-way coupling: music-cache subscribes to favorites; favorites
+ * never observes the music-cache. No cycle.
+ *
+ * Guards:
+ *   - Identity compare on `state.songs`: skip if the array reference
+ *     didn't change (re-renders, unrelated field changes).
+ *   - `trackMapsReady`: skip during the startup window when
+ *     trackUriMap / trackToItems are still being populated from SQL.
+ *     Otherwise we'd run syncCachedItemTracks against empty maps and
+ *     treat every song as "missing locally", causing a re-download
+ *     storm of already-cached songs on boot.
+ */
 favoritesStore.subscribe((state, prev) => {
   if (state.songs === prev.songs) return;
   if (!trackMapsReady) return;

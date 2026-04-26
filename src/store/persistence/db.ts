@@ -113,8 +113,29 @@ try {
     'CREATE INDEX IF NOT EXISTS idx_scrobble_events_time ON scrobble_events (time);',
   );
 
+  // pending_scrobble_events — the offline transmit queue. Same row shape
+  // as scrobble_events but a separate table so a completed row and its
+  // still-pending sibling (legitimately sharing `id`) don't collide.
+  db.execSync(
+    `CREATE TABLE IF NOT EXISTS pending_scrobble_events (
+       id TEXT PRIMARY KEY NOT NULL,
+       song_json TEXT NOT NULL,
+       time INTEGER NOT NULL
+     );`,
+  );
+  db.execSync(
+    'CREATE INDEX IF NOT EXISTS idx_pending_scrobble_events_time ON pending_scrobble_events (time);',
+  );
+
   // Music-cache tables — FK graph: cached_item_songs.item_id → cached_items
   // (ON DELETE CASCADE), cached_item_songs.song_id → cached_songs.
+  // `raw_json` preserves the full Subsonic `Child` envelope alongside the
+  // indexed/hot columns. Columns above are for sort/filter/display fast paths;
+  // `raw_json` is the source of truth for any field a future feature might
+  // need (discNumber, track, genre, MusicBrainz id, ReplayGain, contributors,
+  // …). Never drop fields from the envelope on write — see CLAUDE.md /
+  // plan `new-issue-to-look-distributed-quiche.md`. Nullable initially to
+  // keep Migration 17 a pure schema change; Migration 18 backfills.
   db.execSync(
     `CREATE TABLE IF NOT EXISTS cached_songs (
        song_id TEXT PRIMARY KEY NOT NULL,
@@ -130,12 +151,18 @@ try {
        bit_depth INTEGER,
        sampling_rate INTEGER,
        format_captured_at INTEGER NOT NULL,
-       downloaded_at INTEGER NOT NULL
+       downloaded_at INTEGER NOT NULL,
+       raw_json TEXT
      );`,
   );
   db.execSync(
     'CREATE INDEX IF NOT EXISTS idx_cached_songs_album_id ON cached_songs(album_id);',
   );
+  // `raw_json` preserves the full Subsonic `AlbumID3` / `Playlist` envelope
+  // for album and playlist items. Nullable: `favorites` and `song`-intent
+  // rows have no natural envelope (favorites is an app-local virtual
+  // playlist; `song` intent refers to a Child already stored in
+  // `cached_songs.raw_json`).
   db.execSync(
     `CREATE TABLE IF NOT EXISTS cached_items (
        item_id TEXT PRIMARY KEY NOT NULL,
@@ -146,7 +173,8 @@ try {
        expected_song_count INTEGER NOT NULL,
        parent_album_id TEXT,
        last_sync_at INTEGER NOT NULL,
-       downloaded_at INTEGER NOT NULL
+       downloaded_at INTEGER NOT NULL,
+       raw_json TEXT
      );`,
   );
   db.execSync(
@@ -161,6 +189,22 @@ try {
   );
   db.execSync(
     'CREATE INDEX IF NOT EXISTS idx_cached_item_songs_song_id ON cached_item_songs(song_id);',
+  );
+  // Dedup any rows with the same (item_id, song_id) before adding a UNIQUE
+  // index. The PK `(item_id, position)` prevents duplicate inserts at the
+  // same position but does not prevent the same song being edged twice at
+  // different positions — which could theoretically happen under a
+  // concurrent `ensurePartialAlbumEdge` + queue-completion race. Heal
+  // in-flight by keeping the lowest-position edge per `(item_id, song_id)`.
+  db.execSync(
+    `DELETE FROM cached_item_songs
+       WHERE rowid NOT IN (
+         SELECT MIN(rowid) FROM cached_item_songs
+         GROUP BY item_id, song_id
+       );`,
+  );
+  db.execSync(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_cached_item_songs_item_song ON cached_item_songs(item_id, song_id);',
   );
   db.execSync(
     `CREATE TABLE IF NOT EXISTS download_queue (

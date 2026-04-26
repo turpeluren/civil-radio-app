@@ -21,7 +21,7 @@ import BootSplash from 'react-native-bootsplash';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import AnimatedWaveformLogo from './AnimatedWaveformLogo';
+import AnimatedWaveformLogo, { type WaveformHandle } from './AnimatedWaveformLogo';
 import { getPendingTasks, runMigrations } from '../services/migrationService';
 import { rehydrateAllStores } from '../store/persistence/rehydrate';
 import { migrationStore } from '../store/migrationStore';
@@ -84,6 +84,10 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
   const waveformCompleted = useRef(false);
   const visibleSince = useRef(0);
   const [migrationPhase, setMigrationPhase] = useState<MigrationPhase>('idle');
+  // Imperative handle: the ripple sequence only arms when bootsplash's
+  // `animate()` callback fires. Otherwise the forward sweep plays while
+  // animatedLogoOpacity is still 0 and the user only sees the reverse sweep.
+  const waveformRef = useRef<WaveformHandle>(null);
   onFinishRef.current = onFinish;
 
   const complete = useCallback(() => {
@@ -264,6 +268,10 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
           if (finished) runOnJS(onAnimateComplete)();
         },
       );
+      // Mount-time animation start is the wrong trigger here: the bootsplash
+      // keeps the waveform invisible until this callback fires, so kick off
+      // the ripple sweeps NOW to keep the forward sweep on-screen.
+      waveformRef.current?.start();
     },
   });
 
@@ -346,9 +354,11 @@ export default function AnimatedSplashScreen({ onFinish }: Props) {
         {/* Animated waveform bars – hidden until animate() swaps them in */}
         <Animated.View style={animatedLogoStyle}>
           <AnimatedWaveformLogo
+            ref={waveformRef}
             size={130}
             color="#FFFFFF"
             onComplete={onWaveformComplete}
+            autoStart={false}
           />
         </Animated.View>
       </Animated.View>

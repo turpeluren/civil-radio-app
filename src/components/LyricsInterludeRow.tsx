@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   row: {
     height: 28,
     marginVertical: 6,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

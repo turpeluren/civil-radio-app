@@ -22,6 +22,7 @@ export interface LayoutPreferencesState {
   artistAlbumSortOrder: ArtistAlbumSortOrder;
   dateFormat: DateFormat;
   listLength: ListLength;
+  includePartialInDownloadedFilter: boolean;
   setAlbumLayout: (layout: ItemLayout) => void;
   setArtistLayout: (layout: ItemLayout) => void;
   setPlaylistLayout: (layout: ItemLayout) => void;
@@ -32,6 +33,7 @@ export interface LayoutPreferencesState {
   setArtistAlbumSortOrder: (order: ArtistAlbumSortOrder) => void;
   setDateFormat: (format: DateFormat) => void;
   setListLength: (length: ListLength) => void;
+  setIncludePartialInDownloadedFilter: (value: boolean) => void;
 }
 
 const PERSIST_KEY = 'substreamer-layout-preferences';
@@ -49,6 +51,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
       artistAlbumSortOrder: 'newest',
       dateFormat: 'yyyy/mm/dd',
       listLength: 20,
+      includePartialInDownloadedFilter: false,
       setAlbumLayout: (albumLayout) => set({ albumLayout }),
       setArtistLayout: (artistLayout) => set({ artistLayout }),
       setPlaylistLayout: (playlistLayout) => set({ playlistLayout }),
@@ -60,6 +63,8 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
         set({ artistAlbumSortOrder }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
       setListLength: (listLength) => set({ listLength }),
+      setIncludePartialInDownloadedFilter: (includePartialInDownloadedFilter) =>
+        set({ includePartialInDownloadedFilter }),
     }),
     {
       name: PERSIST_KEY,
@@ -75,6 +80,7 @@ export const layoutPreferencesStore = create<LayoutPreferencesState>()(
         artistAlbumSortOrder: state.artistAlbumSortOrder,
         dateFormat: state.dateFormat,
         listLength: state.listLength,
+        includePartialInDownloadedFilter: state.includePartialInDownloadedFilter,
       }),
     }
   )

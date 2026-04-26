@@ -30,6 +30,43 @@ export interface LyricsContentProps {
   };
 }
 
+/** Skeleton placeholder rows. The first entry sits at the active-line
+ *  position (upper third of the viewport); opacity ramps down from there
+ *  mirroring `LyricsLineRow`'s per-line fade so the placeholder looks
+ *  like the real view, just wordless. */
+const SKELETON_LINES: ReadonlyArray<{ width: number; opacity: number }> = [
+  { width: 0.72, opacity: 1.0 },
+  { width: 0.55, opacity: 0.65 },
+  { width: 0.82, opacity: 0.45 },
+  { width: 0.48, opacity: 0.30 },
+  { width: 0.68, opacity: 0.22 },
+  { width: 0.40, opacity: 0.16 },
+];
+
+/**
+ * Small pill shown above the lyrics list — indicates whether the active
+ * lyrics are real synced timings ("Synced lyrics") or derived-per-duration
+ * estimates ("Approximate timing"). Same layout, position, and colour
+ * treatment in both cases.
+ */
+const LyricsModePill = memo(function LyricsModePill({
+  label,
+  backgroundColor,
+  textColor,
+}: {
+  label: string;
+  backgroundColor: string;
+  textColor: string;
+}) {
+  return (
+    <View style={styles.pillWrap} pointerEvents="none">
+      <View style={[styles.pill, { backgroundColor }]}>
+        <Text style={[styles.pillText, { color: textColor }]}>{label}</Text>
+      </View>
+    </View>
+  );
+});
+
 export const LyricsContent = memo(function LyricsContent({
   lyricsData,
   lyricsLoading,
@@ -81,12 +118,26 @@ export const LyricsContent = memo(function LyricsContent({
   if (lyricsLoading) {
     return (
       <View style={styles.skeletonWrap}>
-        {[0.82, 0.7, 0.88, 0.55, 0.78].map((w, i) => (
-          <View
-            key={i}
-            style={[styles.skeletonLine, { width: `${w * 100}%` }]}
-          />
-        ))}
+        {/* Top spacer pushes the first "active" skeleton bar to the same
+            upper-third position real lyrics use (ACTIVE_LINE_VIEWPORT_RATIO
+            ≈ 0.35 in SyncedLyricsView). Opacity ramp mirrors the per-line
+            fade real lyrics apply by distance from the active line. */}
+        <View style={styles.skeletonTopSpacer} />
+        <View style={styles.skeletonContent}>
+          {SKELETON_LINES.map((spec, i) => (
+            <View
+              key={i}
+              style={[
+                styles.skeletonLine,
+                {
+                  width: `${spec.width * 100}%`,
+                  backgroundColor: hexWithAlpha(colors.border, 0.5),
+                  opacity: spec.opacity,
+                },
+              ]}
+            />
+          ))}
+        </View>
       </View>
     );
   }
@@ -109,39 +160,37 @@ export const LyricsContent = memo(function LyricsContent({
 
   if (lyricsData.synced) {
     return (
-      <SyncedLyricsView
-        lines={lyricsData.lines}
-        offsetMs={lyricsData.offsetMs}
-        source="structured"
-        textColor={colors.textPrimary}
-        backgroundColor={colors.background}
-      />
+      <View style={styles.fakeContainer}>
+        <LyricsModePill
+          label={t('lyricsSynced')}
+          backgroundColor={hexWithAlpha(colors.background, 0.55)}
+          textColor={colors.textPrimary}
+        />
+        <SyncedLyricsView
+          lines={lyricsData.lines}
+          offsetMs={lyricsData.offsetMs}
+          source="structured"
+          textColor={colors.textPrimary}
+          pillBackgroundColor={hexWithAlpha(colors.background, 0.55)}
+        />
+      </View>
     );
   }
 
   if (fakeLines) {
     return (
       <View style={styles.fakeContainer}>
-        <View style={styles.pillWrap} pointerEvents="none">
-          <View
-            style={[
-              styles.pill,
-              {
-                backgroundColor: hexWithAlpha(colors.border, 0.35),
-              },
-            ]}
-          >
-            <Text style={[styles.pillText, { color: colors.textSecondary }]}>
-              {t('lyricsApproximateTiming')}
-            </Text>
-          </View>
-        </View>
+        <LyricsModePill
+          label={t('lyricsApproximateTiming')}
+          backgroundColor={hexWithAlpha(colors.background, 0.55)}
+          textColor={colors.textPrimary}
+        />
         <SyncedLyricsView
           lines={fakeLines}
           offsetMs={lyricsData.offsetMs}
           source="fake"
           textColor={colors.textPrimary}
-          backgroundColor={colors.background}
+          pillBackgroundColor={hexWithAlpha(colors.background, 0.55)}
         />
       </View>
     );
@@ -183,14 +232,19 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   skeletonWrap: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    gap: 18,
+    flex: 1,
+  },
+  skeletonTopSpacer: {
+    flex: 0.35,
+  },
+  skeletonContent: {
+    flex: 0.65,
+    paddingHorizontal: 16,
+    gap: 28,
   },
   skeletonLine: {
-    height: 22,
+    height: 28,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   fakeContainer: {
     flex: 1,

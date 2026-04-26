@@ -4,8 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { CachedImage } from './CachedImage';
-import { DownloadedIcon } from './DownloadedIcon';
-import { StarRatingDisplay } from './StarRating';
+import { RowMetaLine } from './RowMetaLine';
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 import { useDownloadStatus } from '../hooks/useDownloadStatus';
 import { useIsStarred } from '../hooks/useIsStarred';
@@ -59,7 +58,7 @@ export const QueueItemRow = memo(function QueueItemRow({
 
   const { t } = useTranslation();
   const starred = useIsStarred('song', track.id);
-  const downloaded = useDownloadStatus('song', track.id) === 'complete';
+  const downloadStatus = useDownloadStatus('song', track.id);
   const rating = useRating(track.id, track.userRating);
   const offlineMode = offlineModeStore((s) => s.offlineMode);
 
@@ -147,18 +146,19 @@ export const QueueItemRow = memo(function QueueItemRow({
 
         {/* Downloaded + Starred indicators + Duration */}
         <View style={styles.trailing}>
-          {rating > 0 && (
-            <StarRatingDisplay rating={rating} size={12} color={colors.primary} emptyColor={colors.primary} />
-          )}
-          {downloaded && (
-            <DownloadedIcon size={14} circleColor={colors.primary} arrowColor="#fff" />
-          )}
-          {starred && (
-            <Ionicons name="heart" size={14} color={colors.red} />
-          )}
-          <Text style={[styles.duration, { color: isActive ? colors.primary : colors.textSecondary }]}>
-            {durationText}
-          </Text>
+          <RowMetaLine
+            slots={['rating', 'download', 'heart', 'duration']}
+            rating={rating}
+            starred={starred}
+            downloadStatus={
+              downloadStatus === 'complete' || downloadStatus === 'partial'
+                ? downloadStatus
+                : 'none'
+            }
+            durationText={durationText}
+            durationFontSize={14}
+            durationColor={isActive ? colors.primary : undefined}
+          />
         </View>
       </View>
     </SwipeableRow>
@@ -208,12 +208,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   trailing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginLeft: 12,
-  },
-  duration: {
-    fontSize: 14,
   },
 });

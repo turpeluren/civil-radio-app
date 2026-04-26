@@ -21,7 +21,7 @@ import { AlbumRow } from '../components/AlbumRow';
 import { EmptyState } from '../components/EmptyState';
 import { ArtistCard } from '../components/ArtistCard';
 import { CachedImage } from '../components/CachedImage';
-import { MiniPlayerFooter } from '../components/MiniPlayerFooter';
+import { BottomChrome } from '../components/BottomChrome';
 import { MoreOptionsButton } from '../components/MoreOptionsButton';
 import { SectionTitle } from '../components/SectionTitle';
 import { SongCard } from '../components/SongCard';
@@ -32,7 +32,7 @@ import {
   GRADIENT_MIX_CURVE,
   LIGHT_MIX,
 } from '../components/GradientBackground';
-import { SKIP_COLOR_EXTRACTION, useColorExtraction } from '../hooks/useColorExtraction';
+import { SKIP_COLOR_EXTRACTION, useImagePalette } from '../hooks/useImagePalette';
 import { useIsStarred } from '../hooks/useIsStarred';
 import { useLayoutMode } from '../hooks/useLayoutMode';
 import { useRefreshControlKey } from '../hooks/useRefreshControlKey';
@@ -105,9 +105,8 @@ export function ArtistDetailScreen() {
   const isWide = useLayoutMode() === 'wide';
   const refreshControlKey = useRefreshControlKey();
 
-  const { coverBackgroundColor, gradientOpacity } = useColorExtraction(
+  const { primary, secondary, gradientOpacity } = useImagePalette(
     isWide ? SKIP_COLOR_EXTRACTION : artist?.coverArt,
-    colors.background,
   );
 
   const themeGradientColors = useMemo(() => {
@@ -200,8 +199,15 @@ export function ArtistDetailScreen() {
   const onRefresh = useCallback(() => fetchData(true), [fetchData]);
 
   /* ---- Derived values ---- */
-  const gradientStart = coverBackgroundColor ?? colors.background;
-  const gradientEnd = colors.background;
+  // 2-stop gradient: extracted secondary (prefer) → theme background.
+  // On smaller screens the richer 3-stop bi-tone read as too busy over
+  // the hero, so we drop the more-vibrant `primary` from the render and
+  // use `secondary` (the most-common hue distinct from primary) as the
+  // calmer top colour. `primary` still extracts and is available in the
+  // hook for future tablet/landscape layouts with more room.
+  const gradientTopColor = secondary ?? primary ?? colors.background;
+  const gradientColors: readonly [string, string, ...string[]] = [gradientTopColor, colors.background];
+  const gradientLocations: readonly [number, number, ...number[]] = [0, 0.5];
 
   const gradientAnimatedStyle = useAnimatedStyle(() => ({
     opacity: gradientOpacity.value,
@@ -508,8 +514,8 @@ export function ArtistDetailScreen() {
           pointerEvents="none"
         >
           <LinearGradient
-            colors={[gradientStart, gradientEnd]}
-            locations={[0, 0.5]}
+            colors={gradientColors}
+            locations={gradientLocations}
             style={StyleSheet.absoluteFillObject}
           />
         </Animated.View>
@@ -557,7 +563,7 @@ export function ArtistDetailScreen() {
             )
           }
         />
-        <MiniPlayerFooter />
+        <BottomChrome withSafeAreaPadding />
       </View>
     </>
   );

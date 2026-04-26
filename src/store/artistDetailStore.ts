@@ -43,10 +43,16 @@ export interface ArtistDetailEntry {
 export interface ArtistDetailState {
   /** Artist details indexed by artist ID. */
   artists: Record<string, ArtistDetailEntry>;
-  /** Fetch artist from API, store it, and return the entry. Returns null on failure. */
-  fetchArtist: (id: string) => Promise<ArtistDetailEntry | null>;
+  /** Fetch artist from API, store it, and return the entry. Returns null on failure.
+   *  Pass `{ prefetchCovers: false }` to skip the eager cover-art cache —
+   *  used by the background library sync. User-facing fetches omit it. */
+  fetchArtist: (id: string, opts?: { prefetchCovers?: boolean }) => Promise<ArtistDetailEntry | null>;
   /** Re-fetch only topSongs for all cached artists (lightweight refresh). */
   refreshTopSongs: () => Promise<void>;
+  /** Eagerly bump local play stats for a just-scrobbled song across every
+   *  cached artist entry — updates the matching entry in `artist.album[]`
+   *  and the matching entry in `topSongs[]`, wherever they appear. */
+  applyLocalPlay: (songId: string, albumId: string | undefined, now: string) => void;
   /** Clear all cached artist details. */
   clearArtists: () => void;
 }
@@ -58,7 +64,8 @@ export const artistDetailStore = create<ArtistDetailState>()(
     (set, get) => ({
       artists: {},
 
-      fetchArtist: async (id: string) => {
+      fetchArtist: async (id: string, opts?: { prefetchCovers?: boolean }) => {
+        const prefetchCovers = opts?.prefetchCovers ?? true;
         const result = await withTimeout(async (signal) => {
           await ensureCoverArtAuth();
 
@@ -136,8 +143,9 @@ export const artistDetailStore = create<ArtistDetailState>()(
             },
           });
 
-          // Proactively cache cover art for new IDs so they survive offline
-          if (topSongs.length > 0) cacheEntityCoverArt(topSongs);
+          // Proactively cache cover art for new IDs so they survive offline.
+          // Skipped during bulk sync — see prefetchCovers contract above.
+          if (prefetchCovers && topSongs.length > 0) cacheEntityCoverArt(topSongs);
 
           return entry;
         }, FETCH_TIMEOUT_MS);
@@ -164,6 +172,62 @@ export const artistDetailStore = create<ArtistDetailState>()(
 
         // Proactively cache cover art for new IDs so they survive offline
         if (allTopSongs.length > 0) cacheEntityCoverArt(allTopSongs);
+      },
+
+      applyLocalPlay: (songId, albumId, now) => {
+        const current = get().artists;
+        let touched = false;
+        const next: Record<string, ArtistDetailEntry> = {};
+        for (const [id, entry] of Object.entries(current)) {
+          let entryChanged = false;
+
+          // Match and bump the album inside artist.album[] if present.
+          let updatedArtist = entry.artist;
+          if (albumId && entry.artist.album?.length) {
+            const albumIdx = entry.artist.album.findIndex((a) => a.id === albumId);
+            if (albumIdx !== -1) {
+              const oldAlbum = entry.artist.album[albumIdx];
+              const nextAlbum = {
+                ...oldAlbum,
+                playCount: (oldAlbum.playCount ?? 0) + 1,
+                played: now,
+              };
+              const nextAlbums = entry.artist.album.map((a, i) =>
+                i === albumIdx ? nextAlbum : a,
+              );
+              updatedArtist = { ...entry.artist, album: nextAlbums };
+              entryChanged = true;
+            }
+          }
+
+          // Match and bump the song inside topSongs[] if present.
+          let updatedTopSongs = entry.topSongs;
+          const topSongIdx = entry.topSongs.findIndex((s) => s.id === songId);
+          if (topSongIdx !== -1) {
+            const oldSong = entry.topSongs[topSongIdx];
+            const nextSong: Child = {
+              ...oldSong,
+              playCount: (oldSong.playCount ?? 0) + 1,
+              played: now,
+            };
+            updatedTopSongs = entry.topSongs.map((s, i) =>
+              i === topSongIdx ? nextSong : s,
+            );
+            entryChanged = true;
+          }
+
+          if (entryChanged) {
+            touched = true;
+            next[id] = {
+              ...entry,
+              artist: updatedArtist,
+              topSongs: updatedTopSongs,
+            };
+          } else {
+            next[id] = entry;
+          }
+        }
+        if (touched) set({ artists: next });
       },
 
       clearArtists: () => set({ artists: {} }),
